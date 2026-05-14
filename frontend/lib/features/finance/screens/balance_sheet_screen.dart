@@ -250,7 +250,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
       children: [
         Text(label, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
         const SizedBox(height: 4),
-        Text('\$${value.toStringAsFixed(2)}',
+        Text('\$${GlService.fmtAmount(value)}',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: color)),
       ],
     );
@@ -300,7 +300,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                 Expanded(child: Text(totalLabel, style: const TextStyle(
                   fontWeight: FontWeight.w800, fontSize: 13, color: AppTheme.textPrimary,
                 ))),
-                Text('\$${total.toStringAsFixed(2)}', style: TextStyle(
+                Text('\$${GlService.fmtAmount(total)}', style: TextStyle(
                   fontWeight: FontWeight.w800, fontSize: 14, color: color,
                 )),
               ],
@@ -352,7 +352,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                 Expanded(child: Text('Total Equity', style: const TextStyle(
                   fontWeight: FontWeight.w800, fontSize: 13, color: AppTheme.textPrimary,
                 ))),
-                Text('\$${totalEquity.toStringAsFixed(2)}',
+                Text('\$${GlService.fmtAmount(totalEquity)}',
                     style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: Colors.purple.shade700)),
               ],
             ),
@@ -398,7 +398,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
                         if (netIncome != null) ...[
                           const TextSpan(text: '  '),
                           TextSpan(
-                            text: '(Net Income: \$${netIncome.toStringAsFixed(2)})',
+                            text: '(Net Income: \$${GlService.fmtAmount(netIncome)})',
                             style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
                           ),
                         ],
@@ -411,7 +411,7 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          Text('\$${balance.toStringAsFixed(2)}', style: TextStyle(
+          Text('\$${GlService.fmtAmount(balance)}', style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
             color: balance >= 0 ? AppTheme.textPrimary : AppTheme.errorColor,
@@ -509,7 +509,7 @@ td{padding:6px 16px;font-size:13px;border-bottom:1px solid #f1f5f9}
 <div class="section" style="border-color:#8b5cf6">
 <h3 style="background:#f5f3ff;color:#8b5cf6;border-color:#ddd6fe">EQUITY</h3>
 <table>${equity}
-<tr class="total"><td style="color:#8b5cf6">Total Equity</td><td style="text-align:right;color:#8b5cf6">\$${totalEquity.toStringAsFixed(2)}</td></tr></table></div></div></div>
+<tr class="total"><td style="color:#8b5cf6">Total Equity</td><td style="text-align:right;color:#8b5cf6">\$${GlService.fmtAmount(totalEquity)}</td></tr></table></div></div></div>
 <div class="footer" style="background:${checked ? '#f0fdf4' : '#fff7ed'};border:1px solid ${checked ? '#bbf7d0' : '#fed7aa'}">
 <div class="vals"><div class="v"><p class="l">Total Assets</p><p class="n" style="color:#2563eb">\$${totalAssets.toStringAsFixed(2)}</p></div>
 <span style="color:#94a3b8;font-size:20px">&#8652;</span>

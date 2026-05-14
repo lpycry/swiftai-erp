@@ -304,17 +304,17 @@ class _LedgerRow extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
           )),
           Expanded(flex: 2, child: Text(
-            debit > 0 ? '\$${debit.toStringAsFixed(2)}' : '',
+            debit > 0 ? '\$${GlService.fmtAmount(debit)}' : '',
             style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500),
             textAlign: TextAlign.right,
           )),
           Expanded(flex: 2, child: Text(
-            credit > 0 ? '\$${credit.toStringAsFixed(2)}' : '',
+            credit > 0 ? '\$${GlService.fmtAmount(credit)}' : '',
             style: TextStyle(fontSize: 12, color: Colors.orange.shade700, fontWeight: FontWeight.w500),
             textAlign: TextAlign.right,
           )),
           Expanded(flex: 2, child: Text(
-            '\$${balance.toStringAsFixed(2)}',
+            '\$${GlService.fmtAmount(balance)}',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,

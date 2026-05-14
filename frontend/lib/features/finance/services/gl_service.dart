@@ -521,4 +521,18 @@ class GlService {
       return false;
     }
   }
+
+  /// Format a number with thousand separators: 1000000.00 → "1,000,000.00"
+  static String fmtAmount(num? value) {
+    final v = (value ?? 0).toDouble();
+    if (v.isNaN || v.isInfinite) return "0.00";
+    final parts = v.toStringAsFixed(2).split('.');
+    final intPart = parts[0];
+    final buf = StringBuffer();
+    for (int i = 0; i < intPart.length; i++) {
+      if (i > 0 && (intPart.length - i) % 3 == 0) buf.write(',');
+      buf.write(intPart[i]);
+    }
+    return '${buf.toString()}.${parts[1]}';
+  }
 }

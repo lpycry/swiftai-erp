@@ -212,17 +212,17 @@ class _BalanceRow extends StatelessWidget {
             style: TextStyle(fontSize: 11, color: AccountModel.typeColor(type)),
           )),
           Expanded(flex: 2, child: Text(
-            '\$${debit.toStringAsFixed(2)}',
+            '\$${GlService.fmtAmount(debit)}',
             style: TextStyle(fontSize: 12, color: Colors.green.shade700),
             textAlign: TextAlign.right,
           )),
           Expanded(flex: 2, child: Text(
-            '\$${credit.toStringAsFixed(2)}',
+            '\$${GlService.fmtAmount(credit)}',
             style: TextStyle(fontSize: 12, color: Colors.orange.shade700),
             textAlign: TextAlign.right,
           )),
           Expanded(flex: 2, child: Text(
-            '\$${balance.abs().toStringAsFixed(2)}${balance < 0 ? ' CR' : ' DR'}',
+            '\$${GlService.fmtAmount(balance.abs())}${balance < 0 ? ' CR' : ' DR'}',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,

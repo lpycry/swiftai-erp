@@ -32,7 +32,9 @@ class SettingsScreen extends StatelessWidget {
                     radius: 32,
                     backgroundColor: AppTheme.primaryColor,
                     child: Text(
-                      (user?['display_name'] ?? 'U').toString()[0].toUpperCase(),
+                      (user?['display_name'] ?? 'U')
+                          .toString()[0]
+                          .toUpperCase(),
                       style: const TextStyle(color: Colors.white, fontSize: 24),
                     ),
                   ),
@@ -43,9 +45,8 @@ class SettingsScreen extends StatelessWidget {
                       children: [
                         Text(
                           user?['display_name'] ?? 'User',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -70,14 +71,18 @@ class SettingsScreen extends StatelessWidget {
                   child: Text(
                     'General',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppTheme.primaryColor, fontWeight: FontWeight.w600,
-                        ),
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.language),
                   title: const Text('Language'),
-                  subtitle: Text(LocalizationService.instance?.currentLocale.displayName ?? 'English'),
+                  subtitle: Text(
+                    LocalizationService.instance?.currentLocale.displayName ??
+                        'English',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     final current = LocalizationService.instance?.currentLocale;
@@ -130,8 +135,9 @@ class SettingsScreen extends StatelessWidget {
                   child: Text(
                     'Administration',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppTheme.primaryColor, fontWeight: FontWeight.w600,
-                        ),
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 ListTile(
@@ -139,7 +145,8 @@ class SettingsScreen extends StatelessWidget {
                   title: const Text('Authorization Objects'),
                   subtitle: const Text('Define permission objects and fields'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pushNamed(context, '/admin/auth-objects'),
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/admin/auth-objects'),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -153,9 +160,12 @@ class SettingsScreen extends StatelessWidget {
                 ListTile(
                   leading: const Icon(Icons.account_balance),
                   title: const Text('Organizations'),
-                  subtitle: const Text('Manage legal entities and company codes'),
+                  subtitle: const Text(
+                    'Manage legal entities and company codes',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pushNamed(context, '/admin/organizations'),
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/admin/organizations'),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -167,16 +177,27 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.account_balance_outlined, color: AppTheme.accentBlue),
+                  leading: const Icon(
+                    Icons.account_balance_outlined,
+                    color: AppTheme.accentBlue,
+                  ),
                   title: const Text('Initialize Chart of Accounts'),
-                  subtitle: const Text('Replace COA with GAAP, IFRS, or China standard'),
+                  subtitle: const Text(
+                    'Replace COA with GAAP, IFRS, or China standard',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _showCoaDialog(context),
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.dangerous_outlined, color: AppTheme.errorColor),
-                  title: Text('Database Reset', style: TextStyle(color: AppTheme.errorColor)),
+                  leading: const Icon(
+                    Icons.dangerous_outlined,
+                    color: AppTheme.errorColor,
+                  ),
+                  title: Text(
+                    'Database Reset',
+                    style: TextStyle(color: AppTheme.errorColor),
+                  ),
                   subtitle: const Text('Delete all transactional data'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => _confirmReset(context),
@@ -195,8 +216,9 @@ class SettingsScreen extends StatelessWidget {
                   child: Text(
                     'Notifications',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppTheme.primaryColor, fontWeight: FontWeight.w600,
-                        ),
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
                 const SwitchListTile(
@@ -233,7 +255,10 @@ class SettingsScreen extends StatelessWidget {
               Navigator.pushReplacementNamed(context, AppRouter.login);
             },
             icon: const Icon(Icons.logout, color: AppTheme.errorColor),
-            label: const Text('Sign Out', style: TextStyle(color: AppTheme.errorColor)),
+            label: const Text(
+              'Sign Out',
+              style: TextStyle(color: AppTheme.errorColor),
+            ),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: AppTheme.errorColor),
               minimumSize: const Size(double.infinity, 48),
@@ -254,21 +279,33 @@ class SettingsScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('This will replace the entire Chart of Accounts.', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              'This will replace the entire Chart of Accounts.',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             SizedBox(height: 8),
             Text('Only allowed when no journal entries exist.'),
             SizedBox(height: 12),
-            Text('Select a COA standard:', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              'Select a COA standard:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: TextButton.icon(
               icon: const Icon(Icons.account_balance, size: 16),
               label: const Text('US GAAP'),
-              onPressed: () { Navigator.pop(ctx); _executeInitializeCoa(context, 'gaap'); },
+              onPressed: () {
+                Navigator.pop(ctx);
+                _executeInitializeCoa(context, 'gaap');
+              },
             ),
           ),
           Padding(
@@ -276,13 +313,19 @@ class SettingsScreen extends StatelessWidget {
             child: TextButton.icon(
               icon: const Icon(Icons.language, size: 16),
               label: const Text('IFRS'),
-              onPressed: () { Navigator.pop(ctx); _executeInitializeCoa(context, 'ifrs'); },
+              onPressed: () {
+                Navigator.pop(ctx);
+                _executeInitializeCoa(context, 'ifrs');
+              },
             ),
           ),
           TextButton.icon(
             icon: const Icon(Icons.map, size: 16),
-            label: const Text('China GAAP'),
-            onPressed: () { Navigator.pop(ctx); _executeInitializeCoa(context, 'china'); },
+            label: const Text('China CAS'),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _executeInitializeCoa(context, 'china');
+            },
           ),
         ],
       ),
@@ -301,14 +344,20 @@ class SettingsScreen extends StatelessWidget {
       if (buildContext.mounted) {
         Navigator.pop(buildContext);
         ScaffoldMessenger.of(buildContext).showSnackBar(
-          const SnackBar(content: Text('Chart of Accounts initialized successfully.'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Chart of Accounts initialized successfully.'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       if (buildContext.mounted) {
         Navigator.pop(buildContext);
         ScaffoldMessenger.of(buildContext).showSnackBar(
-          SnackBar(content: Text('Failed: $e'), backgroundColor: AppTheme.errorColor),
+          SnackBar(
+            content: Text('Failed: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     }
@@ -320,7 +369,11 @@ class SettingsScreen extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: AppTheme.errorColor, size: 24),
+            Icon(
+              Icons.warning_amber_rounded,
+              color: AppTheme.errorColor,
+              size: 24,
+            ),
             SizedBox(width: 10),
             Text('Database Reset', style: TextStyle(fontSize: 16)),
           ],
@@ -329,7 +382,10 @@ class SettingsScreen extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('This will permanently delete ALL transactional data:', style: TextStyle(fontWeight: FontWeight.w600)),
+            Text(
+              'This will permanently delete ALL transactional data:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
             SizedBox(height: 8),
             Text('\u2022 Journal entries & lines'),
             Text('\u2022 Account balances'),
@@ -338,19 +394,36 @@ class SettingsScreen extends StatelessWidget {
             Text('\u2022 Sessions'),
             Text('\u2022 User role assignments'),
             SizedBox(height: 12),
-            Text('Chart of accounts, organizations, fiscal periods, user accounts, and tenants will NOT be affected.',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(
+              'Chart of accounts, organizations, fiscal periods, user accounts, and tenants will NOT be affected.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             SizedBox(height: 12),
-            Text('This action cannot be undone!', style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold)),
+            Text(
+              'This action cannot be undone!',
+              style: TextStyle(
+                color: AppTheme.errorColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton.icon(
-            onPressed: () { Navigator.pop(ctx); _executeReset(context); },
+            onPressed: () {
+              Navigator.pop(ctx);
+              _executeReset(context);
+            },
             icon: const Icon(Icons.delete_forever, size: 18),
             label: const Text('Reset Database'),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+              foregroundColor: Colors.white,
+            ),
           ),
         ],
       ),
@@ -364,29 +437,49 @@ class SettingsScreen extends StatelessWidget {
         title: const Text('Confirm Database Reset'),
         content: const Text('Type RESET to confirm:'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
-              showDialog(context: buildContext, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+              showDialog(
+                context: buildContext,
+                barrierDismissible: false,
+                builder: (_) =>
+                    const Center(child: CircularProgressIndicator()),
+              );
               try {
                 await glService.resetDatabase();
                 if (buildContext.mounted) {
                   Navigator.pop(buildContext);
                   ScaffoldMessenger.of(buildContext).showSnackBar(
-                    const SnackBar(content: Text('Database reset complete.'), backgroundColor: Colors.green),
+                    const SnackBar(
+                      content: Text('Database reset complete.'),
+                      backgroundColor: Colors.green,
+                    ),
                   );
                 }
               } catch (e) {
                 if (buildContext.mounted) {
                   Navigator.pop(buildContext);
                   ScaffoldMessenger.of(buildContext).showSnackBar(
-                    SnackBar(content: Text('Reset failed: $e'), backgroundColor: AppTheme.errorColor),
+                    SnackBar(
+                      content: Text('Reset failed: $e'),
+                      backgroundColor: AppTheme.errorColor,
+                    ),
                   );
                 }
               }
             },
-            child: const Text('RESET', style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'RESET',
+              style: TextStyle(
+                color: AppTheme.errorColor,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),

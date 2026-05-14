@@ -297,12 +297,12 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen> with Si
                             )),
                             Expanded(flex: 1, child: Text(
                               ((e.value['debit'] as num?)?.toDouble() ?? 0) > 0
-                                  ? '\$${((e.value['debit'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}' : '',
+                                  ? '\$${GlService.fmtAmount(e.value['debit'] as num?)}' : '',
                               textAlign: TextAlign.right, style: const TextStyle(fontSize: 11),
                             )),
                             Expanded(flex: 1, child: Text(
                               ((e.value['credit'] as num?)?.toDouble() ?? 0) > 0
-                                  ? '\$${((e.value['credit'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}' : '',
+                                  ? '\$${GlService.fmtAmount(e.value['credit'] as num?)}' : '',
                               textAlign: TextAlign.right, style: const TextStyle(fontSize: 11),
                             )),
                             Expanded(flex: 2, child: Text(
@@ -323,11 +323,11 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen> with Si
                           children: [
                             const Expanded(flex: 2, child: Text('TOTAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
                             Expanded(flex: 1, child: Text(
-                              '\$${totalDebit.toStringAsFixed(2)}',
+                              '\$${GlService.fmtAmount(totalDebit)}',
                               textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                             )),
                             Expanded(flex: 1, child: Text(
-                              '\$${totalCredit.toStringAsFixed(2)}',
+                              '\$${GlService.fmtAmount(totalCredit)}',
                               textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
                             )),
                             const Expanded(flex: 2, child: SizedBox()),
@@ -572,7 +572,7 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen> with Si
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '\$${(((entry['total_debit'] ?? entry['debit_sum'] ?? 0) as num).toDouble()).toStringAsFixed(2)}',
+                    '\$${GlService.fmtAmount(((entry['total_debit'] ?? entry['debit_sum'] ?? 0) as num))}',
                     style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                   ),
                   const SizedBox(height: 4),

@@ -228,11 +228,17 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
         lines,
       );
       final entry = _isEditing
-          ? await widget.glService.updateJournalEntry(widget.existingEntry!['id']!.toString(), body)
+          ? await widget.glService.updateJournalEntry(
+              widget.existingEntry!['id']!.toString(),
+              body,
+            )
           : await widget.glService.createJournalEntry(body);
 
       if (_attachedFiles.isNotEmpty) {
-        await widget.glService.uploadAttachments(entry['id']!.toString(), _attachedFiles);
+        await widget.glService.uploadAttachments(
+          entry['id']!.toString(),
+          _attachedFiles,
+        );
       }
 
       if (mounted) {
@@ -294,7 +300,10 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
         lines,
       );
       final entry = _isEditing
-          ? await widget.glService.updateJournalEntry(widget.existingEntry!['id']!.toString(), body)
+          ? await widget.glService.updateJournalEntry(
+              widget.existingEntry!['id']!.toString(),
+              body,
+            )
           : await widget.glService.createJournalEntry(body);
 
       // Step 2: Post it (status → 'posted', balance update)
@@ -774,7 +783,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                         flex: 1,
                         child: Text(
                           ((e.value['debit'] as num?)?.toDouble() ?? 0) > 0
-                              ? '\$${((e.value['debit'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}'
+                              ? '\$${GlService.fmtAmount(e.value['debit'] as num?)}'
                               : '',
                           textAlign: TextAlign.right,
                           style: const TextStyle(fontSize: 11),
@@ -784,7 +793,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                         flex: 1,
                         child: Text(
                           ((e.value['credit'] as num?)?.toDouble() ?? 0) > 0
-                              ? '\$${((e.value['credit'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}'
+                              ? '\$${GlService.fmtAmount(e.value['credit'] as num?)}'
                               : '',
                           textAlign: TextAlign.right,
                           style: const TextStyle(fontSize: 11),
@@ -824,7 +833,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                     Expanded(
                       flex: 1,
                       child: Text(
-                        '\$${totalDebit.toStringAsFixed(2)}',
+                        '\$${GlService.fmtAmount(totalDebit)}',
                         textAlign: TextAlign.right,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
@@ -835,7 +844,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                     Expanded(
                       flex: 1,
                       child: Text(
-                        '\$${totalCredit.toStringAsFixed(2)}',
+                        '\$${GlService.fmtAmount(totalCredit)}',
                         textAlign: TextAlign.right,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
@@ -857,7 +866,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
               const Icon(Icons.check_circle, size: 14, color: Colors.green),
               const SizedBox(width: 6),
               Text(
-                'Posted â€” balances updated',
+                'Posted balances updated',
                 style: TextStyle(
                   fontSize: 11,
                   color: Colors.green.shade700,
@@ -873,7 +882,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                 const Icon(Icons.balance, size: 14, color: Colors.green),
                 const SizedBox(width: 6),
                 Text(
-                  'Balanced: \$${totalDebit.toStringAsFixed(2)} DR = \$${totalCredit.toStringAsFixed(2)} CR',
+                  'Balanced: \$${GlService.fmtAmount(totalDebit)} DR = \$${GlService.fmtAmount(totalCredit)} CR',
                   style: TextStyle(fontSize: 11, color: Colors.green.shade700),
                 ),
               ],
@@ -1078,7 +1087,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                     flex: 2,
                     child: pw.Text(
                       ((l['debit'] as num?)?.toDouble() ?? 0) > 0
-                          ? '\$${((l['debit'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}'
+                          ? '\$${GlService.fmtAmount(l['debit'] as num?)}'
                           : '',
                       textAlign: pw.TextAlign.right,
                       style: const pw.TextStyle(fontSize: 9),
@@ -1088,7 +1097,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                     flex: 2,
                     child: pw.Text(
                       ((l['credit'] as num?)?.toDouble() ?? 0) > 0
-                          ? '\$${((l['credit'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}'
+                          ? '\$${GlService.fmtAmount(l['credit'] as num?)}'
                           : '',
                       textAlign: pw.TextAlign.right,
                       style: const pw.TextStyle(fontSize: 9),
@@ -1123,7 +1132,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                 pw.Expanded(
                   flex: 2,
                   child: pw.Text(
-                    '\$${totalDebit.toStringAsFixed(2)}',
+                    '\$${GlService.fmtAmount(totalDebit)}',
                     textAlign: pw.TextAlign.right,
                     style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
@@ -1134,7 +1143,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                 pw.Expanded(
                   flex: 2,
                   child: pw.Text(
-                    '\$${totalCredit.toStringAsFixed(2)}',
+                    '\$${GlService.fmtAmount(totalCredit)}',
                     textAlign: pw.TextAlign.right,
                     style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
@@ -1246,7 +1255,10 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
       // Create entry
       final body = _buildRequestBody('ai', desc, lines);
       final entry = _isEditing
-          ? await widget.glService.updateJournalEntry(widget.existingEntry!['id']!.toString(), body)
+          ? await widget.glService.updateJournalEntry(
+              widget.existingEntry!['id']!.toString(),
+              body,
+            )
           : await widget.glService.createJournalEntry(body);
 
       // Post it
@@ -1329,9 +1341,11 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
       final line = _JournalLine();
       line.selectedAccount = l['account_id']?.toString();
       line.debitCtrl.text = ((l['debit'] as num?)?.toDouble() ?? 0) > 0
-          ? ((l['debit'] as num?)?.toDouble() ?? 0).toStringAsFixed(2) : '';
+          ? GlService.fmtAmount(l['debit'] as num?)
+          : '';
       line.creditCtrl.text = ((l['credit'] as num?)?.toDouble() ?? 0) > 0
-          ? ((l['credit'] as num?)?.toDouble() ?? 0).toStringAsFixed(2) : '';
+          ? GlService.fmtAmount(l['credit'] as num?)
+          : '';
       line.lineDescCtrl.text = l['description']?.toString() ?? '';
       _lines.add(line);
     }
@@ -2261,7 +2275,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                     ),
                   ),
                   Text(
-                    '\$${((e.value['debit'] as num?)?.toDouble() ?? (e.value['credit'] as num?)?.toDouble() ?? 0).toStringAsFixed(2)}',
+                    '\$${GlService.fmtAmount(((e.value['debit'] as num?) ?? (e.value['credit'] as num?)))}',
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
@@ -2283,7 +2297,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
               Text(
                 aiBalanced
                     ? 'Balanced \u2713'
-                    : 'Difference: \$${aiDiff.toStringAsFixed(2)}',
+                    : 'Difference: \$${GlService.fmtAmount(aiDiff)}',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
@@ -2366,7 +2380,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
             style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
           ),
           Text(
-            '\$${_totalDebit.toStringAsFixed(2)}',
+            '\$${GlService.fmtAmount(_totalDebit)}',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -2379,7 +2393,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
             style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
           ),
           Text(
-            '\$${_totalCredit.toStringAsFixed(2)}',
+            '\$${GlService.fmtAmount(_totalCredit)}',
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -2395,7 +2409,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                'Diff: \$${_balanceDiff.toStringAsFixed(2)}',
+                'Diff: \$${GlService.fmtAmount(_balanceDiff)}',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.orange.shade800,
