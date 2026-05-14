@@ -1949,7 +1949,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                         'Select account',
                         style: TextStyle(fontSize: 12),
                       ),
-                      items: _accounts.where((a) => a.isLeaf && a.isActive).map(
+                      items: _accounts.where((a) => a.isLeaf && a.isActive && a.reconciliationType == 'none').map(
                         (a) {
                           return DropdownMenuItem(
                             value: a.id,
