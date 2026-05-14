@@ -461,7 +461,7 @@ class GlService {
 
   Future<void> initializeCoa(String coaType) async {
     final resp = await http.post(
-      Uri.parse('\${_baseUrl}/gl/initialize-coa'),
+      Uri.parse('${_baseUrl}/gl/initialize-coa'),
       headers: _headers,
       body: jsonEncode({'coa_type': coaType}),
     );
