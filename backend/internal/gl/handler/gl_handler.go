@@ -787,6 +787,34 @@ func (h *GLHandler) GetAttachments(c *gin.Context) {
 	response.OK(c, atts)
 }
 
+// InitializeCoA handles POST /api/v1/gl/initialize-coa
+func (h *GLHandler) InitializeCoA(c *gin.Context) {
+	var req struct {
+		CoaType string `json:"coa_type" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "coa_type field is required (gaap, ifrs, or china)")
+		return
+	}
+
+	if err := h.glSvc.InitializeChartOfAccounts(c.Request.Context(), req.CoaType); err != nil {
+		log.Err(err).Msg("initialize COA failed")
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.OK(c, gin.H{"message": "Chart of accounts initialized successfully"})
+}
+// ResetDatabase handles POST /api/v1/gl/reset-database
+func (h *GLHandler) ResetDatabase(c *gin.Context) {
+	if err := h.glSvc.ResetDatabase(c.Request.Context()); err != nil {
+		log.Err(err).Msg("database reset failed")
+		response.InternalError(c, "database reset failed: "+err.Error())
+		return
+	}
+
+	response.OK(c, gin.H{"message": "All data cleared successfully"})
+}
 // ── Helpers ──
 
 // getTenantID extracts tenant ID from the Gin context (set by auth middleware).

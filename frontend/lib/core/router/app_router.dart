@@ -58,7 +58,7 @@ class AppRouter {
         );
       case settingsRoute:
         return MaterialPageRoute(
-          builder: (_) => SettingsScreen(authService: _authService),
+          builder: (_) => SettingsScreen(authService: _authService, glService: GlService(_authService.accessToken)),
           settings: settings,
         );
       case adminAuthObjects:

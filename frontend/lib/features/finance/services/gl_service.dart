@@ -459,6 +459,29 @@ class GlService {
 
   // ==================== Dashboard ====================
 
+  Future<void> initializeCoa(String coaType) async {
+    final resp = await http.post(
+      Uri.parse('\/gl/initialize-coa'),
+      headers: _headers,
+      body: jsonEncode({'coa_type': coaType}),
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to initialize COA');
+    }
+  }
+
+  Future<void> resetDatabase() async {
+    final resp = await http.post(
+      Uri.parse('${_baseUrl}/gl/reset-database'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to reset database');
+    }
+  }
+
   Future<Map<String, dynamic>> getDashboardSummary() async {
     // Get accounts count
     final accounts = await getAccounts();

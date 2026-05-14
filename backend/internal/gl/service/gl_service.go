@@ -1,6 +1,7 @@
 package service
 
 import (
+	"os"
 	"context"
 	"errors"
 	"fmt"
@@ -305,6 +306,63 @@ func (s *GLService) GetAccountLedger(ctx context.Context, tenantID, accountID uu
 	return s.entryRepo.GetAccountLedger(ctx, tenantID, accountID, fromDate, toDate, page, pageSize)
 }
 
+// InitializeChartOfAccounts deletes existing COA and seeds a new one.
+// coaType: "gaap", "ifrs", or "china". Only allowed when no journal entries exist.
+func (s *GLService) InitializeChartOfAccounts(ctx context.Context, coaType string) error {
+	// Check if any transactions exist
+	var entryCount int
+	err := s.db.QueryRow(ctx, "SELECT COUNT(*) FROM gl_journal_entries").Scan(&entryCount)
+	if err != nil {
+		return fmt.Errorf("check entries: %w", err)
+	}
+	if entryCount > 0 {
+		return fmt.Errorf("cannot initialize COA: there are %d existing journal entries. Delete all transactions first", entryCount)
+	}
+
+	// Delete existing chart of accounts (cascades to balances, lines)
+	_, err = s.db.Exec(ctx, "DELETE FROM gl_account_balances")
+	if err != nil {
+		return fmt.Errorf("delete balances: %w", err)
+	}
+	_, err = s.db.Exec(ctx, "DELETE FROM gl_accounts")
+	if err != nil {
+		return fmt.Errorf("delete accounts: %w", err)
+	}
+	_, err = s.db.Exec(ctx, "DELETE FROM gl_periods")
+	if err != nil {
+		return fmt.Errorf("delete periods: %w", err)
+	}
+	_, err = s.db.Exec(ctx, "DELETE FROM gl_document_seq")
+	if err != nil {
+		return fmt.Errorf("delete document seq: %w", err)
+	}
+
+	// Pick the seed SQL file
+	var seedPath string
+	switch coaType {
+	case "gaap":
+		seedPath = "migrations/seed_gaap_coa.sql"
+	case "ifrs":
+		seedPath = "migrations/seed_accounts_ifrs.sql"
+	case "china":
+		seedPath = "migrations/seed_accounts.sql"
+	default:
+		return fmt.Errorf("invalid COA type: %s (must be gaap, ifrs, or china)", coaType)
+	}
+
+	// Read and execute the seed SQL
+	seedSQL, err := os.ReadFile(seedPath)
+	if err != nil {
+		return fmt.Errorf("read seed file %s: %w", seedPath, err)
+	}
+
+	_, err = s.db.Exec(ctx, string(seedSQL))
+	if err != nil {
+		return fmt.Errorf("execute seed: %w", err)
+	}
+
+	return nil
+}
 // GetAccountBalances returns period balances for accounts with date filtering.
 func (s *GLService) GetAccountBalances(ctx context.Context, tenantID uuid.UUID, year, month int) ([]map[string]interface{}, error) {
 	return s.entryRepo.GetAccountBalances(ctx, tenantID, year, month)
@@ -441,6 +499,36 @@ func (s *GLService) GetLeafAccounts(ctx context.Context, tenantID uuid.UUID) ([]
 // ── Attachment methods ──
 
 // AddAttachment saves an attachment record.
+// ResetDatabase deletes all transactional data from all tables in FK-safe order.
+func (s *GLService) ResetDatabase(ctx context.Context) error {
+	tables := []string{
+		"gl_account_balances",
+		"gl_entry_attachments",
+		"gl_journal_lines",
+		"gl_journal_entries",
+		"gl_document_seq",
+		"audit_log",
+		"access_requests",
+		"sod_violations",
+		"composite_role_members",
+		"derived_role_rules",
+		"role_auth_values",
+		"user_org_assignments",
+		"user_role_assignments",
+		"sessions",
+		"permissions",
+		"role_permissions",
+		"user_roles",
+		"sod_rules",
+	}
+	for _, t := range tables {
+		_, err := s.db.Exec(ctx, "DELETE FROM "+t)
+		if err != nil {
+			return fmt.Errorf("failed to clear %s: %w", t, err)
+		}
+	}
+	return nil
+}
 func (s *GLService) AddAttachment(ctx context.Context, att *glmodels.EntryAttachment) error {
 	return s.entryRepo.AddAttachment(ctx, att)
 }

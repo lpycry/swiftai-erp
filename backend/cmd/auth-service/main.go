@@ -169,6 +169,8 @@ func main() {
 
 		// ---- GL: AI ----
 		protected.POST("/gl/ai/suggest", glHandler.AISuggest)
+				protected.POST("/gl/reset-database", glHandler.ResetDatabase)
+				protected.POST("/gl/initialize-coa", glHandler.InitializeCoA)
 
 		// ---- GL: Attachments ----
 		protected.POST("/gl/journal-entries/:id/attachments", glHandler.UploadAttachment)

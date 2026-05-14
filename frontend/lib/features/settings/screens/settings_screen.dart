@@ -3,10 +3,17 @@ import 'package:swiftai_erp/core/l10n/localization_service.dart';
 import 'package:swiftai_erp/core/services/auth_service.dart';
 import 'package:swiftai_erp/core/theme/app_theme.dart';
 import 'package:swiftai_erp/core/router/app_router.dart';
+import 'package:swiftai_erp/features/finance/services/gl_service.dart';
 
 class SettingsScreen extends StatelessWidget {
   final AuthService authService;
-  const SettingsScreen({super.key, required this.authService});
+  final GlService glService;
+
+  SettingsScreen({
+    super.key,
+    required this.authService,
+    required this.glService,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +23,6 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Profile section
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -55,7 +61,6 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // General settings
           Card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,8 +70,7 @@ class SettingsScreen extends StatelessWidget {
                   child: Text(
                     'General',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppTheme.primaryColor,
-                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryColor, fontWeight: FontWeight.w600,
                         ),
                   ),
                 ),
@@ -117,7 +121,6 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Administration
           Card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -127,8 +130,7 @@ class SettingsScreen extends StatelessWidget {
                   child: Text(
                     'Administration',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppTheme.primaryColor,
-                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryColor, fontWeight: FontWeight.w600,
                         ),
                   ),
                 ),
@@ -163,12 +165,27 @@ class SettingsScreen extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.pushNamed(context, '/admin/periods'),
                 ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.account_balance_outlined, color: AppTheme.accentBlue),
+                  title: const Text('Initialize Chart of Accounts'),
+                  subtitle: const Text('Replace COA with GAAP, IFRS, or China standard'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _showCoaDialog(context),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.dangerous_outlined, color: AppTheme.errorColor),
+                  title: Text('Database Reset', style: TextStyle(color: AppTheme.errorColor)),
+                  subtitle: const Text('Delete all transactional data'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _confirmReset(context),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 16),
 
-          // Notification settings
           Card(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,8 +195,7 @@ class SettingsScreen extends StatelessWidget {
                   child: Text(
                     'Notifications',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppTheme.primaryColor,
-                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryColor, fontWeight: FontWeight.w600,
                         ),
                   ),
                 ),
@@ -201,7 +217,6 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // About
           Card(
             child: ListTile(
               leading: const Icon(Icons.info_outline),
@@ -212,7 +227,6 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Logout
           OutlinedButton.icon(
             onPressed: () {
               authService.logout();
@@ -226,6 +240,154 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  void _showCoaDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Initialize Chart of Accounts'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('This will replace the entire Chart of Accounts.', style: TextStyle(fontWeight: FontWeight.w600)),
+            SizedBox(height: 8),
+            Text('Only allowed when no journal entries exist.'),
+            SizedBox(height: 12),
+            Text('Select a COA standard:', style: TextStyle(fontWeight: FontWeight.w600)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: TextButton.icon(
+              icon: const Icon(Icons.account_balance, size: 16),
+              label: const Text('US GAAP'),
+              onPressed: () { Navigator.pop(ctx); _executeInitializeCoa(context, 'gaap'); },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: TextButton.icon(
+              icon: const Icon(Icons.language, size: 16),
+              label: const Text('IFRS'),
+              onPressed: () { Navigator.pop(ctx); _executeInitializeCoa(context, 'ifrs'); },
+            ),
+          ),
+          TextButton.icon(
+            icon: const Icon(Icons.map, size: 16),
+            label: const Text('China GAAP'),
+            onPressed: () { Navigator.pop(ctx); _executeInitializeCoa(context, 'china'); },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeInitializeCoa(BuildContext buildContext, String coaType) async {
+    showDialog(
+      context: buildContext,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      await glService.initializeCoa(coaType);
+      if (buildContext.mounted) {
+        Navigator.pop(buildContext);
+        ScaffoldMessenger.of(buildContext).showSnackBar(
+          const SnackBar(content: Text('Chart of Accounts initialized successfully.'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (buildContext.mounted) {
+        Navigator.pop(buildContext);
+        ScaffoldMessenger.of(buildContext).showSnackBar(
+          SnackBar(content: Text('Failed: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
+  }
+
+  void _confirmReset(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppTheme.errorColor, size: 24),
+            SizedBox(width: 10),
+            Text('Database Reset', style: TextStyle(fontSize: 16)),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('This will permanently delete ALL transactional data:', style: TextStyle(fontWeight: FontWeight.w600)),
+            SizedBox(height: 8),
+            Text('\u2022 Journal entries & lines'),
+            Text('\u2022 Account balances'),
+            Text('\u2022 Attachments'),
+            Text('\u2022 Audit logs'),
+            Text('\u2022 Sessions'),
+            Text('\u2022 User role assignments'),
+            SizedBox(height: 12),
+            Text('Chart of accounts, organizations, fiscal periods, user accounts, and tenants will NOT be affected.',
+                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            SizedBox(height: 12),
+            Text('This action cannot be undone!', style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton.icon(
+            onPressed: () { Navigator.pop(ctx); _executeReset(context); },
+            icon: const Icon(Icons.delete_forever, size: 18),
+            label: const Text('Reset Database'),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor, foregroundColor: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _executeReset(BuildContext buildContext) {
+    showDialog(
+      context: buildContext,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Database Reset'),
+        content: const Text('Type RESET to confirm:'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              showDialog(context: buildContext, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+              try {
+                await glService.resetDatabase();
+                if (buildContext.mounted) {
+                  Navigator.pop(buildContext);
+                  ScaffoldMessenger.of(buildContext).showSnackBar(
+                    const SnackBar(content: Text('Database reset complete.'), backgroundColor: Colors.green),
+                  );
+                }
+              } catch (e) {
+                if (buildContext.mounted) {
+                  Navigator.pop(buildContext);
+                  ScaffoldMessenger.of(buildContext).showSnackBar(
+                    SnackBar(content: Text('Reset failed: $e'), backgroundColor: AppTheme.errorColor),
+                  );
+                }
+              }
+            },
+            child: const Text('RESET', style: TextStyle(color: AppTheme.errorColor, fontWeight: FontWeight.bold)),
+          ),
         ],
       ),
     );
