@@ -28,8 +28,9 @@ type Account struct {
 type JournalEntry struct {
 	ID             uuid.UUID        `json:"id"`
 	TenantID       uuid.UUID        `json:"tenant_id"`
-	OrganizationID *uuid.UUID       `json:"organization_id,omitempty"`
-	DocumentNo     string           `json:"document_no"`   // auto-generated
+	OrganizationID   *uuid.UUID       `json:"organization_id,omitempty"`
+	OrganizationName string           `json:"organization_name,omitempty"`
+	DocumentNo       string           `json:"document_no"`   // auto-generated
 	PostingDate    time.Time        `json:"posting_date"`
 	DocumentDate   *time.Time       `json:"document_date,omitempty"`
 	PeriodID       uuid.UUID        `json:"period_id"`

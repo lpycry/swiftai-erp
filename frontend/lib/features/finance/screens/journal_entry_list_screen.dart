@@ -213,7 +213,77 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen> with Si
 
   // ── Detail Dialog (matches journal_entry_screen's style) ──
 
-  void _showDetailDialog(Map<String, dynamic> entry) {
+    void _fetchAndShowAttachments(BuildContext ctx, String entryId) async {
+    try {
+      final detail = await widget.glService.getJournalEntry(entryId);
+      var attachmentList = detail['attachments'] as List<dynamic>?;
+      // If attachments not pre-loaded, try fetching separately
+      if (attachmentList == null || attachmentList.isEmpty) {
+        // No separate attachments endpoint available via GlService
+        // Try the getAttachments if it exists
+      }
+      // Show simple dialog with attachment count
+      if (ctx.mounted) {
+        Navigator.pop(ctx);
+        _showAttachmentsForEntry(entryId);
+      }
+    } catch (_) {
+      // Silently handle
+    }
+  }
+
+  void _showAttachmentsForEntry(String entryId) async {
+    final detail = await widget.glService.getJournalEntry(entryId);
+    final attachments = detail['attachments'] as List<dynamic>? ?? [];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.attach_file, size: 20),
+                  const SizedBox(width: 8),
+                  Text('Attachments ()', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                  const Spacer(),
+                  IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.pop(ctx)),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: attachments.isEmpty
+                  ? const Padding(padding: EdgeInsets.all(32), child: Text('No attachments'))
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: attachments.length,
+                      itemBuilder: (_, i) => ListTile(
+                        leading: const Icon(Icons.attach_file, size: 20),
+                        title: Text(attachments[i]['file_name']?.toString() ?? 'Attachment'),
+                        subtitle: attachments[i]['file_size'] != null
+                            ? Text(' bytes')
+                            : null,
+                      ),
+                    ),
+            ),
+            const Divider(height: 1),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+              ]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+void _showDetailDialog(Map<String, dynamic> entry) {
     final lines = (entry['lines'] as List<dynamic>?) ?? [];
     final status = entry['status']?.toString() ?? 'draft';
 
@@ -256,7 +326,9 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen> with Si
                 _detailRow('Document Date', _fmtDate(entry['document_date'])),
                 _detailRow('Reference', entry['reference']?.toString() ?? ''),
                 _detailRow('Type', entry['entry_type']?.toString() ?? 'normal'),
-                if (entry['organization_id'] != null)
+                if (entry['organization_name'] != null && (entry['organization_name'] as String).isNotEmpty)
+                  _detailRow('Company', entry['organization_name'] as String)
+                else if (entry['organization_id'] != null)
                   _detailRow('Company', entry['organization_id'].toString()),
                 const Divider(height: 16),
                 // Lines
@@ -342,6 +414,10 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen> with Si
           ),
         ),
         actions: [
+          TextButton(
+            onPressed: () => _fetchAndShowAttachments(ctx, entry['id']!.toString()),
+            child: const Text('Attachments'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close'),

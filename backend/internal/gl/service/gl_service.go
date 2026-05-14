@@ -254,6 +254,15 @@ func (s *GLService) ReverseJournalEntry(ctx context.Context, tenantID, userID uu
 		return nil, ErrEntryAlreadyReversed
 	}
 
+	// Check if this entry has already been reversed (reversal doc references original doc_no)
+	var reversalCount int
+	err = s.db.QueryRow(ctx,
+		"SELECT COUNT(*) FROM gl_journal_entries WHERE tenant_id = $1 AND reference = $2 AND entry_type = 'reversal' AND status = 'posted'",
+		tenantID, original.DocumentNo).Scan(&reversalCount)
+	if err == nil && reversalCount > 0 {
+		return nil, fmt.Errorf("entry %s has already been reversed (%d reversal(s) exist)", original.DocumentNo, reversalCount)
+	}
+
 	// Build the reversal entry: swap debits and credits
 	revLines := make([]glmodels.CreateJournalLineRequest, len(original.Lines))
 	for i, line := range original.Lines {

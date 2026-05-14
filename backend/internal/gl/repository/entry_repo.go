@@ -112,15 +112,19 @@ func (r *EntryRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, req 
 // GetByID retrieves a journal entry with its lines.
 func (r *EntryRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*glmodels.JournalEntry, error) {
 	query := `
-		SELECT id, tenant_id, organization_id, document_no, posting_date,
-		       document_date, period_id,
-		       description, reference, entry_type, status, source,
-		       ai_confidence, created_by, created_at, posted_at, posted_by
-		FROM gl_journal_entries WHERE id = $1 AND tenant_id = $2
+		SELECT e.id, e.tenant_id, e.organization_id,
+		       COALESCE(o.org_code || ' - ' || o.org_name, ''),
+		       e.document_no, e.posting_date,
+		       e.document_date, e.period_id,
+		       e.description, e.reference, e.entry_type, e.status, e.source,
+		       e.ai_confidence, e.created_by, e.created_at, e.posted_at, e.posted_by
+		FROM gl_journal_entries e
+		LEFT JOIN organizations o ON o.id = e.organization_id
+		WHERE e.id = $1 AND e.tenant_id = $2
 	`
 	entry := &glmodels.JournalEntry{}
 	err := r.db.QueryRow(ctx, query, id, tenantID).Scan(
-		&entry.ID, &entry.TenantID, &entry.OrganizationID, &entry.DocumentNo, &entry.PostingDate,
+		&entry.ID, &entry.TenantID, &entry.OrganizationID, &entry.OrganizationName, &entry.DocumentNo, &entry.PostingDate,
 		&entry.DocumentDate, &entry.PeriodID,
 		&entry.Description, &entry.Reference, &entry.EntryType, &entry.Status, &entry.Source,
 		&entry.AIConfidence, &entry.CreatedBy, &entry.CreatedAt, &entry.PostedAt, &entry.PostedBy,
@@ -179,7 +183,7 @@ func (r *EntryRepo) ListByTenant(ctx context.Context, tenantID uuid.UUID, limit,
 	for rows.Next() {
 		entry := &glmodels.JournalEntry{}
 		err := rows.Scan(
-			&entry.ID, &entry.TenantID, &entry.OrganizationID, &entry.DocumentNo, &entry.PostingDate,
+			&entry.ID, &entry.TenantID, &entry.OrganizationID, &entry.OrganizationName, &entry.DocumentNo, &entry.PostingDate,
 			&entry.DocumentDate, &entry.PeriodID,
 			&entry.Description, &entry.Reference, &entry.EntryType, &entry.Status, &entry.Source,
 			&entry.AIConfidence, &entry.CreatedBy, &entry.CreatedAt, &entry.PostedAt, &entry.PostedBy,
@@ -225,7 +229,7 @@ func (r *EntryRepo) UpdateStatus(ctx context.Context, entryID, tenantID uuid.UUI
 // ListFiltered retrieves entries with optional status and entry_type filters.
 func (r *EntryRepo) ListFiltered(ctx context.Context, tenantID uuid.UUID, limit, offset int, status, entryType string) ([]*glmodels.JournalEntry, int64, error) {
 	// Build dynamic WHERE clause
-	whereClause := "WHERE tenant_id = $1"
+	whereClause := "WHERE e.tenant_id = $1"
 	args := []interface{}{tenantID}
 	argIdx := 2
 
@@ -242,7 +246,7 @@ func (r *EntryRepo) ListFiltered(ctx context.Context, tenantID uuid.UUID, limit,
 
 	// Count
 	var total int64
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM gl_journal_entries %s", whereClause)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM gl_journal_entries e %s", whereClause)
 	err := r.db.QueryRow(ctx, countQuery, args...).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count entries: %w", err)
@@ -256,12 +260,16 @@ func (r *EntryRepo) ListFiltered(ctx context.Context, tenantID uuid.UUID, limit,
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, tenant_id, organization_id, document_no, posting_date,
-		       document_date, period_id,
-		       description, reference, entry_type, status, source,
-		       ai_confidence, created_by, created_at, posted_at, posted_by
-		FROM gl_journal_entries %s
-		ORDER BY created_at DESC
+		SELECT e.id, e.tenant_id, e.organization_id,
+		       COALESCE(o.org_code || ' - ' || o.org_name, ''),
+		       e.document_no, e.posting_date,
+		       e.document_date, e.period_id,
+		       e.description, e.reference, e.entry_type, e.status, e.source,
+		       e.ai_confidence, e.created_by, e.created_at, e.posted_at, e.posted_by
+		FROM gl_journal_entries e
+		LEFT JOIN organizations o ON o.id = e.organization_id
+		%s
+		ORDER BY e.created_at DESC
 		LIMIT $%d OFFSET $%d
 	`, whereClause, argIdx, argIdx+1)
 
@@ -277,7 +285,7 @@ func (r *EntryRepo) ListFiltered(ctx context.Context, tenantID uuid.UUID, limit,
 	for rows.Next() {
 		entry := &glmodels.JournalEntry{}
 		err := rows.Scan(
-			&entry.ID, &entry.TenantID, &entry.OrganizationID, &entry.DocumentNo, &entry.PostingDate,
+			&entry.ID, &entry.TenantID, &entry.OrganizationID, &entry.OrganizationName, &entry.DocumentNo, &entry.PostingDate,
 			&entry.DocumentDate, &entry.PeriodID,
 			&entry.Description, &entry.Reference, &entry.EntryType, &entry.Status, &entry.Source,
 			&entry.AIConfidence, &entry.CreatedBy, &entry.CreatedAt, &entry.PostedAt, &entry.PostedBy,
@@ -311,7 +319,7 @@ func (r *EntryRepo) ListByStatus(ctx context.Context, tenantID uuid.UUID, status
 	for rows.Next() {
 		entry := &glmodels.JournalEntry{}
 		err := rows.Scan(
-			&entry.ID, &entry.TenantID, &entry.OrganizationID, &entry.DocumentNo, &entry.PostingDate,
+			&entry.ID, &entry.TenantID, &entry.OrganizationID, &entry.OrganizationName, &entry.DocumentNo, &entry.PostingDate,
 			&entry.DocumentDate, &entry.PeriodID,
 			&entry.Description, &entry.Reference, &entry.EntryType, &entry.Status, &entry.Source,
 			&entry.AIConfidence, &entry.CreatedBy, &entry.CreatedAt, &entry.PostedAt, &entry.PostedBy,
