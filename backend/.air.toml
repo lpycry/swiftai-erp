@@ -1,0 +1,18 @@
+# Air hot-reload config for development
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  bin = "tmp/main"
+  cmd = "go build -o ./tmp/main ./cmd/auth-service"
+  include_ext = ["go", "yaml", "yml", "toml"]
+  exclude_dir = ["tmp", "vendor"]
+  delay = 1000
+
+[log]
+  log_level = "info"
+
+[color]
+  app = "blue"
+  build = "yellow"
+  runner = "green"

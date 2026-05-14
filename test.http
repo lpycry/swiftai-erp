@@ -1,0 +1,93 @@
+### ============================================
+### SwiftAI ERP - API Test Suite
+### Requires: Humao REST Client (VS Code extension)
+### Backend:  auth-service (port 8081) + api-gateway (port 8080)
+### ============================================
+
+### 1. Health Check
+GET http://localhost:8080/health
+
+### 2. User Registration
+POST http://localhost:8080/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "email": "john@company.com",
+  "password": "MyPass1234",
+  "display_name": "John Lee",
+  "company_name": "My Company"
+}
+
+### 3. User Login
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "john@company.com",
+  "password": "MyPass1234"
+}
+
+### 4. Get Current User (requires token)
+# @prompt token Enter your access_token from login response
+GET http://localhost:8080/api/v1/auth/me
+Authorization: Bearer {{token}}
+
+### 5. List Roles
+GET http://localhost:8080/api/v1/roles
+Authorization: Bearer {{token}}
+
+### 6. Create Role in Role Master
+POST http://localhost:8080/api/v1/role-master
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "role_id": "Z_FINANCE_MGR",
+  "description": "Finance Manager - full finance access",
+  "role_type": "single",
+  "role_category": "finance"
+}
+
+### 7. List Role Master
+GET http://localhost:8080/api/v1/role-master
+Authorization: Bearer {{token}}
+
+### 8. Get Role Detail
+# @prompt roleId Enter role ID from role-master list
+GET http://localhost:8080/api/v1/role-master/{{roleId}}
+Authorization: Bearer {{token}}
+
+### 9. List Auth Objects
+GET http://localhost:8080/api/v1/admin/auth-objects
+Authorization: Bearer {{token}}
+
+### 10. Create Auth Object
+POST http://localhost:8080/api/v1/admin/auth-objects
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "object_class": "finance",
+  "object_code": "F_TAX_POST",
+  "description": "Post Tax Documents",
+  "activities": ["create", "read", "approve"]
+}
+
+### 11. Set Auth Values for Role
+PUT http://localhost:8080/api/v1/role-auth-values/{{roleId}}
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "auth_object_id": "F_GL_POST",
+  "activity_create": true,
+  "activity_read": true,
+  "activity_approve": true,
+  "field_values": {
+    "company_code": "1000"
+  }
+}
+
+### 12. Check Permission
+GET http://localhost:8080/api/v1/permissions/check?object=F_GL_POST&activity=create
+Authorization: Bearer {{token}}

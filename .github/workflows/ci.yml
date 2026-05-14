@@ -1,0 +1,150 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: "1.22"
+  FLUTTER_VERSION: "3.x"
+
+jobs:
+  # ---- Backend Tests ----
+  backend-test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: swiftai_erp_test
+          POSTGRES_USER: swiftai
+          POSTGRES_PASSWORD: swiftai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/go.sum
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: go mod download
+
+      - name: Run migrations
+        working-directory: ./backend
+        run: |
+          PGPASSWORD=swiftai_test psql -h localhost -U swiftai -d swiftai_erp_test -f migrations/001_init.sql
+
+      - name: Run unit tests
+        working-directory: ./backend
+        run: go test -v -race -coverprofile=coverage.out ./...
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: swiftai
+          DB_PASSWORD: swiftai_test
+          DB_NAME: swiftai_erp_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./backend/coverage.out
+
+      - name: Check formatting
+        working-directory: ./backend
+        run: test -z $(gofmt -l .)
+
+  # ---- Frontend Tests ----
+  frontend-test:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Get dependencies
+        working-directory: ./frontend
+        run: flutter pub get
+
+      - name: Analyze code
+        working-directory: ./frontend
+        run: flutter analyze
+
+      - name: Run tests
+        working-directory: ./frontend
+        run: flutter test --coverage
+
+      - name: Check formatting
+        working-directory: ./frontend
+        run: dart format --set-exit-if-changed lib/
+
+  # ---- Docker Build ----
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend images
+        uses: docker/bake-action@v4
+        with:
+          files: ./deploy/docker/docker-bake.hcl
+          targets: api-gateway,auth-service
+          provenance: false
+
+  # ---- Security Scan ----
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif

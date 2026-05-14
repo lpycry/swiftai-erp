@@ -1,0 +1,51 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: swiftai-erp
+  K8S_CLUSTER: swiftai-erp-prod
+
+jobs:
+  deploy:
+    name: Build & Deploy to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker images
+        run: |
+          docker build --target api-gateway -t $ECR_REPOSITORY:api-gateway-${{ github.ref_name }} ./backend
+          docker build --target auth-service -t $ECR_REPOSITORY:auth-service-${{ github.ref_name }} ./backend
+
+          docker tag $ECR_REPOSITORY:api-gateway-${{ github.ref_name }} \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPOSITORY:api-gateway-${{ github.ref_name }}
+
+          docker tag $ECR_REPOSITORY:auth-service-${{ github.ref_name }} \
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPOSITORY:auth-service-${{ github.ref_name }}
+
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPOSITORY:api-gateway-${{ github.ref_name }}
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPOSITORY:auth-service-${{ github.ref_name }}
+
+      - name: Deploy to K8s
+        run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.K8S_CLUSTER }}
+          kubectl set image deployment/api-gateway \
+            api-gateway=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPOSITORY:api-gateway-${{ github.ref_name }}
+          kubectl set image deployment/auth-service \
+            auth-service=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/$ECR_REPOSITORY:auth-service-${{ github.ref_name }}
