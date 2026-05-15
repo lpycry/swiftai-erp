@@ -506,6 +506,33 @@ func (h *GLHandler) UpdateDraftEntry(c *gin.Context) {
 
 	response.OK(c, entry)
 }
+// UnpostEntry handles POST /api/v1/gl/journal-entries/:id/unpost
+func (h *GLHandler) UnpostEntry(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	entryID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid entry id")
+		return
+	}
+
+	entry, err := h.glSvc.UnpostEntry(c.Request.Context(), tenantID, userID, entryID)
+	if err != nil {
+		log.Err(err).Msg("unpost entry failed")
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	response.OK(c, entry)
+}
 // ReverseJournalEntry handles POST /api/v1/gl/journal-entries/:id/reverse
 func (h *GLHandler) ReverseJournalEntry(c *gin.Context) {
 	tenantID, err := getTenantID(c)

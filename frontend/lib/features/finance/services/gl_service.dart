@@ -287,6 +287,19 @@ class GlService {
   }
 
   /// Reverse a posted journal entry
+  Future<Map<String, dynamic>> unpostJournalEntry(String id) async {
+    final resp = await http.post(
+      Uri.parse('\/gl/journal-entries/\/unpost'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to unpost journal entry');
+    }
+    final body = jsonDecode(resp.body);
+    return body['data'] as Map<String, dynamic>? ?? body;
+  }
+
   Future<Map<String, dynamic>> reverseJournalEntry(String id) async {
     final resp = await http.post(
       Uri.parse('$_baseUrl/gl/journal-entries/$id/reverse'),

@@ -194,13 +194,17 @@ func (r *EntryRepo) ListByTenant(ctx context.Context, tenantID uuid.UUID, limit,
 		entries = append(entries, entry)
 	}
 
-	// Load lines for each entry
+	// Load lines for each entry and compute totals
 	for _, e := range entries {
 		lines, err := r.getLines(ctx, e.ID)
 		if err != nil {
 			return nil, 0, fmt.Errorf("get lines for entry %s: %w", e.ID, err)
 		}
 		e.Lines = lines
+		for _, l := range lines {
+			e.TotalDebit += l.Debit
+			e.TotalCredit += l.Credit
+		}
 	}
 
 	return entries, total, nil
@@ -814,6 +818,49 @@ func (r *EntryRepo) PostEntry(ctx context.Context, entryID, tenantID, userID uui
 // generateDocumentNo creates a sequential document number: GL-YYYYMM-XXXX
 
 // generateDocumentNo creates a sequential document number: GL-YYYYMM-XXXX
+// UnpostEntry reverses the effect of posting: subtracts from gl_account_balances and sets status to draft.
+func (r *EntryRepo) UnpostEntry(ctx context.Context, entryID, tenantID uuid.UUID) error {
+	entry, err := r.GetByID(ctx, entryID, tenantID)
+	if err != nil || entry == nil {
+		return fmt.Errorf("entry not found: %w", err)
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(ctx, `
+		UPDATE gl_journal_entries
+		SET status = 'draft', posted_at = NULL, posted_by = NULL
+		WHERE id = $1 AND tenant_id = $2 AND status = 'posted'
+	`, entryID, tenantID)
+	if err != nil {
+		return fmt.Errorf("update status: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("entry not found or not posted")
+	}
+
+	for _, line := range entry.Lines {
+		_, err = tx.Exec(ctx, `
+			UPDATE gl_account_balances
+			SET period_debit  = GREATEST(period_debit - $4, 0),
+			    period_credit = GREATEST(period_credit - $5, 0),
+			    closing_balance = opening_balance +
+			                      GREATEST(period_debit - $4, 0) -
+			                      GREATEST(period_credit - $5, 0),
+			    updated_at = NOW()
+			WHERE tenant_id = $1 AND account_id = $2 AND period_id = $3
+		`, tenantID, line.AccountID, entry.PeriodID, line.Debit, line.Credit)
+		if err != nil {
+			return fmt.Errorf("reverse balance for account %s: %w", line.AccountID, err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
 func generateDocumentNo(ctx context.Context, db *pgxpool.Pool, tenantID uuid.UUID) string {
 	now := time.Now()
 	prefix := fmt.Sprintf("GL-%s-", now.Format("200601"))

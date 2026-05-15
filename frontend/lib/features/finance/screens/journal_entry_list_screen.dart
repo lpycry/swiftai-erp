@@ -40,7 +40,7 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen> with Si
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         final key = _tabDefs[_tabController.index]['key'] as String;
@@ -155,7 +155,7 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen> with Si
     );
     if (confirmed != true) return;
     try {
-      await widget.glService.reverseJournalEntry(id);
+      await widget.glService.unpostJournalEntry(id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Entry reversed successfully'), backgroundColor: Colors.green),
@@ -526,7 +526,7 @@ void _showDetailDialog(Map<String, dynamic> entry) {
     switch (key) {
       case 'draft': return Icons.edit_note;
       case 'posted': return Icons.check_circle_outline;
-      case 'reversed': return Icons.undo;
+      case '': return Icons.undo;
       default: return Icons.receipt_long;
     }
   }
@@ -535,7 +535,7 @@ void _showDetailDialog(Map<String, dynamic> entry) {
     switch (key) {
       case 'draft': return AppTheme.warningColor;
       case 'posted': return AppTheme.successColor;
-      case 'reversed': return AppTheme.errorColor;
+      case '': return AppTheme.errorColor;
       default: return Colors.grey;
     }
   }
@@ -544,7 +544,7 @@ void _showDetailDialog(Map<String, dynamic> entry) {
     switch (key) {
       case 'draft': return 'Draft';
       case 'posted': return 'Posted';
-      case 'reversed': return 'Reversed';
+      case '': return 'Reversed';
       default: return '';
     }
   }
@@ -710,7 +710,7 @@ void _showDetailDialog(Map<String, dynamic> entry) {
           ],
         );
 
-      case 'reversed':
+      case '':
         return IconButton(
           icon: Icon(Icons.visibility_outlined, size: 18, color: Colors.grey.shade400),
           onPressed: () => _viewDetail(entry),

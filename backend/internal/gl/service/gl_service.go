@@ -239,6 +239,28 @@ func (s *GLService) UpdateDraftEntry(ctx context.Context, tenantID, userID uuid.
 
 	return s.GetJournalEntry(ctx, entryID, tenantID)
 }
+// UnpostEntry reverses a posted entry back to draft and subtracts from balances.
+func (s *GLService) UnpostEntry(ctx context.Context, tenantID, userID uuid.UUID, entryID uuid.UUID) (*glmodels.JournalEntry, error) {
+	entry, err := s.entryRepo.GetByID(ctx, entryID, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("get entry: %w", err)
+	}
+	if entry == nil {
+		return nil, ErrEntryNotFound
+	}
+	if entry.Status != "posted" {
+		return nil, fmt.Errorf("only posted entries can be unposted")
+	}
+	if entry.EntryType == "reversal" {
+		return nil, fmt.Errorf("reversal entries cannot be unposted")
+	}
+
+	if err := s.entryRepo.UnpostEntry(ctx, entryID, tenantID); err != nil {
+		return nil, fmt.Errorf("unpost entry: %w", err)
+	}
+
+	return s.entryRepo.GetByID(ctx, entryID, tenantID)
+}
 func (s *GLService) ReverseJournalEntry(ctx context.Context, tenantID, userID uuid.UUID, entryID uuid.UUID) (*glmodels.JournalEntry, error) {
 	original, err := s.entryRepo.GetByID(ctx, entryID, tenantID)
 	if err != nil {
