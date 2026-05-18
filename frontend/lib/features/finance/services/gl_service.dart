@@ -420,6 +420,17 @@ class GlService {
     return body['data'] as Map<String, dynamic>? ?? {};
   }
 
+  /// Get all attachments for a journal entry
+  Future<List<Map<String, dynamic>>> getAttachments(String entryId) async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/gl/journal-entries/$entryId/attachments'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    final body = jsonDecode(resp.body);
+    return (body['data'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+  }
+
   Future<void> uploadAttachments(String entryId, List<PlatformFile> files) async {
     for (final file in files) {
       try {

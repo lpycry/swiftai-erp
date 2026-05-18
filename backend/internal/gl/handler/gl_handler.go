@@ -451,6 +451,34 @@ func (h *GLHandler) UpdateJournalEntryStatus(c *gin.Context) {
 	response.OK(c, entry)
 }
 
+// DeleteJournalEntry handles DELETE /api/v1/gl/journal-entries/:id
+func (h *GLHandler) DeleteJournalEntry(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+
+	entryID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid entry id")
+		return
+	}
+
+	if err := h.glSvc.DeleteJournalEntry(c.Request.Context(), entryID, tenantID); err != nil {
+		log.Err(err).Msg("delete journal entry failed")
+		switch err {
+		case service.ErrEntryNotFound:
+			response.NotFound(c, err.Error())
+		default:
+			response.BadRequest(c, err.Error())
+		}
+		return
+	}
+
+	response.OK(c, gin.H{"message": "journal entry deleted"})
+}
+
 // UpdateDraftEntry handles PUT /api/v1/gl/journal-entries/:id
 func (h *GLHandler) UpdateDraftEntry(c *gin.Context) {
 	tenantID, err := getTenantID(c)

@@ -165,6 +165,7 @@ func main() {
 		protected.POST("/gl/journal-entries/post", glHandler.PostJournalEntries)
 		protected.PATCH("/gl/journal-entries/:id/status", glHandler.UpdateJournalEntryStatus)
 		protected.PUT("/gl/journal-entries/:id", glHandler.UpdateDraftEntry)
+		protected.DELETE("/gl/journal-entries/:id", glHandler.DeleteJournalEntry)
 		protected.POST("/gl/journal-entries/:id/reverse", glHandler.ReverseJournalEntry)
 				protected.POST("/gl/journal-entries/:id/unpost", glHandler.UnpostEntry)
 

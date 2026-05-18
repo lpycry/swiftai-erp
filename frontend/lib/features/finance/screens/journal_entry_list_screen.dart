@@ -180,7 +180,7 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen>
   void _viewDetail(dynamic entry) async {
     try {
       final detail = await widget.glService.getJournalEntry(entry['id']!.toString());
-      if (mounted) _showDetailDialog(detail);
+      if (mounted) await _showDetailDialog(detail);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -190,16 +190,26 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen>
     }
   }
 
-  void _showDetailDialog(Map<String, dynamic> entry) {
+  Future<void> _showDetailDialog(Map<String, dynamic> entry) async {
     final lines = (entry['lines'] as List<dynamic>?) ?? [];
     final status = entry['status']?.toString() ?? 'draft';
     final docNo = entry['document_no']?.toString() ?? 'N/A';
+    final entryId = entry['id']?.toString() ?? '';
 
     double totalDebit = 0, totalCredit = 0;
     for (final l in lines) {
       totalDebit += (l['debit'] as num?)?.toDouble() ?? 0;
       totalCredit += (l['credit'] as num?)?.toDouble() ?? 0;
     }
+
+    // Fetch attachments count
+    int attachmentCount = 0;
+    try {
+      final atts = await widget.glService.getAttachments(entryId);
+      attachmentCount = atts.length;
+    } catch (_) {}
+
+    if (!mounted) return;
 
     showDialog(
       context: context,
@@ -306,15 +316,173 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen>
                     ],
                   ),
                 ),
+                if (attachmentCount > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.attach_file, size: 14, color: Colors.grey.shade600),
+                      const SizedBox(width: 4),
+                      Text('$attachmentCount attachment(s)', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
         ),
         actions: [
+          if (attachmentCount > 0)
+            TextButton.icon(
+              icon: const Icon(Icons.attach_file, size: 18),
+              label: Text('Attachments ($attachmentCount)', style: const TextStyle(fontSize: 12)),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _showEntryAttachmentsDialog(entryId, docNo);
+              },
+            ),
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
         ],
       ),
     );
+  }
+
+  Future<void> _showEntryAttachmentsDialog(String entryId, String docNo) async {
+    try {
+      final atts = await widget.glService.getAttachments(entryId);
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    const Icon(Icons.attach_file, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Attachments - $docNo',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              if (atts.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Text('No attachments found'),
+                )
+              else
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: atts.map((a) => _buildAttachmentItem(a)).toList(),
+                    ),
+                  ),
+                ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load attachments: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
+  }
+
+  Widget _buildAttachmentItem(Map<String, dynamic> att) {
+    final fileType = att['file_type']?.toString() ?? '';
+    final fileName = att['file_name']?.toString() ?? 'Unknown';
+    final fileSize = (att['file_size'] as num?)?.toInt() ?? 0;
+    final isImage = fileType.startsWith('image/');
+
+    IconData icon;
+    Color color;
+    if (fileType.contains('pdf')) {
+      icon = Icons.picture_as_pdf;
+      color = Colors.red.shade600;
+    } else if (fileType.contains('spreadsheet') || fileName.endsWith('.xls') || fileName.endsWith('.xlsx')) {
+      icon = Icons.table_chart;
+      color = Colors.green.shade600;
+    } else if (fileType.contains('word') || fileName.endsWith('.doc') || fileName.endsWith('.docx')) {
+      icon = Icons.description;
+      color = Colors.blue.shade600;
+    } else if (isImage) {
+      icon = Icons.image;
+      color = Colors.purple.shade500;
+    } else {
+      icon = Icons.insert_drive_file;
+      color = Colors.orange.shade600;
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(fileName, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 1),
+                if (fileSize > 0)
+                  Text(_formatFileSize(fileSize), style: TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   // ── Helpers ──

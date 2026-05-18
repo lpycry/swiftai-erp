@@ -300,6 +300,19 @@ func (r *EntryRepo) ListFiltered(ctx context.Context, tenantID uuid.UUID, limit,
 		entries = append(entries, entry)
 	}
 
+	// Load lines and compute totals for each entry
+	for _, e := range entries {
+		lines, err := r.getLines(ctx, e.ID)
+		if err != nil {
+			return nil, 0, fmt.Errorf("get lines for entry %s: %w", e.ID, err)
+		}
+		e.Lines = lines
+		for _, l := range lines {
+			e.TotalDebit += l.Debit
+			e.TotalCredit += l.Credit
+		}
+	}
+
 	return entries, total, nil
 }
 
@@ -684,6 +697,38 @@ func (r *EntryRepo) GetAttachments(ctx context.Context, entryID uuid.UUID) ([]gl
 		atts = append(atts, a)
 	}
 	return atts, nil
+}
+
+// DeleteEntry deletes a draft journal entry and its lines and attachments.
+func (r *EntryRepo) DeleteEntry(ctx context.Context, entryID, tenantID uuid.UUID) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Delete lines
+	_, err = tx.Exec(ctx, `DELETE FROM gl_journal_lines WHERE entry_id = $1`, entryID)
+	if err != nil {
+		return fmt.Errorf("delete lines: %w", err)
+	}
+
+	// Delete attachments
+	_, err = tx.Exec(ctx, `DELETE FROM gl_entry_attachments WHERE entry_id = $1`, entryID)
+	if err != nil {
+		return fmt.Errorf("delete attachments: %w", err)
+	}
+
+	// Delete entry
+	result, err := tx.Exec(ctx, `DELETE FROM gl_journal_entries WHERE id = $1 AND tenant_id = $2`, entryID, tenantID)
+	if err != nil {
+		return fmt.Errorf("delete entry: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("entry not found")
+	}
+
+	return tx.Commit(ctx)
 }
 
 // DeleteAttachment removes an attachment by ID.

@@ -560,6 +560,21 @@ func (s *GLService) ResetDatabase(ctx context.Context) error {
 	}
 	return nil
 }
+// DeleteJournalEntry deletes a draft journal entry.
+func (s *GLService) DeleteJournalEntry(ctx context.Context, entryID, tenantID uuid.UUID) error {
+	entry, err := s.entryRepo.GetByID(ctx, entryID, tenantID)
+	if err != nil {
+		return fmt.Errorf("get entry: %w", err)
+	}
+	if entry == nil {
+		return ErrEntryNotFound
+	}
+	if entry.Status != "draft" {
+		return fmt.Errorf("only draft entries can be deleted")
+	}
+	return s.entryRepo.DeleteEntry(ctx, entryID, tenantID)
+}
+
 func (s *GLService) AddAttachment(ctx context.Context, att *glmodels.EntryAttachment) error {
 	return s.entryRepo.AddAttachment(ctx, att)
 }
