@@ -583,3 +583,8 @@ func (s *GLService) AddAttachment(ctx context.Context, att *glmodels.EntryAttach
 func (s *GLService) GetAttachments(ctx context.Context, entryID uuid.UUID) ([]glmodels.EntryAttachment, error) {
 	return s.entryRepo.GetAttachments(ctx, entryID)
 }
+
+// GetAttachmentByID retrieves a single attachment by ID and entry ID.
+func (s *GLService) GetAttachmentByID(ctx context.Context, attID, entryID uuid.UUID) (*glmodels.EntryAttachment, error) {
+	return s.entryRepo.GetAttachmentByID(ctx, attID, entryID)
+}

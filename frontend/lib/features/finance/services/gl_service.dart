@@ -420,6 +420,22 @@ class GlService {
     return body['data'] as Map<String, dynamic>? ?? {};
   }
 
+  /// Get download URL for an attachment file
+  String getAttachmentDownloadUrl(String entryId, String attachmentId) {
+    return '$_baseUrl/gl/journal-entries/$entryId/attachments/$attachmentId/download';
+  }
+
+  /// Fetch attachment file bytes
+  Future<List<int>> downloadAttachmentBytes(String entryId, String attachmentId) async {
+    final url = getAttachmentDownloadUrl(entryId, attachmentId);
+    final resp = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $_token'},
+    );
+    if (resp.statusCode >= 400) throw Exception('Download failed: ${resp.statusCode}');
+    return resp.bodyBytes;
+  }
+
   /// Get all attachments for a journal entry
   Future<List<Map<String, dynamic>>> getAttachments(String entryId) async {
     final resp = await http.get(

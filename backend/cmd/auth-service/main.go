@@ -177,6 +177,7 @@ func main() {
 		// ---- GL: Attachments ----
 		protected.POST("/gl/journal-entries/:id/attachments", glHandler.UploadAttachment)
 		protected.GET("/gl/journal-entries/:id/attachments", glHandler.GetAttachments)
+		protected.GET("/gl/journal-entries/:id/attachments/:attachmentId/download", glHandler.DownloadAttachment)
 
 		// ---- Orgs ----
 		protected.POST("/orgs", orgHandler.CreateOrg)

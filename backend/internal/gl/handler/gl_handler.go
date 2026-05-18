@@ -842,6 +842,30 @@ func (h *GLHandler) GetAttachments(c *gin.Context) {
 	response.OK(c, atts)
 }
 
+// DownloadAttachment handles GET /api/v1/gl/journal-entries/:id/attachments/:attachmentId/download
+func (h *GLHandler) DownloadAttachment(c *gin.Context) {
+	entryID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid entry id")
+		return
+	}
+
+	attID, err := uuid.Parse(c.Param("attachmentId"))
+	if err != nil {
+		response.BadRequest(c, "invalid attachment id")
+		return
+	}
+
+	att, err := h.glSvc.GetAttachmentByID(c.Request.Context(), attID, entryID)
+	if err != nil {
+		response.NotFound(c, "attachment not found")
+		return
+	}
+
+	// Serve the file
+	c.FileAttachment(att.FilePath, att.FileName)
+}
+
 // InitializeCoA handles POST /api/v1/gl/initialize-coa
 func (h *GLHandler) InitializeCoA(c *gin.Context) {
 	var req struct {

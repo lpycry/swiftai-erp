@@ -732,6 +732,27 @@ func (r *EntryRepo) DeleteEntry(ctx context.Context, entryID, tenantID uuid.UUID
 }
 
 // DeleteAttachment removes an attachment by ID.
+// GetAttachmentByID retrieves a single attachment by ID and entry ID.
+func (r *EntryRepo) GetAttachmentByID(ctx context.Context, id, entryID uuid.UUID) (*glmodels.EntryAttachment, error) {
+	query := `
+		SELECT id, entry_id, file_name, file_type, file_size, file_path,
+		       COALESCE(description,'') as description, uploaded_by, created_at
+		FROM gl_entry_attachments WHERE id = $1 AND entry_id = $2
+	`
+	var a glmodels.EntryAttachment
+	err := r.db.QueryRow(ctx, query, id, entryID).Scan(
+		&a.ID, &a.EntryID, &a.FileName, &a.FileType, &a.FileSize, &a.FilePath,
+		&a.Description, &a.UploadedBy, &a.CreatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get attachment: %w", err)
+	}
+	return &a, nil
+}
+
 func (r *EntryRepo) DeleteAttachment(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.Exec(ctx, "DELETE FROM gl_entry_attachments WHERE id = $1", id)
 	if err != nil {
