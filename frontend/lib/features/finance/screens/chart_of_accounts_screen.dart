@@ -56,7 +56,11 @@ class _ChartOfAccountsScreenState extends State<ChartOfAccountsScreen> {
   }
 
   void _toggle(String id) => setState(() {
-    if (_expanded.contains(id)) _expanded.remove(id); else _expanded.add(id);
+    if (_expanded.contains(id)) {
+      _expanded.remove(id);
+    } else {
+      _expanded.add(id);
+    }
   });
 
   // ── Create ──
@@ -222,8 +226,10 @@ class _ChartOfAccountsScreenState extends State<ChartOfAccountsScreen> {
     try {
       await widget.glService.deleteAccount(a.id);
       _load();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Account deleted'), backgroundColor: AppTheme.successColor));
+      }
     } catch (e) {
       if (mounted) _err('$e');
     }
@@ -244,8 +250,10 @@ class _ChartOfAccountsScreenState extends State<ChartOfAccountsScreen> {
     try {
       await widget.glService.reactivateAccount(a.id);
       _load();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Account reactivated'), backgroundColor: AppTheme.successColor));
+      }
     } catch (e) { if (mounted) _err('$e'); }
   }
 
@@ -343,12 +351,14 @@ class _ChartOfAccountsScreenState extends State<ChartOfAccountsScreen> {
   );
 
   Widget _buildSearch() {
-    if (_searchResults.isEmpty) return Center(
+    if (_searchResults.isEmpty) {
+      return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.search_off_rounded, size: 40, color: AppTheme.textMuted),
         const SizedBox(height: 8),
         Text('No matching accounts', style: TextStyle(color: AppTheme.textMuted)),
       ]));
+    }
     return ListView.builder(padding: const EdgeInsets.all(8), itemCount: _searchResults.length,
       itemBuilder: (_, i) => _card(_searchResults[i]));
   }

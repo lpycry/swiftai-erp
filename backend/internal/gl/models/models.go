@@ -59,10 +59,12 @@ type JournalLine struct {
 	AccountName  string     `json:"account_name"`  // denormalized
 	Debit        float64    `json:"debit"`
 	Credit       float64    `json:"credit"`
-	Description  string     `json:"description,omitempty"` // line item text
+	DocumentNo   string     `json:"document_no,omitempty"`   // from parent entry
+	PostingDate  *time.Time `json:"posting_date,omitempty"` // from parent entry
+	Description  string     `json:"description,omitempty"`  // line item text
 	CostCenterID *uuid.UUID `json:"cost_center_id,omitempty"`
-	PartnerID    *uuid.UUID `json:"partner_id,omitempty"`   // customer/vendor id
-	PartnerType  string     `json:"partner_type,omitempty"` // customer, vendor
+	PartnerID    *uuid.UUID `json:"partner_id,omitempty"`    // customer/vendor id
+	PartnerType  string     `json:"partner_type,omitempty"`  // customer, vendor
 }
 
 // ── Request / Response types ──

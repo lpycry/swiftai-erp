@@ -258,6 +258,7 @@ class GlService {
     String? entryType,
     String? dateFrom,
     String? dateTo,
+    String? query,
   }) async {
     final params = <String, String>{
       'page': '$page',
@@ -286,24 +287,11 @@ class GlService {
     return body['data'] as Map<String, dynamic>? ?? body;
   }
 
-  /// Reverse a posted journal entry
-  Future<Map<String, dynamic>> unpostJournalEntry(String id) async {
-    final resp = await http.post(
-      Uri.parse('\/gl/journal-entries/\/unpost'),
-      headers: _headers,
-    );
-    if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Failed to unpost journal entry');
-    }
-    final body = jsonDecode(resp.body);
-    return body['data'] as Map<String, dynamic>? ?? body;
-  }
-
-  Future<Map<String, dynamic>> reverseJournalEntry(String id) async {
+  Future<Map<String, dynamic>> reverseJournalEntry(String id, {String reversalType = 'negative'}) async {
     final resp = await http.post(
       Uri.parse('$_baseUrl/gl/journal-entries/$id/reverse'),
       headers: _headers,
+      body: jsonEncode({'reversal_type': reversalType}),
     );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
@@ -497,11 +485,25 @@ class GlService {
     return body['data'] as Map<String, dynamic>? ?? body;
   }
 
+  /// OCR analyze an image file, returns AI suggestion for journal entry.
+  /// Sends image as multipart/form-data to the OCR endpoint.
+  Future<Map<String, dynamic>> ocrAnalyze(String filePath, String fileName) async {
+    final uri = Uri.parse('$_baseUrl/gl/ai/ocr');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer $_token';
+    request.files.add(await http.MultipartFile.fromPath('image', filePath, filename: fileName));
+    final streamedResp = await request.send();
+    final resp = await http.Response.fromStream(streamedResp);
+    if (resp.statusCode >= 400) throw Exception('OCR analysis failed: ${resp.statusCode}');
+    final body = jsonDecode(resp.body);
+    return body['data'] as Map<String, dynamic>? ?? body;
+  }
+
   // ==================== Dashboard ====================
 
   Future<void> initializeCoa(String coaType) async {
     final resp = await http.post(
-      Uri.parse('${_baseUrl}/gl/initialize-coa'),
+      Uri.parse('$_baseUrl/gl/initialize-coa'),
       headers: _headers,
       body: jsonEncode({'coa_type': coaType}),
     );
@@ -513,7 +515,7 @@ class GlService {
 
   Future<void> resetDatabase() async {
     final resp = await http.post(
-      Uri.parse('${_baseUrl}/gl/reset-database'),
+      Uri.parse('$_baseUrl/gl/reset-database'),
       headers: _headers,
     );
     if (resp.statusCode >= 400) {

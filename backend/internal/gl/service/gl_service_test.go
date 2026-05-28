@@ -41,7 +41,7 @@ func TestMain(m *testing.M) {
 
 	// Find leaf accounts for tests
 	rows, _ := testPool.Query(context.Background(),
-		"SELECT id, account_code, account_type FROM gl_accounts WHERE tenant_id = $1 AND is_leaf = true AND is_active = true LIMIT 50",
+		"SELECT id, account_code, account_type FROM gl_accounts WHERE tenant_id = $1 AND is_leaf = true AND is_active = true AND reconciliation_type = 'none' LIMIT 50",
 		testTenant)
 	for rows.Next() {
 		var id uuid.UUID
@@ -234,8 +234,8 @@ func TestPostAndReverseEntry(t *testing.T) {
 		t.Error("Expected gl_account_balances to have entries for posted entry")
 	}
 
-	// Reverse
-	reversal, err := svc.ReverseJournalEntry(context.Background(), testTenant, testUser, entry.ID)
+	// Reverse (default to negative/红字冲销)
+	reversal, err := svc.ReverseJournalEntry(context.Background(), testTenant, testUser, entry.ID, "negative")
 	if err != nil {
 		t.Fatalf("Reverse failed: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestListJournalEntries_FilterByStatus(t *testing.T) {
 	svc.UpdateJournalEntryStatus(ctx, entry1.ID, testTenant, testUser, "posted")
 
 	// List drafts
-	drafts, total, err := svc.ListJournalEntries(ctx, testTenant, 1, 50, "draft", "")
+	drafts, total, err := svc.ListJournalEntries(ctx, testTenant, 1, 50, "draft", "", "")
 	if err != nil {
 		t.Fatalf("List drafts failed: %v", err)
 	}
@@ -308,7 +308,7 @@ func TestListJournalEntries_FilterByStatus(t *testing.T) {
 	}
 
 	// List posted
-	posted, _, _ := svc.ListJournalEntries(ctx, testTenant, 1, 50, "posted", "")
+	posted, _, _ := svc.ListJournalEntries(ctx, testTenant, 1, 50, "posted", "", "")
 	if len(posted) != 1 {
 		t.Errorf("Expected 1 posted, got %d", len(posted))
 	}
@@ -332,7 +332,7 @@ func TestListJournalEntries_Pagination(t *testing.T) {
 	}
 
 	// List with page_size=2
-	entries, total, err := svc.ListJournalEntries(ctx, testTenant, 1, 2, "", "")
+	entries, total, err := svc.ListJournalEntries(ctx, testTenant, 1, 2, "", "", "")
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestListJournalEntries_Pagination(t *testing.T) {
 		t.Errorf("Expected 2 entries on page 1, got %d", len(entries))
 	}
 
-	page2, _, _ := svc.ListJournalEntries(ctx, testTenant, 2, 2, "", "")
+	page2, _, _ := svc.ListJournalEntries(ctx, testTenant, 2, 2, "", "", "")
 	if len(page2) != 1 {
 		t.Errorf("Expected 1 entry on page 2, got %d", len(page2))
 	}

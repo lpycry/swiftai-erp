@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -230,22 +231,51 @@ func (r *EntryRepo) UpdateStatus(ctx context.Context, entryID, tenantID uuid.UUI
 	return nil
 }
 
-// ListFiltered retrieves entries with optional status and entry_type filters.
-func (r *EntryRepo) ListFiltered(ctx context.Context, tenantID uuid.UUID, limit, offset int, status, entryType string) ([]*glmodels.JournalEntry, int64, error) {
+// ListFiltered retrieves entries with optional status, entry_type, and smart search filters.
+// query supports: document_no, description, reference, and numeric amount matching on line items.
+func (r *EntryRepo) ListFiltered(ctx context.Context, tenantID uuid.UUID, limit, offset int, status, entryType, query string) ([]*glmodels.JournalEntry, int64, error) {
 	// Build dynamic WHERE clause
 	whereClause := "WHERE e.tenant_id = $1"
 	args := []interface{}{tenantID}
 	argIdx := 2
 
 	if status != "" {
-		whereClause += fmt.Sprintf(" AND status = $%d", argIdx)
+		whereClause += fmt.Sprintf(" AND e.status = $%d", argIdx)
 		args = append(args, status)
 		argIdx++
 	}
 	if entryType != "" {
-		whereClause += fmt.Sprintf(" AND entry_type = $%d", argIdx)
+		whereClause += fmt.Sprintf(" AND e.entry_type = $%d", argIdx)
 		args = append(args, entryType)
 		argIdx++
+	}
+	if query != "" {
+		// Smart search: match against text fields (ILIKE) or line amounts (if numeric)
+		likePattern := "%" + query + "%"
+		searchClause := fmt.Sprintf(` AND (
+			e.document_no ILIKE $%[1]d OR
+			e.description ILIKE $%[1]d OR
+			e.reference ILIKE $%[1]d
+		)`, argIdx)
+		argsLikeIdx := argIdx
+		args = append(args, likePattern)
+		argIdx++
+
+		// If the query can be parsed as a number, also search line amounts
+		if amt, parseErr := strconv.ParseFloat(query, 64); parseErr == nil && amt > 0 {
+			searchClause = fmt.Sprintf(` AND (
+				e.document_no ILIKE $%[1]d OR
+				e.description ILIKE $%[1]d OR
+				e.reference ILIKE $%[1]d OR
+				e.id IN (
+					SELECT entry_id FROM gl_journal_lines
+					WHERE ABS(debit - $%[2]d) < 0.01 OR ABS(credit - $%[2]d) < 0.01
+				)
+			)`, argsLikeIdx, argIdx)
+			args = append(args, amt)
+			argIdx++
+		}
+		whereClause += searchClause
 	}
 
 	// Count
@@ -263,7 +293,7 @@ func (r *EntryRepo) ListFiltered(ctx context.Context, tenantID uuid.UUID, limit,
 		offset = 0
 	}
 
-	query := fmt.Sprintf(`
+	sqlQuery := fmt.Sprintf(`
 		SELECT e.id, e.tenant_id, e.organization_id,
 		       COALESCE(o.org_code || ' - ' || o.org_name, ''),
 		       e.document_no, e.posting_date,
@@ -279,7 +309,7 @@ func (r *EntryRepo) ListFiltered(ctx context.Context, tenantID uuid.UUID, limit,
 
 	args = append(args, limit, offset)
 
-	rows, err := r.db.Query(ctx, query, args...)
+	rows, err := r.db.Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list entries: %w", err)
 	}
@@ -421,7 +451,10 @@ func (r *EntryRepo) GetAccountLedger(ctx context.Context, tenantID, accountID uu
 	offset := (page - 1) * pageSize
 	query := `
 		SELECT l.id, l.entry_id, l.account_id, l.account_code, l.account_name,
-		       l.debit, l.credit, COALESCE(l.description,'') as description,
+		       l.debit, l.credit,
+		       COALESCE(e.document_no, '') as document_no,
+		       e.posting_date,
+		       COALESCE(l.description,'') as description,
 		       l.cost_center_id, l.partner_id, COALESCE(l.partner_type,'') as partner_type
 		FROM gl_journal_lines l
 		INNER JOIN gl_journal_entries e ON e.id = l.entry_id
@@ -441,7 +474,9 @@ func (r *EntryRepo) GetAccountLedger(ctx context.Context, tenantID, accountID uu
 		l := &glmodels.JournalLine{}
 		err := rows.Scan(
 			&l.ID, &l.EntryID, &l.AccountID, &l.AccountCode, &l.AccountName,
-			&l.Debit, &l.Credit, &l.Description, &l.CostCenterID, &l.PartnerID, &l.PartnerType,
+			&l.Debit, &l.Credit,
+			&l.DocumentNo, &l.PostingDate,
+			&l.Description, &l.CostCenterID, &l.PartnerID, &l.PartnerType,
 		)
 		if err != nil {
 			return nil, 0, fmt.Errorf("scan ledger line: %w", err)
@@ -468,6 +503,8 @@ func (r *EntryRepo) GetAccountBalances(ctx context.Context, tenantID uuid.UUID, 
 		) filtered ON filtered.account_id = a.id
 		WHERE a.tenant_id = $1 AND a.is_leaf = true
 		GROUP BY a.id, a.account_code, a.account_name, a.account_type, a.level
+		HAVING COALESCE(SUM(filtered.debit), 0) > 0
+		    OR COALESCE(SUM(filtered.credit), 0) > 0
 		ORDER BY a.account_code
 	`
 	rows, err := r.db.Query(ctx, query, tenantID, year, month)

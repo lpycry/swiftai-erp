@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -338,6 +339,62 @@ func containsAny(s string, keywords []string) bool {
 		}
 	}
 	return false
+}
+
+// AnalyzeOCR processes an image file and returns suggested journal entry lines.
+// The image is analyzed using OCR, and the extracted text is matched against accounts.
+func (s *AIService) AnalyzeOCR(ctx context.Context, tenantID uuid.UUID, imageData []byte, fileName string) (*glmodels.AISuggestResponse, error) {
+	extracted := s.performOCR(imageData, fileName)
+	if extracted == "" {
+		return &glmodels.AISuggestResponse{
+			Description:    "OCR: extracted text from " + fileName,
+			SuggestedLines: nil,
+			Confidence:     0.0,
+		}, nil
+	}
+
+	log.Info().Str("file", fileName).Str("extracted", extracted).Msg("OCR extraction complete")
+
+	// Try to parse an amount from the extracted text
+	amount := 0.0
+	for _, word := range strings.Fields(extracted) {
+		if f, err := strconv.ParseFloat(word, 64); err == nil && f > 0 {
+			amount = math.Max(amount, f)
+		}
+	}
+
+	// Feed extracted text through the existing account suggestion engine
+	req := &glmodels.AISuggestRequest{
+		NaturalLanguage: extracted,
+		Amount:          amount,
+	}
+	return s.SuggestAccounts(ctx, tenantID, req)
+}
+
+// performOCR extracts text from image bytes.
+// TODO: Replace with actual OCR engine (Google Cloud Vision, Tesseract, etc.)
+func (s *AIService) performOCR(imageData []byte, fileName string) string {
+	if len(imageData) == 0 {
+		return ""
+	}
+
+	ext, _ := getFileExtension(fileName)
+	switch strings.ToLower(ext) {
+	case "jpg", "jpeg", "png", "gif", "bmp", "webp", "pdf":
+		// In production, send to OCR service here
+		// For now, return empty to let the caller use default logic
+		return ""
+	default:
+		return ""
+	}
+}
+
+func getFileExtension(fileName string) (string, string) {
+	idx := strings.LastIndex(fileName, ".")
+	if idx < 0 {
+		return fileName, ""
+	}
+	return fileName[:idx], fileName[idx+1:]
 }
 
 // Ensure our log import is used

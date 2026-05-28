@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -52,6 +53,9 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
   final TextEditingController _aiDescriptionCtrl = TextEditingController();
   final TextEditingController _aiAmountCtrl = TextEditingController();
   Map<String, dynamic>? _aiSuggestion;
+
+  // ── OCR ──
+  bool _ocrLoading = false;
 
   // â”€â”€ Accounts cache â”€â”€
   List<AccountModel> _accounts = [];
@@ -555,14 +559,14 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                           ? Image.memory(
                               file.bytes!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
+                              errorBuilder: (_, _, _) =>
                                   _fileIconWidget(file.extension),
                             )
                           : (file.path != null
                                 ? Image.file(
                                     File(file.path!),
                                     fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) =>
+                                    errorBuilder: (_, _, _) =>
                                         _fileIconWidget(file.extension),
                                   )
                                 : _fileIconWidget(file.extension)),
@@ -623,13 +627,13 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                       ? Image.memory(
                           file.bytes!,
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const SizedBox(),
+                          errorBuilder: (_, _, _) => const SizedBox(),
                         )
                       : (file.path != null
                             ? Image.file(
                                 File(file.path!),
                                 fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => const SizedBox(),
+                                errorBuilder: (_, _, _) => const SizedBox(),
                               )
                             : const SizedBox()),
                 ),
@@ -640,7 +644,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
     );
   }
 
-  _buildPrintContent(
+  Column _buildPrintContent(
     Map<String, dynamic> entry,
     List<dynamic> lines,
     String docNo,
@@ -727,7 +731,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                       flex: 1,
                       child: Text(
                         'Debit',
-                        textAlign: TextAlign.right,
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 11,
@@ -738,7 +742,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                       flex: 1,
                       child: Text(
                         'Credit',
-                        textAlign: TextAlign.right,
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 11,
@@ -749,6 +753,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                       flex: 2,
                       child: Text(
                         'Description',
+                        textAlign: TextAlign.center,
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 11,
@@ -1032,7 +1037,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                   flex: 2,
                   child: pw.Text(
                     'Debit',
-                    textAlign: pw.TextAlign.right,
+                    textAlign: pw.TextAlign.center,
                     style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
                       fontSize: 9,
@@ -1043,7 +1048,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                   flex: 2,
                   child: pw.Text(
                     'Credit',
-                    textAlign: pw.TextAlign.right,
+                    textAlign: pw.TextAlign.center,
                     style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
                       fontSize: 9,
@@ -1054,6 +1059,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                   flex: 3,
                   child: pw.Text(
                     'Description',
+                    textAlign: pw.TextAlign.center,
                     style: pw.TextStyle(
                       fontWeight: pw.FontWeight.bold,
                       fontSize: 9,
@@ -1190,6 +1196,59 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
   }
 
   // â”€â”€ AI Mode (Professional) â”€â”€
+  // ── OCR methods ──
+
+  Future<void> _pickOcrDocument() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'pdf'],
+      );
+      if (result != null && result.files.isNotEmpty) {
+        final path = result.files.first.path;
+        if (path != null) {
+          await _processOcrImage(path, result.files.first.name);
+        }
+      }
+    } catch (e) {
+      if (mounted) _showError('Failed to pick document: ');
+    }
+  }
+
+  Future<void> _takeOcrPhoto() async {
+    try {
+      final picker = ImagePicker();
+      final photo = await picker.pickImage(source: ImageSource.camera);
+      if (photo != null) {
+        await _processOcrImage(photo.path, photo.name);
+      }
+    } catch (e) {
+      if (mounted) _showError('Failed to take photo: ');
+    }
+  }
+
+  Future<void> _processOcrImage(String filePath, String fileName) async {
+    setState(() {
+      _ocrLoading = true;
+    });
+    try {
+      final suggestion = await widget.glService.ocrAnalyze(filePath, fileName);
+      setState(() {
+        _aiSuggestion = suggestion;
+        _ocrLoading = false;
+        // Auto-fill description from OCR result if available
+        if (suggestion['description'] != null) {
+          _aiDescriptionCtrl.text = suggestion['description'].toString();
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _ocrLoading = false);
+        _showError('OCR analysis failed: ');
+      }
+    }
+  }
+
   Future<void> _getAiSuggestion() async {
     final desc = _aiDescriptionCtrl.text.trim();
     final amount = double.tryParse(_aiAmountCtrl.text.trim());
@@ -1470,14 +1529,14 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                       ? Image.memory(
                           file.bytes!,
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) =>
+                          errorBuilder: (_, _, _) =>
                               const Center(child: Text('Unable to load image')),
                         )
                       : (file.path != null
                             ? Image.file(
                                 File(file.path!),
                                 fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => const Center(
+                                errorBuilder: (_, _, _) => const Center(
                                   child: Text('Unable to load image'),
                                 ),
                               )
@@ -1709,7 +1768,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                 // Company Code
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _selectedOrgId,
+                    initialValue: _selectedOrgId,
                     decoration: const InputDecoration(
                       labelText: 'Company Code',
                       contentPadding: EdgeInsets.symmetric(
@@ -1745,7 +1804,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                 // Document Type
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _documentType,
+                    initialValue: _documentType,
                     decoration: const InputDecoration(
                       labelText: 'Document Type',
                       contentPadding: EdgeInsets.symmetric(
@@ -1935,7 +1994,7 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                 : SizedBox(
                     height: 36,
                     child: DropdownButtonFormField<String>(
-                      value: line.selectedAccount,
+                      initialValue: line.selectedAccount,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         contentPadding: EdgeInsets.symmetric(
@@ -1949,18 +2008,24 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
                         'Select account',
                         style: TextStyle(fontSize: 12),
                       ),
-                      items: _accounts.where((a) => a.isLeaf && a.isActive && a.reconciliationType == 'none').map(
-                        (a) {
-                          return DropdownMenuItem(
-                            value: a.id,
-                            child: Text(
-                              '${a.code} - ${a.name}',
-                              style: const TextStyle(fontSize: 11),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          );
-                        },
-                      ).toList(),
+                      items: _accounts
+                          .where(
+                            (a) =>
+                                a.isLeaf &&
+                                a.isActive &&
+                                a.reconciliationType == 'none',
+                          )
+                          .map((a) {
+                            return DropdownMenuItem(
+                              value: a.id,
+                              child: Text(
+                                '${a.code} - ${a.name}',
+                                style: const TextStyle(fontSize: 11),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            );
+                          })
+                          .toList(),
                       onChanged: (v) =>
                           setState(() => line.selectedAccount = v),
                     ),
@@ -2096,6 +2161,53 @@ class _JournalEntryScreenState extends State<JournalEntryScreen> {
               ),
               maxLines: 2,
               style: const TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            // ── OCR buttons ──
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: _ocrLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.document_scanner, size: 18),
+                    label: const Text(
+                      'Upload Document',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onPressed: _ocrLoading ? null : () => _pickOcrDocument(),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 38),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: _ocrLoading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.camera_alt, size: 18),
+                    label: const Text(
+                      'Take Photo',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onPressed: _ocrLoading ? null : () => _takeOcrPhoto(),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 38),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             Row(

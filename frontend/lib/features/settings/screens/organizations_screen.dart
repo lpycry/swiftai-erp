@@ -3,7 +3,8 @@ import 'package:swiftai_erp/core/services/auth_service.dart';
 import 'package:swiftai_erp/core/theme/app_theme.dart';
 import 'package:swiftai_erp/core/widgets/app_layout.dart';
 import 'package:swiftai_erp/features/settings/services/org_service.dart';
-import 'package:swiftai_erp/features/settings/screens/sites_screen.dart';
+import 'package:swiftai_erp/features/settings/screens/org_detail_screen.dart';
+import 'package:swiftai_erp/features/logistics/services/warehouse_service.dart';
 
 class OrganizationsScreen extends StatefulWidget {
   final AuthService authService;
@@ -186,9 +187,10 @@ class _OrganizationsScreenState extends State<OrganizationsScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => SitesScreen(
+        builder: (_) => OrgDetailScreen(
           authService: widget.authService,
           orgService: widget.orgService,
+          warehouseService: WarehouseService(widget.authService.accessToken ?? ''),
           orgId: org['id'],
           orgCode: org['org_code'] ?? '',
           orgName: org['org_name'] ?? '',

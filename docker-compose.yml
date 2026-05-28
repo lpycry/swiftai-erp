@@ -97,30 +97,7 @@ services:
     volumes:
       - meilidata:/meili_data
 
-  # --- API Gateway (Go) ---
-  api-gateway:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: api-gateway
-    container_name: swiftai-gateway
-    environment:
-      APP_ENV: development
-      CONFIG_PATH: /app/config/config.dev.yaml
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      nats:
-        condition: service_healthy
-    volumes:
-      - ./backend:/app
-    command: ["go", "run", "./cmd/api-gateway"]
-
-  # --- Auth Service (Go) ---
+  # --- Auth Service (merged: handles all API + auth logic) ---
   auth-service:
     build:
       context: ./backend

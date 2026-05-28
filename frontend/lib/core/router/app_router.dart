@@ -12,9 +12,13 @@ import '../../features/finance/screens/journal_entry_list_screen.dart';
 import '../../features/finance/screens/account_ledger_screen.dart';
 import '../../features/finance/screens/account_balance_screen.dart';
 import '../../features/finance/services/gl_service.dart';
+import '../../features/logistics/screens/logistics_screen.dart';
+import '../../features/logistics/services/warehouse_service.dart';
 import '../../features/settings/screens/organizations_screen.dart';
 import '../../features/settings/screens/periods_screen.dart';
+import '../../features/settings/screens/finance_settings/finance_settings_screen.dart';
 import '../../features/settings/services/org_service.dart';
+import '../../features/settings/services/finance_settings_service.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../services/auth_service.dart';
 
@@ -34,6 +38,8 @@ class AppRouter {
   static const String financeJournalEntryList = '/finance/journal-entries';
   static const String financeLedger = '/finance/ledger';
   static const String financeBalances = '/finance/balances';
+  static const String logisticsRoute = '/logistics';
+  static const String financeSettingsRoute = '/settings/finance';
 
   final AuthService _authService;
 
@@ -59,6 +65,16 @@ class AppRouter {
       case settingsRoute:
         return MaterialPageRoute(
           builder: (_) => SettingsScreen(authService: _authService, glService: GlService(_authService.accessToken)),
+          settings: settings,
+        );
+      case financeSettingsRoute:
+        return MaterialPageRoute(
+          builder: (_) => FinanceSettingsScreen(
+            authService: _authService,
+            glService: GlService(_authService.accessToken),
+            orgService: OrgService(_authService.accessToken),
+            financeSettingsService: FinanceSettingsService(_authService.accessToken),
+          ),
           settings: settings,
         );
       case adminAuthObjects:
@@ -141,6 +157,14 @@ class AppRouter {
           builder: (_) => AccountBalanceScreen(
             authService: _authService,
             glService: GlService(_authService.accessToken),
+          ),
+          settings: settings,
+        );
+      case logisticsRoute:
+        return MaterialPageRoute(
+          builder: (_) => LogisticsScreen(
+            authService: _authService,
+            warehouseService: WarehouseService(_authService.accessToken ?? ''),
           ),
           settings: settings,
         );

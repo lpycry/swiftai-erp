@@ -210,7 +210,10 @@ func (r *OrgRepo) ListSites(ctx context.Context, orgID uuid.UUID) ([]*orgmodels.
 }
 
 func (r *OrgRepo) ListSitesByTenant(ctx context.Context, tenantID uuid.UUID) ([]*orgmodels.Site, error) {
-	query := `SELECT s.` + siteSelectCols + ` FROM sites s
+	query := `SELECT s.id, s.organization_id, s.site_code, s.site_name, s.site_type,
+		COALESCE(s.address,'') as address,
+		s.is_active, s.created_at, s.updated_at
+		FROM sites s
 		INNER JOIN organizations o ON o.id = s.organization_id
 		WHERE o.tenant_id = $1 ORDER BY s.site_code`
 	rows, err := r.db.Query(ctx, query, tenantID)

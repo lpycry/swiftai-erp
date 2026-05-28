@@ -119,9 +119,11 @@ class _PeriodsScreenState extends State<PeriodsScreen> {
         body: jsonEncode(body),
       );
       await _loadPeriods();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Periods generated'), backgroundColor: AppTheme.successColor),
       );
+      }
     } catch (e) {
       if (mounted) _err('$e');
     }
@@ -181,7 +183,8 @@ class _PeriodsScreenState extends State<PeriodsScreen> {
   }
 
   Widget _buildTable() {
-    if (_periods.isEmpty) return Center(
+    if (_periods.isEmpty) {
+      return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(Icons.event_note, size: 48, color: AppTheme.textMuted),
         const SizedBox(height: 12),
@@ -189,6 +192,7 @@ class _PeriodsScreenState extends State<PeriodsScreen> {
             style: TextStyle(color: AppTheme.textMuted)),
       ]),
     );
+    }
 
     return ListView.builder(
       padding: const EdgeInsets.all(12),
@@ -265,7 +269,7 @@ class _PeriodsScreenState extends State<PeriodsScreen> {
           if (canToggle)
             Switch(
               value: isOpen,
-              activeColor: AppTheme.accentGreen,
+              activeThumbColor: AppTheme.accentGreen,
               onChanged: (v) => _togglePeriod(p['id'], v),
             ),
           if (!canToggle)

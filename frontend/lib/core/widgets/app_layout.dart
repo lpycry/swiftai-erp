@@ -22,9 +22,9 @@ class AppLayout extends StatelessWidget {
   static const _navItems = [
     _NavDef(Icons.dashboard_rounded, 'Dashboard', AppRouter.dashboard),
     _NavDef(Icons.account_balance_rounded, 'Finance', AppRouter.financeRoute),
-    _NavDef(Icons.inventory_2_rounded, 'Logistics', null),
+    _NavDef(Icons.inventory_2_rounded, 'Logistics', AppRouter.logisticsRoute),
     _NavDef(Icons.shopping_cart_rounded, 'Sales', null),
-    _NavDef(Icons.shopping_bag_rounded, 'Procurement', null),
+
     _NavDef(Icons.settings_rounded, 'Settings', AppRouter.settingsRoute),
   ];
 
@@ -133,8 +133,9 @@ class AppLayout extends StatelessWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 4,
       onSelected: (v) {
-        if (v == 'settings') Navigator.pushNamed(context, AppRouter.settingsRoute);
-        else if (v == 'logout') {
+        if (v == 'settings') {
+          Navigator.pushNamed(context, AppRouter.settingsRoute);
+        } else if (v == 'logout') {
           authService.logout();
           Navigator.pushReplacementNamed(context, AppRouter.login);
         }

@@ -499,16 +499,16 @@ td{padding:6px 16px;font-size:13px;border-bottom:1px solid #f1f5f9}
 <div class="side">
 <div class="section" style="border-color:#3b82f6">
 <h3 style="background:#eff6ff;color:#3b82f6;border-color:#bfdbfe">ASSETS</h3>
-<table>${assets}
+<table>$assets
 <tr class="total"><td style="color:#3b82f6">Total Assets</td><td style="text-align:right;color:#3b82f6">\$${totalAssets.toStringAsFixed(2)}</td></tr></table></div></div>
 <div class="side">
 <div class="section" style="border-color:#f59e0b">
 <h3 style="background:#fffbeb;color:#f59e0b;border-color:#fde68a">LIABILITIES</h3>
-<table>${liabilities}
+<table>$liabilities
 <tr class="total"><td style="color:#f59e0b">Total Liabilities</td><td style="text-align:right;color:#f59e0b">\$${totalLiabilities.toStringAsFixed(2)}</td></tr></table></div>
 <div class="section" style="border-color:#8b5cf6">
 <h3 style="background:#f5f3ff;color:#8b5cf6;border-color:#ddd6fe">EQUITY</h3>
-<table>${equity}
+<table>$equity
 <tr class="total"><td style="color:#8b5cf6">Total Equity</td><td style="text-align:right;color:#8b5cf6">\$${GlService.fmtAmount(totalEquity)}</td></tr></table></div></div></div>
 <div class="footer" style="background:${checked ? '#f0fdf4' : '#fff7ed'};border:1px solid ${checked ? '#bbf7d0' : '#fed7aa'}">
 <div class="vals"><div class="v"><p class="l">Total Assets</p><p class="n" style="color:#2563eb">\$${totalAssets.toStringAsFixed(2)}</p></div>

@@ -9,7 +9,7 @@ class SettingsScreen extends StatelessWidget {
   final AuthService authService;
   final GlService glService;
 
-  SettingsScreen({
+  const SettingsScreen({
     super.key,
     required this.authService,
     required this.glService,
@@ -169,24 +169,11 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.calendar_month),
-                  title: const Text('Accounting Periods'),
-                  subtitle: const Text('Open/close fiscal periods by company'),
+                  leading: const Icon(Icons.account_balance_rounded, color: AppTheme.accentBlue),
+                  title: const Text('Finance Settings'),
+                  subtitle: const Text('Periods, COA, Payment Terms, Incoterms'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pushNamed(context, '/admin/periods'),
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(
-                    Icons.account_balance_outlined,
-                    color: AppTheme.accentBlue,
-                  ),
-                  title: const Text('Initialize Chart of Accounts'),
-                  subtitle: const Text(
-                    'Replace COA with GAAP, IFRS, or China standard',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => _showCoaDialog(context),
+                  onTap: () => Navigator.pushNamed(context, '/settings/finance'),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -268,99 +255,6 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  void _showCoaDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Initialize Chart of Accounts'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'This will replace the entire Chart of Accounts.',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            SizedBox(height: 8),
-            Text('Only allowed when no journal entries exist.'),
-            SizedBox(height: 12),
-            Text(
-              'Select a COA standard:',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: TextButton.icon(
-              icon: const Icon(Icons.account_balance, size: 16),
-              label: const Text('US GAAP'),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _executeInitializeCoa(context, 'gaap');
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: TextButton.icon(
-              icon: const Icon(Icons.language, size: 16),
-              label: const Text('IFRS'),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _executeInitializeCoa(context, 'ifrs');
-              },
-            ),
-          ),
-          TextButton.icon(
-            icon: const Icon(Icons.map, size: 16),
-            label: const Text('China CAS'),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _executeInitializeCoa(context, 'china');
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _executeInitializeCoa(BuildContext buildContext, String coaType) async {
-    showDialog(
-      context: buildContext,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      await glService.initializeCoa(coaType);
-      if (buildContext.mounted) {
-        Navigator.pop(buildContext);
-        ScaffoldMessenger.of(buildContext).showSnackBar(
-          const SnackBar(
-            content: Text('Chart of Accounts initialized successfully.'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (buildContext.mounted) {
-        Navigator.pop(buildContext);
-        ScaffoldMessenger.of(buildContext).showSnackBar(
-          SnackBar(
-            content: Text('Failed: $e'),
-            backgroundColor: AppTheme.errorColor,
-          ),
-        );
-      }
-    }
   }
 
   void _confirmReset(BuildContext context) {

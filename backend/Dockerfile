@@ -4,7 +4,7 @@
 # ============================================================
 
 # ---- Builder ----
-FROM golang:1.22-alpine AS builder
+FROM  golang:1.26-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
 
@@ -17,18 +17,8 @@ RUN go mod download
 # Copy source
 COPY . .
 
-# Build targets
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/api-gateway ./cmd/api-gateway && \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/auth-service ./cmd/auth-service
-
-# ---- API Gateway ----
-FROM alpine:3.19 AS api-gateway
-RUN apk add --no-cache ca-certificates tzdata
-COPY --from=builder /bin/api-gateway /app/api-gateway
-COPY --from=builder /build/config /app/config
-EXPOSE 8080
-WORKDIR /app
-CMD ["./api-gateway"]
+# Build target
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/auth-service ./cmd/auth-service
 
 # ---- Auth Service ----
 FROM alpine:3.19 AS auth-service

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -23,7 +24,18 @@ import (
 	"github.com/swiftai-erp/backend/internal/middleware"
 	orghandler "github.com/swiftai-erp/backend/internal/org/handler"
 	orgrepo "github.com/swiftai-erp/backend/internal/org/repository"
+	whhandler "github.com/swiftai-erp/backend/internal/warehouse/handler"
+	whrepo "github.com/swiftai-erp/backend/internal/warehouse/repository"
+	whsvc "github.com/swiftai-erp/backend/internal/warehouse/service"
 	"github.com/swiftai-erp/backend/internal/rbac"
+
+	purchaserepo "github.com/swiftai-erp/backend/internal/purchase/repository"
+	purchasessvc "github.com/swiftai-erp/backend/internal/purchase/service"
+	purchasehandler "github.com/swiftai-erp/backend/internal/purchase/handler"
+
+	fsrepo "github.com/swiftai-erp/backend/internal/financesettings/repository"
+	fssvc "github.com/swiftai-erp/backend/internal/financesettings/service"
+	fshandler "github.com/swiftai-erp/backend/internal/financesettings/handler"
 )
 
 func main() {
@@ -82,14 +94,34 @@ func main() {
 	orgHandler := orghandler.NewOrgHandler(orgRepo)
 	periodHandler := orghandler.NewPeriodHandler(pool)
 
+	// Warehouse
+	whProductRepo := whrepo.NewProductRepo(pool)
+	whWarehouseRepo := whrepo.NewWarehouseRepo(pool)
+	whSvc := whsvc.NewWarehouseService(pool, whProductRepo, whWarehouseRepo)
+	whHandler := whhandler.NewWarehouseHandler(whSvc)
+
+	// Purchase
+	purchaseRepo := purchaserepo.NewPurchaseRepo(pool)
+	purchaseSvc := purchasessvc.NewPurchaseService(pool, purchaseRepo, glSvc)
+	purchaseHandler := purchasehandler.NewPurchaseHandler(purchaseSvc)
+
+	// Finance Settings
+	financeSettingsRepo := fsrepo.NewFinanceSettingsRepo(pool)
+	financeSettingsSvc := fssvc.NewFinanceSettingsService(financeSettingsRepo)
+	financeSettingsHandler := fshandler.NewFinanceSettingsHandler(financeSettingsSvc)
+
 	// Router
 	r := gin.New()
 	r.Use(gin.Recovery())
 	r.Use(gin.Logger())
+	r.Use(middleware.CORS())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "auth-service"})
 	})
+
+	// Serve uploaded files (product photos, etc.)
+	r.Static("/uploads", "./uploads")
 
 	v1 := r.Group("/api/v1")
 	{
@@ -171,6 +203,7 @@ func main() {
 
 		// ---- GL: AI ----
 		protected.POST("/gl/ai/suggest", glHandler.AISuggest)
+		protected.POST("/gl/ai/ocr", glHandler.AnalyzeOCR)
 				protected.POST("/gl/reset-database", glHandler.ResetDatabase)
 				protected.POST("/gl/initialize-coa", glHandler.InitializeCoA)
 
@@ -178,6 +211,55 @@ func main() {
 		protected.POST("/gl/journal-entries/:id/attachments", glHandler.UploadAttachment)
 		protected.GET("/gl/journal-entries/:id/attachments", glHandler.GetAttachments)
 		protected.GET("/gl/journal-entries/:id/attachments/:attachmentId/download", glHandler.DownloadAttachment)
+
+		// ---- Warehouse (REQ-WM-002/003/004/005) ----
+		protected.POST("/warehouse/products", whHandler.CreateProduct)
+		protected.GET("/warehouse/products", whHandler.ListProducts)
+		protected.GET("/warehouse/products/:id", whHandler.GetProduct)
+		protected.POST("/warehouse/warehouses", whHandler.CreateWarehouse)
+		protected.GET("/warehouse/warehouses", whHandler.ListWarehouses)
+		protected.GET("/warehouse/warehouses/:id", whHandler.GetWarehouse)
+		protected.PUT("/warehouse/warehouses/:id", whHandler.UpdateWarehouse)
+		protected.DELETE("/warehouse/warehouses/:id", whHandler.DeleteWarehouse)
+		protected.POST("/warehouse/movements", whHandler.PostMovement)
+		protected.GET("/warehouse/movements", whHandler.ListMovements)
+		protected.GET("/warehouse/stock", whHandler.ListStock)
+		protected.PUT("/warehouse/products/:id", whHandler.UpdateProduct)
+		protected.DELETE("/warehouse/products/:id", whHandler.DeleteProduct)
+		protected.POST("/warehouse/zones", whHandler.CreateZone)
+		protected.GET("/warehouse/zones", whHandler.ListZones)
+		protected.POST("/warehouse/bins", whHandler.CreateBin)
+		protected.GET("/warehouse/bins", whHandler.ListBins)
+		protected.GET("/warehouse/bins/:id", whHandler.GetBin)
+		protected.PUT("/warehouse/bins/:id", whHandler.UpdateBin)
+		protected.DELETE("/warehouse/bins/:id", whHandler.DeleteBin)
+		// ---- Warehouse: Barcodes (REQ-MM-031) ----
+		protected.GET("/warehouse/products/:id/barcodes", whHandler.ListBarcodes)
+		protected.POST("/warehouse/products/:id/barcodes", whHandler.CreateBarcode)
+		protected.DELETE("/warehouse/products/:id/barcodes/:barcodeId", whHandler.DeleteBarcode)
+		// ---- Warehouse: Photos (REQ-MM-001~010) ----
+		protected.GET("/warehouse/products/:id/photos", whHandler.ListPhotos)
+		protected.POST("/warehouse/products/:id/photos", whHandler.UploadPhoto)
+		protected.DELETE("/warehouse/products/:id/photos/:photoId", whHandler.DeletePhoto)
+
+		// ---- Warehouse: Goods Receipt (REQ-IB-005~014) ----
+		protected.GET("/warehouse/gr", whHandler.ListGRs)
+		protected.POST("/warehouse/gr", whHandler.CreateGR)
+		protected.POST("/warehouse/gr/:id/post", whHandler.PostGR)
+
+		// ---- Warehouse: Outbound Order (REQ-OB-001~018) ----
+		protected.GET("/warehouse/outbound", whHandler.ListOutbound)
+		protected.POST("/warehouse/outbound", whHandler.CreateOutbound)
+		protected.POST("/warehouse/outbound/:id/ship", whHandler.ShipOutbound)
+
+		// ---- Warehouse: Cycle Count (REQ-CC-001~008) ----
+		protected.GET("/warehouse/cycle-counts", whHandler.ListCycleCounts)
+		protected.POST("/warehouse/cycle-counts", whHandler.CreateCycleCount)
+		protected.POST("/warehouse/cycle-counts/ai-suggest", whHandler.AISuggestCycleCounts)
+
+		// ---- Warehouse: Tasks (REQ-IO-014~018) ----
+		protected.GET("/warehouse/tasks", whHandler.ListTasks)
+		protected.POST("/warehouse/tasks/:id/complete", whHandler.CompleteTask)
 
 		// ---- Orgs ----
 		protected.POST("/orgs", orgHandler.CreateOrg)
@@ -198,17 +280,60 @@ func main() {
 		protected.GET("/periods", periodHandler.ListPeriods)
 		protected.PUT("/periods/:id", periodHandler.UpdatePeriod)
 		protected.POST("/periods/generate", periodHandler.GeneratePeriods)
+
+		// ---- Purchase Module ----
+		protected.POST("/purchase/vendors", purchaseHandler.CreateVendor)
+		protected.GET("/purchase/vendors", purchaseHandler.ListVendors)
+		protected.GET("/purchase/vendors/:id", purchaseHandler.GetVendor)
+		protected.PUT("/purchase/vendors/:id", purchaseHandler.UpdateVendor)
+		protected.DELETE("/purchase/vendors/:id", purchaseHandler.DeleteVendor)
+		protected.GET("/purchase/vendors/recommend", purchaseHandler.RecommendVendors)
+
+		protected.POST("/purchase/orders", purchaseHandler.CreatePO)
+		protected.GET("/purchase/orders", purchaseHandler.ListPOs)
+		protected.GET("/purchase/orders/:id", purchaseHandler.GetPO)
+		protected.PUT("/purchase/orders/:id/status", purchaseHandler.UpdatePOStatus)
+		protected.POST("/purchase/orders/:id/attachments", purchaseHandler.UploadPOAttachment)
+		protected.GET("/purchase/orders/:id/attachments", purchaseHandler.ListPOAttachments)
+		protected.GET("/purchase/orders/:id/attachments/:attachId/download", purchaseHandler.DownloadPOAttachment)
+
+		protected.POST("/purchase/receipts", purchaseHandler.ExecuteGoodsReceipt)
+		protected.GET("/purchase/receipts", purchaseHandler.ListReceipts)
+		protected.GET("/purchase/receipts/:id/journal", purchaseHandler.GetReceiptJournalEntry)
+		protected.POST("/purchase/receipts/:id/reverse", purchaseHandler.ReverseGoodsReceipt)
+
+		protected.POST("/purchase/invoices", purchaseHandler.CreateInvoice)
+		protected.GET("/purchase/invoices", purchaseHandler.ListInvoices)
+		protected.GET("/purchase/invoices/:id", purchaseHandler.GetInvoice)
+
+		// ---- Finance Settings: Payment Terms ----
+		protected.GET("/finance-settings/payment-terms", financeSettingsHandler.ListPaymentTerms)
+		protected.POST("/finance-settings/payment-terms", financeSettingsHandler.CreatePaymentTerm)
+		protected.PUT("/finance-settings/payment-terms/:id", financeSettingsHandler.UpdatePaymentTerm)
+		protected.DELETE("/finance-settings/payment-terms/:id", financeSettingsHandler.DeletePaymentTerm)
+
+		// ---- Finance Settings: Incoterms ----
+		protected.GET("/finance-settings/incoterms", financeSettingsHandler.ListIncoterms)
+		protected.POST("/finance-settings/incoterms", financeSettingsHandler.CreateIncoterm)
+		protected.PUT("/finance-settings/incoterms/:id", financeSettingsHandler.UpdateIncoterm)
+		protected.DELETE("/finance-settings/incoterms/:id", financeSettingsHandler.DeleteIncoterm)
+
+		// ---- Finance Settings: Org Reconciliation Accounts ----
+		protected.GET("/finance-settings/org-recon-accounts", financeSettingsHandler.ListOrgReconAccounts)
+		protected.POST("/finance-settings/org-recon-accounts", financeSettingsHandler.CreateOrgReconAccount)
+		protected.PUT("/finance-settings/org-recon-accounts/:id", financeSettingsHandler.UpdateOrgReconAccount)
+		protected.DELETE("/finance-settings/org-recon-accounts/:id", financeSettingsHandler.DeleteOrgReconAccount)
 	}
 
 	srv := &http.Server{
-		Addr:         ":" + "8081",
+		Addr:         ":" + fmt.Sprintf("%d", cfg.Server.Port),
 		Handler:      r,
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
 	}
 
 	go func() {
-		log.Info().Str("port", "8081").Msg("auth-service starting")
+		log.Info().Int("port", cfg.Server.Port).Msg("auth-service starting")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal().Err(err).Msg("auth-service failed")
 		}

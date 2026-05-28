@@ -15,16 +15,17 @@ import (
 )
 
 var (
-	ErrInvalidBalance       = errors.New("debits must equal credits")
-	ErrNoLines              = errors.New("journal entry must have at least 2 lines")
-	ErrAccountNotLeaf       = errors.New("account is not a leaf account; cannot post to it")
-	ErrAccountInactive      = errors.New("account is inactive")
-	ErrPeriodClosed         = errors.New("period is closed or locked")
-	ErrEntryNotFound        = errors.New("journal entry not found")
-	ErrEntryAlreadyPosted   = errors.New("journal entry is already posted")
-	ErrNoAccountMatch       = errors.New("no matching account found")
-	ErrEntryAlreadyReversed = errors.New("entry has already been reversed or is a reversal")
-	ErrNegativeAmount       = errors.New("debit and credit amounts must be positive")
+	ErrInvalidBalance           = errors.New("debits must equal credits")
+	ErrNoLines                  = errors.New("journal entry must have at least 2 lines")
+	ErrAccountNotLeaf           = errors.New("account is not a leaf account; cannot post to it")
+	ErrAccountInactive          = errors.New("account is inactive")
+	ErrAccountIsReconciliation  = errors.New("reconciliation account (统御科目) cannot be used directly in journal entries")
+	ErrPeriodClosed             = errors.New("period is closed or locked")
+	ErrEntryNotFound            = errors.New("journal entry not found")
+	ErrEntryAlreadyPosted       = errors.New("journal entry is already posted")
+	ErrNoAccountMatch           = errors.New("no matching account found")
+	ErrEntryAlreadyReversed     = errors.New("entry has already been reversed or is a reversal")
+	ErrNegativeAmount           = errors.New("debit and credit amounts must be positive")
 )
 
 // RoundOffTolerance is the maximum acceptable difference (in absolute value)
@@ -73,6 +74,9 @@ func (s *GLService) CreateJournalEntry(ctx context.Context, tenantID, userID uui
 		if !acc.IsLeaf {
 			return nil, fmt.Errorf("%w: %s (%s)", ErrAccountNotLeaf, acc.AccountCode, acc.AccountName)
 		}
+		if acc.ReconciliationType != "" && acc.ReconciliationType != "none" {
+			return nil, fmt.Errorf("%w: %s (%s, type=%s)", ErrAccountIsReconciliation, acc.AccountCode, acc.AccountName, acc.ReconciliationType)
+		}
 	}
 
 	// Validate double-entry balance
@@ -82,7 +86,11 @@ func (s *GLService) CreateJournalEntry(ctx context.Context, tenantID, userID uui
 
 	// Auto-derive period from posting date if not provided
 	if req.PeriodID == uuid.Nil {
-		periodID, err := s.derivePeriod(ctx, tenantID, req.PostingDate)
+		orgID := uuid.Nil
+		if req.OrganizationID != nil {
+			orgID = *req.OrganizationID
+		}
+		periodID, err := s.derivePeriod(ctx, tenantID, req.PostingDate, orgID)
 		if err != nil {
 			return nil, fmt.Errorf("derive period: %w", err)
 		}
@@ -115,7 +123,7 @@ func (s *GLService) GetJournalEntry(ctx context.Context, id, tenantID uuid.UUID)
 }
 
 // ListJournalEntries lists entries with pagination, optional status/entry_type filter.
-func (s *GLService) ListJournalEntries(ctx context.Context, tenantID uuid.UUID, page, pageSize int, status, entryType string) ([]*glmodels.JournalEntry, int64, error) {
+func (s *GLService) ListJournalEntries(ctx context.Context, tenantID uuid.UUID, page, pageSize int, status, entryType, query string) ([]*glmodels.JournalEntry, int64, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -124,7 +132,7 @@ func (s *GLService) ListJournalEntries(ctx context.Context, tenantID uuid.UUID, 
 	}
 	offset := (page - 1) * pageSize
 
-	entries, total, err := s.entryRepo.ListFiltered(ctx, tenantID, pageSize, offset, status, entryType)
+	entries, total, err := s.entryRepo.ListFiltered(ctx, tenantID, pageSize, offset, status, entryType, query)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -228,6 +236,9 @@ func (s *GLService) UpdateDraftEntry(ctx context.Context, tenantID, userID uuid.
 		if !acc.IsLeaf {
 			return nil, fmt.Errorf("%w: %s (%s)", ErrAccountNotLeaf, acc.AccountCode, acc.AccountName)
 		}
+		if acc.ReconciliationType != "" && acc.ReconciliationType != "none" {
+			return nil, fmt.Errorf("%w: %s (%s, type=%s)", ErrAccountIsReconciliation, acc.AccountCode, acc.AccountName, acc.ReconciliationType)
+		}
 	}
 	if err := s.validateBalance(req.Lines); err != nil {
 		return nil, err
@@ -261,7 +272,11 @@ func (s *GLService) UnpostEntry(ctx context.Context, tenantID, userID uuid.UUID,
 
 	return s.entryRepo.GetByID(ctx, entryID, tenantID)
 }
-func (s *GLService) ReverseJournalEntry(ctx context.Context, tenantID, userID uuid.UUID, entryID uuid.UUID) (*glmodels.JournalEntry, error) {
+// ReverseJournalEntry creates a reversal entry for a posted entry and posts it immediately.
+// reversalType options:
+//   - "normal":   Swap debit↔credit (add opposite amounts)
+//   - "negative": Keep debit/credit position, use negative amounts (红字冲销, default)
+func (s *GLService) ReverseJournalEntry(ctx context.Context, tenantID, userID uuid.UUID, entryID uuid.UUID, reversalType string) (*glmodels.JournalEntry, error) {
 	original, err := s.entryRepo.GetByID(ctx, entryID, tenantID)
 	if err != nil {
 		return nil, err
@@ -276,7 +291,12 @@ func (s *GLService) ReverseJournalEntry(ctx context.Context, tenantID, userID uu
 		return nil, ErrEntryAlreadyReversed
 	}
 
-	// Check if this entry has already been reversed (reversal doc references original doc_no)
+	// Default to negative (红字冲销)
+	if reversalType != "normal" && reversalType != "negative" {
+		reversalType = "negative"
+	}
+
+	// Check if this entry has already been reversed
 	var reversalCount int
 	err = s.db.QueryRow(ctx,
 		"SELECT COUNT(*) FROM gl_journal_entries WHERE tenant_id = $1 AND reference = $2 AND entry_type = 'reversal' AND status = 'posted'",
@@ -285,21 +305,37 @@ func (s *GLService) ReverseJournalEntry(ctx context.Context, tenantID, userID uu
 		return nil, fmt.Errorf("entry %s has already been reversed (%d reversal(s) exist)", original.DocumentNo, reversalCount)
 	}
 
-	// Build the reversal entry: swap debits and credits
+	// Build reversal lines based on type
 	revLines := make([]glmodels.CreateJournalLineRequest, len(original.Lines))
 	for i, line := range original.Lines {
-		revLines[i] = glmodels.CreateJournalLineRequest{
-			AccountID:    line.AccountID,
-			Debit:        line.Credit,
-			Credit:       line.Debit,
-			Description:  "Reversal: " + line.Description,
-			CostCenterID: line.CostCenterID,
-			PartnerID:    line.PartnerID,
-			PartnerType:  line.PartnerType,
+		if reversalType == "normal" {
+			// Normal reversal: swap debit and credit
+			revLines[i] = glmodels.CreateJournalLineRequest{
+				AccountID:    line.AccountID,
+				Debit:        line.Credit,
+				Credit:       line.Debit,
+				Description:  "Reversal: " + line.Description,
+				CostCenterID: line.CostCenterID,
+				PartnerID:    line.PartnerID,
+				PartnerType:  line.PartnerType,
+			}
+		} else {
+			// Negative posting (红字冲销): keep position, negative amounts
+			revLines[i] = glmodels.CreateJournalLineRequest{
+				AccountID:    line.AccountID,
+				Debit:        -line.Debit,
+				Credit:       -line.Credit,
+				Description:  "Negative reversal: " + line.Description,
+				CostCenterID: line.CostCenterID,
+				PartnerID:    line.PartnerID,
+				PartnerType:  line.PartnerType,
+			}
 		}
 	}
 
-	revReq := &glmodels.CreateJournalEntryRequest{
+	// Create reversal entry via repo directly (bypasses service-level negative amount check)
+	// The original entry's accounts were already validated during posting
+	reversal, err := s.entryRepo.Create(ctx, tenantID, userID, &glmodels.CreateJournalEntryRequest{
 		PostingDate: time.Now(),
 		PeriodID:    original.PeriodID,
 		Description: "Reversal of " + original.DocumentNo + ": " + original.Description,
@@ -307,22 +343,46 @@ func (s *GLService) ReverseJournalEntry(ctx context.Context, tenantID, userID uu
 		EntryType:   "reversal",
 		Source:      "manual",
 		Lines:       revLines,
-	}
-
-	reversal, err := s.CreateJournalEntry(ctx, tenantID, userID, revReq)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create reversal: %w", err)
 	}
 
-	return reversal, nil
+	// Post the reversal entry immediately (status → 'posted', updates gl_account_balances)
+	if err := s.entryRepo.PostEntry(ctx, reversal.ID, tenantID, userID); err != nil {
+		return nil, fmt.Errorf("post reversal: %w", err)
+	}
+
+	// Return fully posted reversal
+	posted, err := s.entryRepo.GetByID(ctx, reversal.ID, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("reload posted reversal: %w", err)
+	}
+	return posted, nil
 }
 
 // derivePeriod finds the period that contains the given posting date.
-func (s *GLService) derivePeriod(ctx context.Context, tenantID uuid.UUID, postingDate time.Time) (uuid.UUID, error) {
+// If orgID is non-nil, matches org-specific periods first, falling back to global periods.
+func (s *GLService) derivePeriod(ctx context.Context, tenantID uuid.UUID, postingDate time.Time, orgID uuid.UUID) (uuid.UUID, error) {
 	var periodID uuid.UUID
+
+	// Try org-specific period first
+	if orgID != uuid.Nil {
+		err := s.db.QueryRow(ctx,
+			`SELECT id FROM gl_periods
+			 WHERE tenant_id = $1 AND organization_id = $2 AND start_date <= $3 AND end_date >= $3 AND is_open = true AND is_locked = false
+			 LIMIT 1`,
+			tenantID, orgID, postingDate,
+		).Scan(&periodID)
+		if err == nil {
+			return periodID, nil
+		}
+	}
+
+	// Fallback: global period (no org) that is open
 	err := s.db.QueryRow(ctx,
 		`SELECT id FROM gl_periods
-		 WHERE tenant_id = $1 AND start_date <= $2 AND end_date >= $2
+		 WHERE tenant_id = $1 AND organization_id IS NULL AND start_date <= $2 AND end_date >= $2 AND is_open = true AND is_locked = false
 		 LIMIT 1`,
 		tenantID, postingDate,
 	).Scan(&periodID)
@@ -339,7 +399,8 @@ func (s *GLService) GetAccountLedger(ctx context.Context, tenantID, accountID uu
 
 // InitializeChartOfAccounts deletes existing COA and seeds a new one.
 // coaType: "gaap", "ifrs", or "china". Only allowed when no journal entries exist.
-func (s *GLService) InitializeChartOfAccounts(ctx context.Context, coaType string) error {
+// If orgID is non-nil, creates COA specifically for that organization.
+func (s *GLService) InitializeChartOfAccounts(ctx context.Context, coaType string, orgID *uuid.UUID) error {
 	// Check if any transactions exist
 	var entryCount int
 	err := s.db.QueryRow(ctx, "SELECT COUNT(*) FROM gl_journal_entries").Scan(&entryCount)

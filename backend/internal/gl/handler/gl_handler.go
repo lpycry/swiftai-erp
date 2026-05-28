@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -341,7 +342,7 @@ func (h *GLHandler) GetJournalEntry(c *gin.Context) {
 	response.OK(c, entry)
 }
 
-// ListJournalEntries handles GET /api/v1/gl/journal-entries?page=1&page_size=20
+// ListJournalEntries handles GET /api/v1/gl/journal-entries?page=1&page_size=20&status=draft&q=search
 func (h *GLHandler) ListJournalEntries(c *gin.Context) {
 	tenantID, err := getTenantID(c)
 	if err != nil {
@@ -353,8 +354,9 @@ func (h *GLHandler) ListJournalEntries(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 	status := c.Query("status")
 	entryType := c.Query("entry_type")
+	query := c.Query("q") // smart search: matches doc_no, description, reference, amounts
 
-	entries, total, err := h.glSvc.ListJournalEntries(c.Request.Context(), tenantID, page, pageSize, status, entryType)
+	entries, total, err := h.glSvc.ListJournalEntries(c.Request.Context(), tenantID, page, pageSize, status, entryType, query)
 	if err != nil {
 		log.Err(err).Msg("list journal entries failed")
 		response.InternalError(c, "failed to list journal entries")
@@ -562,6 +564,7 @@ func (h *GLHandler) UnpostEntry(c *gin.Context) {
 	response.OK(c, entry)
 }
 // ReverseJournalEntry handles POST /api/v1/gl/journal-entries/:id/reverse
+// Body: {"reversal_type":"normal"|"negative"} (default: "negative")
 func (h *GLHandler) ReverseJournalEntry(c *gin.Context) {
 	tenantID, err := getTenantID(c)
 	if err != nil {
@@ -581,7 +584,17 @@ func (h *GLHandler) ReverseJournalEntry(c *gin.Context) {
 		return
 	}
 
-	entry, err := h.glSvc.ReverseJournalEntry(c.Request.Context(), tenantID, userID, entryID)
+	var req struct {
+		ReversalType string `json:"reversal_type"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		req.ReversalType = "negative" // default to 红字冲销
+	}
+	if req.ReversalType != "normal" && req.ReversalType != "negative" {
+		req.ReversalType = "negative"
+	}
+
+	entry, err := h.glSvc.ReverseJournalEntry(c.Request.Context(), tenantID, userID, entryID, req.ReversalType)
 	if err != nil {
 		log.Err(err).Msg("reverse journal entry failed")
 		switch err {
@@ -746,6 +759,42 @@ func (h *GLHandler) AISuggest(c *gin.Context) {
 	response.OK(c, suggestion)
 }
 
+// AnalyzeOCR handles POST /api/v1/gl/ai/ocr - accepts image upload and returns suggested entry
+func (h *GLHandler) AnalyzeOCR(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		response.BadRequest(c, "no image file provided")
+		return
+	}
+	defer file.Close()
+
+	imageData, err := io.ReadAll(file)
+	if err != nil {
+		response.InternalError(c, "failed to read image file")
+		return
+	}
+
+	if len(imageData) == 0 {
+		response.BadRequest(c, "empty image file")
+		return
+	}
+
+	suggestion, err := h.aiSvc.AnalyzeOCR(c.Request.Context(), tenantID, imageData, header.Filename)
+	if err != nil {
+		log.Err(err).Msg("OCR analysis failed")
+		response.InternalError(c, "OCR analysis failed")
+		return
+	}
+
+	response.OK(c, suggestion)
+}
+
 // ── Attachments ──
 
 // UploadAttachment handles POST /api/v1/gl/journal-entries/:id/attachments
@@ -869,20 +918,25 @@ func (h *GLHandler) DownloadAttachment(c *gin.Context) {
 // InitializeCoA handles POST /api/v1/gl/initialize-coa
 func (h *GLHandler) InitializeCoA(c *gin.Context) {
 	var req struct {
-		CoaType string `json:"coa_type" binding:"required"`
+		CoaType        string     `json:"coa_type" binding:"required"`
+		OrganizationID *uuid.UUID `json:"organization_id,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "coa_type field is required (gaap, ifrs, or china)")
 		return
 	}
 
-	if err := h.glSvc.InitializeChartOfAccounts(c.Request.Context(), req.CoaType); err != nil {
+	if err := h.glSvc.InitializeChartOfAccounts(c.Request.Context(), req.CoaType, req.OrganizationID); err != nil {
 		log.Err(err).Msg("initialize COA failed")
 		response.BadRequest(c, err.Error())
 		return
 	}
 
-	response.OK(c, gin.H{"message": "Chart of accounts initialized successfully"})
+	msg := "Chart of accounts initialized successfully"
+	if req.OrganizationID != nil {
+		msg = fmt.Sprintf("Chart of accounts initialized for organization %s", req.OrganizationID.String()[:8])
+	}
+	response.OK(c, gin.H{"message": msg})
 }
 // ResetDatabase handles POST /api/v1/gl/reset-database
 func (h *GLHandler) ResetDatabase(c *gin.Context) {
