@@ -324,6 +324,50 @@ func (r *PurchaseRepo) getPOItems(ctx context.Context, poID uuid.UUID) ([]purcha
 }
 
 // ══════════════════════════════════════════
+//  PENDING INVOICE POs — received but not fully invoiced
+// ══════════════════════════════════════════
+
+func (r *PurchaseRepo) ListPendingInvoicePOs(ctx context.Context, orgID uuid.UUID) ([]*purchasemodels.PurchaseOrder, error) {
+	query := `SELECT po.id, po.org_id, po.po_number, po.vendor_id, COALESCE(v.name,''), COALESCE(v.vendor_code,''),
+		po.total_amount, po.currency, po.status, COALESCE(po.notes,''), po.created_by, po.created_at, po.updated_at,
+		po.organization_id, COALESCE(o.org_code,''), COALESCE(o.org_name,''), po.po_date,
+		COALESCE(po.payment_term_code,''), COALESCE(po.delivery_address,''), COALESCE(po.incoterm_code,'')
+		FROM purchase_orders po
+		LEFT JOIN vendors v ON v.id = po.vendor_id
+		LEFT JOIN organizations o ON o.id = po.organization_id
+		WHERE po.org_id = $1
+		AND po.status IN ('RECEIVED', 'PARTIALLY_INVOICED')
+		AND EXISTS (
+			SELECT 1 FROM purchase_order_items poi
+			WHERE poi.po_id = po.id
+			AND poi.received_quantity > COALESCE(poi.invoiced_quantity,0)
+		)
+		ORDER BY po.created_at DESC`
+
+	rows, err := r.db.Query(ctx, query, orgID)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var list []*purchasemodels.PurchaseOrder
+	for rows.Next() {
+		po := &purchasemodels.PurchaseOrder{}
+		if err := rows.Scan(&po.ID, &po.OrgID, &po.PONumber, &po.VendorID, &po.VendorName, &po.VendorCode,
+			&po.TotalAmount, &po.Currency, &po.Status, &po.Notes, &po.CreatedBy, &po.CreatedAt, &po.UpdatedAt,
+			&po.OrganizationID, &po.OrgCode, &po.OrgName, &po.PODate,
+			&po.PaymentTermCode, &po.DeliveryAddress, &po.IncotermCode); err != nil {
+			return nil, err
+		}
+		// Load items with open invoice qty
+		items, err := r.getPOItems(ctx, po.ID)
+		if err == nil {
+			po.Items = items
+		}
+		list = append(list, po)
+	}
+	return list, nil
+}
+
+// ══════════════════════════════════════════
 //  PURCHASE RECEIPTS  (核心：联动仓库+财务事件)
 // ══════════════════════════════════════════
 
@@ -1045,6 +1089,388 @@ func (r *PurchaseRepo) RecommendVendors(ctx context.Context, orgID uuid.UUID, pr
 		})
 	}
 	return recs, nil
+}
+
+// ══════════════════════════════════════════
+//  DOWN PAYMENTS
+// ══════════════════════════════════════════
+
+func (r *PurchaseRepo) EnsureDownPaymentTable(ctx context.Context) error {
+	_, err := r.db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS down_payments (
+			id UUID PRIMARY KEY,
+			org_id UUID NOT NULL,
+			dp_number VARCHAR(50) NOT NULL,
+			vendor_id UUID NOT NULL,
+			po_id UUID NOT NULL,
+			total_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+			paid_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+			refunded_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+			cleared_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+			remaining_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+			currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+			exchange_rate NUMERIC(18,6) NOT NULL DEFAULT 1,
+			ap_dp_account_id UUID NOT NULL,
+			credit_account_id UUID NOT NULL,
+			status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+			payment_status VARCHAR(30) NOT NULL DEFAULT 'UNPAID',
+			gl_je_id UUID,
+			payment_gl_je_id UUID,
+			description TEXT DEFAULT '',
+			reference_no VARCHAR(100) DEFAULT '',
+			special_gl_indicator VARCHAR(10) NOT NULL DEFAULT 'A',
+			created_by UUID,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_by UUID,
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			posted_by UUID,
+			posted_at TIMESTAMPTZ
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("create down_payments table: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS down_payment_clearings (
+			id UUID PRIMARY KEY,
+			dp_id UUID NOT NULL REFERENCES down_payments(id),
+			invoice_id UUID NOT NULL,
+			clearing_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+			currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+			gl_je_id UUID,
+			notes TEXT DEFAULT '',
+			created_by UUID,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("create down_payment_clearings table: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS down_payment_refunds (
+			id UUID PRIMARY KEY,
+			dp_id UUID NOT NULL REFERENCES down_payments(id),
+			refund_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+			refund_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			refund_method VARCHAR(30) NOT NULL DEFAULT 'BANK_TRANSFER',
+			source_account_id UUID NOT NULL,
+			gl_je_id UUID,
+			payment_gl_je_id UUID,
+			reason TEXT NOT NULL DEFAULT '',
+			created_by UUID,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		return fmt.Errorf("create down_payment_refunds table: %w", err)
+	}
+
+	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dp_org ON down_payments(org_id)`)
+	if err != nil { return fmt.Errorf("create index idx_dp_org: %w", err) }
+
+	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dp_vendor ON down_payments(vendor_id)`)
+	if err != nil { return fmt.Errorf("create index idx_dp_vendor: %w", err) }
+
+	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dp_status ON down_payments(status)`)
+	if err != nil { return fmt.Errorf("create index idx_dp_status: %w", err) }
+
+	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dpc_dp ON down_payment_clearings(dp_id)`)
+	if err != nil { return fmt.Errorf("create index idx_dpc_dp: %w", err) }
+
+	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dpr_dp ON down_payment_refunds(dp_id)`)
+	if err != nil { return fmt.Errorf("create index idx_dpr_dp: %w", err) }
+
+	return nil
+}
+
+func (r *PurchaseRepo) CreateDownPayment(ctx context.Context, orgID uuid.UUID, dp *purchasemodels.DownPayment, tx interface{}) error {
+	db := r.db
+	if tx != nil {
+		if pgxTx, ok := tx.(interface {
+			Exec(ctx context.Context, sql string, args ...interface{}) (interface{}, error)
+		}); ok {
+			run := func(ctx context.Context, sql string, args ...interface{}) (interface{}, error) {
+				return pgxTx.Exec(ctx, sql, args...)
+			}
+			_, err := run(ctx, `
+				INSERT INTO down_payments (id, org_id, dp_number, vendor_id, po_id, total_amount, paid_amount, refunded_amount, cleared_amount, remaining_amount, currency, exchange_rate, ap_dp_account_id, credit_account_id, status, payment_status, gl_je_id, payment_gl_je_id, description, reference_no, special_gl_indicator, created_by, created_at, updated_by, updated_at, posted_by, posted_at)
+				VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW(),$23,NOW(),$24,$25)
+			`, dp.ID, dp.OrgID, dp.DPNumber, dp.VendorID, dp.POID, dp.TotalAmount, dp.PaidAmount, dp.RefundedAmount, dp.ClearedAmount, dp.RemainingAmount,
+				dp.Currency, dp.ExchangeRate, dp.APDPAccountID, dp.CreditAccountID, dp.Status, dp.PaymentStatus,
+				dp.GLJEID, dp.PaymentGLJEID, dp.Description, dp.ReferenceNo, dp.SpecialGLIndicator,
+				dp.CreatedBy, dp.UpdatedBy, dp.PostedBy, dp.PostedAt)
+			if err != nil {
+				return fmt.Errorf("create down payment (tx): %w", err)
+			}
+			return nil
+		}
+	}
+
+	_, err := db.Exec(ctx, `
+		INSERT INTO down_payments (id, org_id, dp_number, vendor_id, po_id, total_amount, paid_amount, refunded_amount, cleared_amount, remaining_amount, currency, exchange_rate, ap_dp_account_id, credit_account_id, status, payment_status, gl_je_id, payment_gl_je_id, description, reference_no, special_gl_indicator, created_by, created_at, updated_by, updated_at, posted_by, posted_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,NOW(),$23,NOW(),$24,$25)
+	`, dp.ID, dp.OrgID, dp.DPNumber, dp.VendorID, dp.POID, dp.TotalAmount, dp.PaidAmount, dp.RefundedAmount, dp.ClearedAmount, dp.RemainingAmount,
+		dp.Currency, dp.ExchangeRate, dp.APDPAccountID, dp.CreditAccountID, dp.Status, dp.PaymentStatus,
+		dp.GLJEID, dp.PaymentGLJEID, dp.Description, dp.ReferenceNo, dp.SpecialGLIndicator,
+		dp.CreatedBy, dp.UpdatedBy, dp.PostedBy, dp.PostedAt)
+	if err != nil {
+		return fmt.Errorf("create down payment: %w", err)
+	}
+	return nil
+}
+
+func (r *PurchaseRepo) GetDownPayment(ctx context.Context, id, orgID uuid.UUID) (*purchasemodels.DownPayment, error) {
+	dp := &purchasemodels.DownPayment{}
+	err := r.db.QueryRow(ctx, `
+		SELECT dp.id, dp.org_id, dp.dp_number, dp.vendor_id, COALESCE(v.vendor_code,''), COALESCE(v.name,''),
+			dp.po_id, COALESCE(po.po_number,''),
+			dp.total_amount, dp.paid_amount, dp.refunded_amount, dp.cleared_amount, dp.remaining_amount,
+			dp.currency, dp.exchange_rate,
+			dp.ap_dp_account_id, dp.credit_account_id,
+			COALESCE(ap_acc.account_code,''), COALESCE(ap_acc.account_name,''),
+			COALESCE(ca_acc.account_code,''), COALESCE(ca_acc.account_name,''),
+			dp.status, dp.payment_status, dp.gl_je_id, dp.payment_gl_je_id,
+			COALESCE(dp.description,''), COALESCE(dp.reference_no,''), dp.special_gl_indicator,
+			dp.created_by, dp.created_at, dp.updated_by, dp.updated_at, dp.posted_by, dp.posted_at
+		FROM down_payments dp
+		LEFT JOIN vendors v ON v.id = dp.vendor_id
+		LEFT JOIN purchase_orders po ON po.id = dp.po_id
+		LEFT JOIN gl_accounts ca_acc ON ca_acc.id = dp.credit_account_id
+		LEFT JOIN gl_accounts ap_acc ON ap_acc.id = dp.ap_dp_account_id
+		WHERE dp.id = $1 AND dp.org_id = $2
+	`, id, orgID).Scan(
+		&dp.ID, &dp.OrgID, &dp.DPNumber, &dp.VendorID, &dp.VendorCode, &dp.VendorName,
+		&dp.POID, &dp.PONumber,
+		&dp.TotalAmount, &dp.PaidAmount, &dp.RefundedAmount, &dp.ClearedAmount, &dp.RemainingAmount,
+		&dp.Currency, &dp.ExchangeRate,
+		&dp.APDPAccountID, &dp.CreditAccountID,
+		&dp.APDPAccountCode, &dp.APDPAccountName,
+		&dp.CreditAccountCode, &dp.CreditAccountName,
+		&dp.Status, &dp.PaymentStatus, &dp.GLJEID, &dp.PaymentGLJEID,
+		&dp.Description, &dp.ReferenceNo, &dp.SpecialGLIndicator,
+		&dp.CreatedBy, &dp.CreatedAt, &dp.UpdatedBy, &dp.UpdatedAt, &dp.PostedBy, &dp.PostedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get down payment: %w", err)
+	}
+	return dp, nil
+}
+
+func (r *PurchaseRepo) DeleteDownPayment(ctx context.Context, id, orgID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM down_payments WHERE id = $1 AND org_id = $2 AND status = 'DRAFT'`, id, orgID)
+	if err != nil {
+		return fmt.Errorf("delete down payment: %w", err)
+	}
+	return nil
+}
+
+func (r *PurchaseRepo) ListDownPayments(ctx context.Context, orgID uuid.UUID, vendorID uuid.UUID, status, dateFrom, dateTo string, minAmount, maxAmount float64) ([]*purchasemodels.DownPayment, error) {
+	query := `SELECT dp.id, dp.org_id, dp.dp_number, dp.vendor_id, COALESCE(v.vendor_code,''), COALESCE(v.name,''),
+		dp.po_id, COALESCE(po.po_number,''),
+		dp.total_amount, dp.paid_amount, dp.refunded_amount, dp.cleared_amount, dp.remaining_amount,
+		dp.currency, dp.exchange_rate,
+		dp.ap_dp_account_id, dp.credit_account_id,
+		COALESCE(ap_acc.account_code,''), COALESCE(ap_acc.account_name,''),
+		COALESCE(ca_acc.account_code,''), COALESCE(ca_acc.account_name,''),
+		dp.status, dp.payment_status, dp.gl_je_id, dp.payment_gl_je_id,
+		COALESCE(dp.description,''), COALESCE(dp.reference_no,''), dp.special_gl_indicator,
+		dp.created_by, dp.created_at, dp.updated_by, dp.updated_at, dp.posted_by, dp.posted_at
+		FROM down_payments dp
+		LEFT JOIN vendors v ON v.id = dp.vendor_id
+		LEFT JOIN purchase_orders po ON po.id = dp.po_id
+		LEFT JOIN gl_accounts ca_acc ON ca_acc.id = dp.credit_account_id
+		LEFT JOIN gl_accounts ap_acc ON ap_acc.id = dp.ap_dp_account_id
+		WHERE dp.org_id = $1`
+	args := []interface{}{orgID}
+	argIdx := 2
+
+	if vendorID != uuid.Nil {
+		query += fmt.Sprintf(" AND dp.vendor_id = $%d", argIdx)
+		args = append(args, vendorID)
+		argIdx++
+	}
+	if status != "" {
+		query += fmt.Sprintf(" AND dp.status = $%d", argIdx)
+		args = append(args, status)
+		argIdx++
+	}
+	if dateFrom != "" {
+		query += fmt.Sprintf(" AND dp.created_at >= $%d::timestamp", argIdx)
+		args = append(args, dateFrom)
+		argIdx++
+	}
+	if dateTo != "" {
+		query += fmt.Sprintf(" AND dp.created_at <= $%d::timestamp", argIdx)
+		args = append(args, dateTo)
+		argIdx++
+	}
+	if minAmount > 0 {
+		query += fmt.Sprintf(" AND dp.total_amount >= $%d", argIdx)
+		args = append(args, minAmount)
+		argIdx++
+	}
+	if maxAmount > 0 {
+		query += fmt.Sprintf(" AND dp.total_amount <= $%d", argIdx)
+		args = append(args, maxAmount)
+		argIdx++
+	}
+
+	query += " ORDER BY dp.created_at DESC"
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var list []*purchasemodels.DownPayment
+	for rows.Next() {
+		dp := &purchasemodels.DownPayment{}
+		if err := rows.Scan(
+			&dp.ID, &dp.OrgID, &dp.DPNumber, &dp.VendorID, &dp.VendorCode, &dp.VendorName,
+			&dp.POID, &dp.PONumber,
+			&dp.TotalAmount, &dp.PaidAmount, &dp.RefundedAmount, &dp.ClearedAmount, &dp.RemainingAmount,
+			&dp.Currency, &dp.ExchangeRate,
+			&dp.APDPAccountID, &dp.CreditAccountID,
+			&dp.APDPAccountCode, &dp.APDPAccountName,
+			&dp.CreditAccountCode, &dp.CreditAccountName,
+			&dp.Status, &dp.PaymentStatus, &dp.GLJEID, &dp.PaymentGLJEID,
+			&dp.Description, &dp.ReferenceNo, &dp.SpecialGLIndicator,
+			&dp.CreatedBy, &dp.CreatedAt, &dp.UpdatedBy, &dp.UpdatedAt, &dp.PostedBy, &dp.PostedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, dp)
+	}
+	return list, nil
+}
+
+func (r *PurchaseRepo) UpdateDownPaymentStatus(ctx context.Context, id uuid.UUID, status, paymentStatus string, remainingAmount float64, tx interface{}) error {
+	db := r.db
+	if tx != nil {
+		if pgxTx, ok := tx.(interface {
+			Exec(ctx context.Context, sql string, args ...interface{}) (interface{}, error)
+		}); ok {
+			var err error
+			if paymentStatus != "" {
+				_, err = pgxTx.Exec(ctx, `UPDATE down_payments SET status = $2, payment_status = $3, remaining_amount = $4, updated_at = NOW() WHERE id = $1`, id, status, paymentStatus, remainingAmount)
+			} else {
+				_, err = pgxTx.Exec(ctx, `UPDATE down_payments SET status = $2, remaining_amount = $3, updated_at = NOW() WHERE id = $1`, id, status, remainingAmount)
+			}
+			if err != nil { return fmt.Errorf("update down payment status (tx): %w", err) }
+			return nil
+		}
+	}
+
+	var err error
+	if paymentStatus != "" {
+		_, err = db.Exec(ctx, `UPDATE down_payments SET status = $2, payment_status = $3, remaining_amount = $4, updated_at = NOW() WHERE id = $1`, id, status, paymentStatus, remainingAmount)
+	} else {
+		_, err = db.Exec(ctx, `UPDATE down_payments SET status = $2, remaining_amount = $3, updated_at = NOW() WHERE id = $1`, id, status, remainingAmount)
+	}
+	if err != nil { return fmt.Errorf("update down payment status: %w", err) }
+	return nil
+}
+
+func (r *PurchaseRepo) UpdateDownPaymentGLJE(ctx context.Context, id uuid.UUID, glJeID uuid.UUID, paymentGLJEID *uuid.UUID, postedBy *uuid.UUID, tx interface{}) error {
+	db := r.db
+	if tx != nil {
+		if pgxTx, ok := tx.(interface {
+			Exec(ctx context.Context, sql string, args ...interface{}) (interface{}, error)
+		}); ok {
+			var err error
+			if paymentGLJEID != nil {
+				_, err = pgxTx.Exec(ctx, `UPDATE down_payments SET gl_je_id = $2, payment_gl_je_id = $3, posted_by = $4, posted_at = NOW(), updated_at = NOW() WHERE id = $1`, id, glJeID, *paymentGLJEID, postedBy)
+			} else {
+				_, err = pgxTx.Exec(ctx, `UPDATE down_payments SET gl_je_id = $2, posted_by = $3, posted_at = NOW(), updated_at = NOW() WHERE id = $1`, id, glJeID, postedBy)
+			}
+			if err != nil { return fmt.Errorf("update down payment gl je (tx): %w", err) }
+			return nil
+		}
+	}
+
+	var err error
+	if paymentGLJEID != nil {
+		_, err = db.Exec(ctx, `UPDATE down_payments SET gl_je_id = $2, payment_gl_je_id = $3, posted_by = $4, posted_at = NOW(), updated_at = NOW() WHERE id = $1`, id, glJeID, *paymentGLJEID, postedBy)
+	} else {
+		_, err = db.Exec(ctx, `UPDATE down_payments SET gl_je_id = $2, posted_by = $3, posted_at = NOW(), updated_at = NOW() WHERE id = $1`, id, glJeID, postedBy)
+	}
+	if err != nil { return fmt.Errorf("update down payment gl je: %w", err) }
+	return nil
+}
+
+func (r *PurchaseRepo) CreateDownPaymentClearing(ctx context.Context, clearing *purchasemodels.DownPaymentClearing) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO down_payment_clearings (id, dp_id, invoice_id, clearing_amount, currency, gl_je_id, notes, created_by, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+	`, clearing.ID, clearing.DPID, clearing.InvoiceID, clearing.ClearingAmount, clearing.Currency, clearing.GLJEID, clearing.Notes, clearing.CreatedBy)
+	if err != nil {
+		return fmt.Errorf("create down payment clearing: %w", err)
+	}
+	return nil
+}
+
+func (r *PurchaseRepo) ListDPClearings(ctx context.Context, dpID uuid.UUID) ([]*purchasemodels.DownPaymentClearing, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT dpc.id, dpc.dp_id, dpc.invoice_id, COALESCE(pi.invoice_number,''),
+			dpc.clearing_amount, dpc.currency, dpc.gl_je_id, COALESCE(dpc.notes,''),
+			dpc.created_by, dpc.created_at
+		FROM down_payment_clearings dpc
+		LEFT JOIN purchase_invoices pi ON pi.id = dpc.invoice_id
+		WHERE dpc.dp_id = $1
+		ORDER BY dpc.created_at DESC
+	`, dpID)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var list []*purchasemodels.DownPaymentClearing
+	for rows.Next() {
+		c := &purchasemodels.DownPaymentClearing{}
+		if err := rows.Scan(&c.ID, &c.DPID, &c.InvoiceID, &c.InvoiceNumber,
+			&c.ClearingAmount, &c.Currency, &c.GLJEID, &c.Notes,
+			&c.CreatedBy, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
+	return list, nil
+}
+
+func (r *PurchaseRepo) CreateDownPaymentRefund(ctx context.Context, refund *purchasemodels.DownPaymentRefund) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO down_payment_refunds (id, dp_id, refund_amount, refund_date, refund_method, source_account_id, gl_je_id, payment_gl_je_id, reason, created_by, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+	`, refund.ID, refund.DPID, refund.RefundAmount, refund.RefundDate, refund.RefundMethod, refund.SourceAccountID, refund.GLJEID, refund.PaymentGLJEID, refund.Reason, refund.CreatedBy)
+	if err != nil {
+		return fmt.Errorf("create down payment refund: %w", err)
+	}
+	return nil
+}
+
+func (r *PurchaseRepo) ListDPRefunds(ctx context.Context, dpID uuid.UUID) ([]*purchasemodels.DownPaymentRefund, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT dpr.id, dpr.dp_id, dpr.refund_amount, dpr.refund_date, dpr.refund_method,
+			dpr.source_account_id, COALESCE(sa_acc.account_code,''), COALESCE(sa_acc.account_name,''),
+			dpr.gl_je_id, dpr.payment_gl_je_id,
+			COALESCE(dpr.reason,''), dpr.created_by, dpr.created_at
+		FROM down_payment_refunds dpr
+		LEFT JOIN gl_accounts sa_acc ON sa_acc.id = dpr.source_account_id
+		WHERE dpr.dp_id = $1
+		ORDER BY dpr.created_at DESC
+	`, dpID)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var list []*purchasemodels.DownPaymentRefund
+	for rows.Next() {
+		r := &purchasemodels.DownPaymentRefund{}
+		if err := rows.Scan(&r.ID, &r.DPID, &r.RefundAmount, &r.RefundDate, &r.RefundMethod,
+			&r.SourceAccountID, &r.SourceAccountCode, &r.SourceAccountName,
+			&r.GLJEID, &r.PaymentGLJEID,
+			&r.Reason, &r.CreatedBy, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, r)
+	}
+	return list, nil
 }
 
 // nilIfUUID returns nil for zero UUID (for nullable DB columns)

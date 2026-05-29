@@ -27,8 +27,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
         _invoices = _invoices.where((i) => i.status == _statusFilter).toList();
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$e'), backgroundColor: AppTheme.errorColor));
+      if (mounted) _msg('$e', isError: true);
     } finally { if (mounted) setState(() => _loading = false); }
   }
 
@@ -53,6 +52,27 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     }
   }
 
+  bool _canPost(PurchaseInvoiceModel inv) {
+    return inv.status != 'POSTED' && inv.status != 'CLEARED'
+        && inv.matchStatus != 'PRICE_MISMATCH' && inv.matchStatus != '';
+  }
+
+  Future<void> _postInvoice(PurchaseInvoiceModel inv) async {
+    try {
+      await widget.purchaseService.postInvoice(inv.id);
+      _msg('Invoice ${inv.invoiceNumber} posted to GL');
+      _load();
+    } catch (e) {
+      _msg('$e', isError: true);
+    }
+  }
+
+  void _msg(String m, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(m), backgroundColor: isError ? AppTheme.errorColor : Colors.green));
+  }
+
   @override Widget build(BuildContext context) {
     return AppLayout(
       authService: widget.authService, currentIndex: 1, onIndexChanged: (_) {},
@@ -66,7 +86,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
               child: DropdownButtonFormField<String>(
                 initialValue: _statusFilter,
                 decoration: InputDecoration(
-                  labelText: 'Status Filter', isDense: true, contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  labelText: 'Status Filter', isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(6))),
                 isExpanded: true,
                 items: [
@@ -94,7 +115,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
         // Column headers
         if (_invoices.isNotEmpty)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             color: Colors.grey.shade100,
             child: Row(children: [
               const Expanded(flex: 2, child: Text('#', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 10))),
@@ -104,6 +125,8 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
               Expanded(flex: 1, child: Text('Amount', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10))),
               Expanded(flex: 1, child: Text('Match', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10))),
               Expanded(flex: 1, child: Text('Status', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10))),
+              SizedBox(width: 30, child: Text('Post', textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 9, color: Colors.grey.shade500))),
             ]),
           ),
         Expanded(
@@ -128,23 +151,81 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     );
   }
 
+  bool _canCancel(PurchaseInvoiceModel inv) {
+    return inv.status != 'CANCELLED' && inv.status != 'REJECTED';
+  }
+
+  Future<void> _cancelInvoice(PurchaseInvoiceModel inv) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel Invoice'),
+        content: Text('Cancel invoice "${inv.invoiceNumber}" for \$${inv.totalAmount.toStringAsFixed(2)}?\n\nThis will reverse the GL entry and restore PO invoiced quantities.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes, Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    try {
+      await widget.purchaseService.cancelInvoice(inv.id);
+      _msg('Invoice ${inv.invoiceNumber} cancelled and GL reversed');
+      _load();
+    } catch (e) {
+      _msg('$e', isError: true);
+    }
+  }
+
   Widget _buildRow(PurchaseInvoiceModel inv) {
     final mColor = _matchColor(inv.matchStatus);
     final sColor = _statusColor(inv.status);
+    final canPost = _canPost(inv);
+    final canCancel = _canCancel(inv);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey, width: 0.2))),
       child: Row(children: [
-        Expanded(flex: 2, child: Text(inv.invoiceNumber, style: const TextStyle(fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.w500),
+        Expanded(flex: 2, child: Text(inv.invoiceNumber,
+            style: const TextStyle(fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.w500),
             overflow: TextOverflow.ellipsis)),
         Expanded(flex: 2, child: Text(inv.invoiceDate.length >= 10 ? inv.invoiceDate.substring(0, 10) : '',
             style: TextStyle(fontSize: 10, color: Colors.grey.shade600))),
-        Expanded(flex: 2, child: Text(inv.vendorName, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
-        Expanded(flex: 2, child: Text(inv.poNumber, style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.grey.shade600))),
+        Expanded(flex: 2, child: Text(inv.vendorName,
+            style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
+        Expanded(flex: 2, child: Text(inv.poNumber,
+            style: TextStyle(fontSize: 10, fontFamily: 'monospace', color: Colors.grey.shade600))),
         Expanded(flex: 1, child: Text('\$${inv.totalAmount.toStringAsFixed(2)}', textAlign: TextAlign.right,
             style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue.shade700))),
         Expanded(flex: 1, child: _badge(inv.matchStatus, mColor)),
         Expanded(flex: 1, child: _badge(inv.status, sColor)),
+        SizedBox(
+          width: 52,
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (canPost)
+              IconButton(
+                icon: Icon(Icons.post_add, size: 16, color: Colors.green.shade600),
+                onPressed: () => _postInvoice(inv),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                tooltip: 'Post to GL',
+              ),
+            if (canCancel)
+              IconButton(
+                icon: Icon(Icons.cancel, size: 16, color: Colors.red.shade400),
+                onPressed: () => _cancelInvoice(inv),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                tooltip: 'Cancel Invoice',
+              ),
+            if (!canPost && !canCancel && inv.status == 'POSTED')
+              Icon(Icons.check_circle, size: 14, color: Colors.green.shade400),
+          ]),
+        ),
       ]),
     );
   }

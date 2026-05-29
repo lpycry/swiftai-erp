@@ -128,6 +128,10 @@ type UpdatePOStatusRequest struct {
 	Status string `json:"status" binding:"required,oneof=DRAFT CONFIRMED CANCELLED"`
 }
 
+type PostInvoiceRequest struct {
+	PostToGL bool `json:"post_to_gl"`
+}
+
 type CreateReceiptRequest struct {
 	POID       uuid.UUID  `json:"po_id" binding:"required"`
 	ItemID     uuid.UUID  `json:"item_id" binding:"required"`
@@ -239,6 +243,101 @@ type BusinessEvent struct {
 	ErrorMessage string                 `json:"error_message,omitempty"`
 	ProcessedAt  *time.Time             `json:"processed_at,omitempty"`
 	CreatedAt    time.Time              `json:"created_at"`
+}
+
+// ── Down Payment ──
+
+type DownPayment struct {
+	ID                uuid.UUID  `json:"id"`
+	OrgID             uuid.UUID  `json:"org_id"`
+	DPNumber          string     `json:"dp_number"`
+	VendorID          uuid.UUID  `json:"vendor_id"`
+	VendorCode        string     `json:"vendor_code,omitempty"`
+	VendorName        string     `json:"vendor_name,omitempty"`
+	POID              uuid.UUID  `json:"po_id"`
+	PONumber          string     `json:"po_number,omitempty"`
+	TotalAmount       float64    `json:"total_amount"`
+	PaidAmount        float64    `json:"paid_amount"`
+	RefundedAmount    float64    `json:"refunded_amount"`
+	ClearedAmount     float64    `json:"cleared_amount"`
+	RemainingAmount   float64    `json:"remaining_amount"`
+	Currency          string     `json:"currency"`
+	ExchangeRate      float64    `json:"exchange_rate"`
+	APDPAccountID     uuid.UUID  `json:"ap_dp_account_id"`
+	APDPAccountCode   string     `json:"ap_dp_account_code,omitempty"`
+	APDPAccountName   string     `json:"ap_dp_account_name,omitempty"`
+	CreditAccountID   uuid.UUID  `json:"credit_account_id"`
+	CreditAccountCode string     `json:"credit_account_code,omitempty"`
+	CreditAccountName string     `json:"credit_account_name,omitempty"`
+	Status            string     `json:"status"`       // DRAFT, POSTED, PARTIALLY_CLEARED, FULLY_CLEARED, PARTIALLY_REFUNDED, FULLY_REFUNDED
+	PaymentStatus     string     `json:"payment_status"` // UNPAID, PAID, REFUNDED
+	GLJEID            *uuid.UUID `json:"gl_je_id,omitempty"`
+	PaymentGLJEID     *uuid.UUID `json:"payment_gl_je_id,omitempty"`
+	Description       string     `json:"description,omitempty"`
+	ReferenceNo       string     `json:"reference_no,omitempty"`
+	SpecialGLIndicator string   `json:"special_gl_indicator"`
+	CreatedBy         *uuid.UUID `json:"created_by,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedBy         *uuid.UUID `json:"updated_by,omitempty"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	PostedBy          *uuid.UUID `json:"posted_by,omitempty"`
+	PostedAt          *time.Time `json:"posted_at,omitempty"`
+}
+
+type DownPaymentClearing struct {
+	ID              uuid.UUID `json:"id"`
+	DPID            uuid.UUID `json:"dp_id"`
+	InvoiceID       uuid.UUID `json:"invoice_id"`
+	InvoiceNumber   string    `json:"invoice_number,omitempty"`
+	ClearingAmount  float64   `json:"clearing_amount"`
+	Currency        string    `json:"currency"`
+	GLJEID          *uuid.UUID `json:"gl_je_id,omitempty"`
+	Notes           string    `json:"notes,omitempty"`
+	CreatedBy       *uuid.UUID `json:"created_by,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+type DownPaymentRefund struct {
+	ID               uuid.UUID  `json:"id"`
+	DPID             uuid.UUID  `json:"dp_id"`
+	RefundAmount     float64    `json:"refund_amount"`
+	RefundDate       time.Time  `json:"refund_date"`
+	RefundMethod     string     `json:"refund_method"` // BANK_TRANSFER, CASH, CHECK, OTHER
+	SourceAccountID  uuid.UUID  `json:"source_account_id"`
+	SourceAccountCode string   `json:"source_account_code,omitempty"`
+	SourceAccountName string   `json:"source_account_name,omitempty"`
+	GLJEID           *uuid.UUID `json:"gl_je_id,omitempty"`
+	PaymentGLJEID    *uuid.UUID `json:"payment_gl_je_id,omitempty"`
+	Reason           string     `json:"reason"`
+	CreatedBy        *uuid.UUID `json:"created_by,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+}
+
+// ── Request / Response ──
+
+type CreateDownPaymentRequest struct {
+	VendorID        uuid.UUID `json:"vendor_id" binding:"required"`
+	POID            uuid.UUID `json:"po_id" binding:"required"`
+	Amount          float64   `json:"amount" binding:"required,gt=0"`
+	Currency        string    `json:"currency,omitempty"`
+	ExchangeRate    float64   `json:"exchange_rate,omitempty"`
+	CreditAccountID uuid.UUID `json:"credit_account_id" binding:"required"`
+	PostImmediately bool      `json:"post_immediately"`
+	Description     string    `json:"description,omitempty"`
+	ReferenceNo     string    `json:"reference_no,omitempty"`
+}
+
+type CreateDownPaymentRefundRequest struct {
+	RefundAmount    float64   `json:"refund_amount" binding:"required,gt=0"`
+	RefundDate      string    `json:"refund_date,omitempty"`
+	RefundMethod    string    `json:"refund_method" binding:"required"`
+	SourceAccountID uuid.UUID `json:"source_account_id" binding:"required"`
+	Reason          string    `json:"reason" binding:"required"`
+}
+
+type CreateDPClearingRequest struct {
+	InvoiceID      string  `json:"invoice_id" binding:"required"`
+	ClearingAmount float64 `json:"clearing_amount" binding:"required,gt=0"`
 }
 
 // ── AI Vendor Recommendation ──

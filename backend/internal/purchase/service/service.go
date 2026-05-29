@@ -26,6 +26,12 @@ func NewPurchaseService(db *pgxpool.Pool, repo *purchaserepo.PurchaseRepo, glSvc
 
 // ── Vendors ──
 
+// ── Pending Invoice POs ──
+
+func (s *PurchaseService) ListPendingInvoicePOs(ctx context.Context, orgID uuid.UUID) ([]*purchasemodels.PurchaseOrder, error) {
+	return s.repo.ListPendingInvoicePOs(ctx, orgID)
+}
+
 func (s *PurchaseService) CreateVendor(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreateVendorRequest) (*purchasemodels.Vendor, error) {
 	return s.repo.CreateVendor(ctx, orgID, req)
 }
@@ -204,7 +210,7 @@ func (s *PurchaseService) ReverseGoodsReceipt(ctx context.Context, orgID uuid.UU
 		jeID, _ := uuid.Parse(je["id"].(string))
 		jeTenantID := orgID
 		// Try to resolve tenant_id for GL reversal
-		if err := s.db.QueryRow(ctx, `SELECT COALESCE(tenant_id, $1) FROM organizations WHERE id = $1`, orgID).Scan(&jeTenantID); err != nil {
+		if err := s.db.QueryRow(ctx, `SELECT COALESCE((SELECT tenant_id FROM organizations WHERE id = $1), $1::uuid)`, orgID).Scan(&jeTenantID); err != nil {
 			jeTenantID = orgID
 		}
 		glUserID := uuid.Nil
@@ -255,6 +261,80 @@ func (s *PurchaseService) ListInvoices(ctx context.Context, orgID uuid.UUID, ven
 	return s.repo.ListInvoices(ctx, orgID, vendorID)
 }
 
+func (s *PurchaseService) CancelInvoice(ctx context.Context, orgID, invoiceID, userID uuid.UUID) error {
+	inv, err := s.repo.GetInvoice(ctx, invoiceID, orgID)
+	if err != nil {
+		return fmt.Errorf("get invoice: %w", err)
+	}
+	if inv.Status == "CANCELLED" || inv.Status == "REJECTED" {
+		return fmt.Errorf("invoice %s is already %s", inv.InvoiceNumber, inv.Status)
+	}
+
+	// Reverse invoiced quantities on PO items
+	items, err := s.repo.GetInvoiceItems(ctx, invoiceID)
+	if err == nil {
+		for _, it := range items {
+			if it.POItemID != nil {
+				_, _ = s.db.Exec(ctx, `UPDATE purchase_order_items SET invoiced_quantity = GREATEST(0, invoiced_quantity - $1) WHERE id = $2`,
+					it.Quantity, *it.POItemID)
+			}
+		}
+	}
+
+	// Find and reverse the GL journal entry if invoice was posted
+	var jeID uuid.UUID
+	err = s.db.QueryRow(ctx, `SELECT id FROM gl_journal_entries WHERE reference = $1 AND source = 'purchase' AND status = 'posted' ORDER BY created_at DESC LIMIT 1`,
+		inv.InvoiceNumber).Scan(&jeID)
+	if err == nil && jeID != uuid.Nil {
+		var glTenantID uuid.UUID
+		_ = s.db.QueryRow(ctx, `SELECT tenant_id FROM organizations WHERE id = $1`, orgID).Scan(&glTenantID)
+		if glTenantID == uuid.Nil {
+			glTenantID = orgID
+		}
+		if _, rErr := s.glSvc.ReverseJournalEntry(ctx, glTenantID, userID, jeID, "negative"); rErr != nil {
+			fmt.Printf("WARN: failed to reverse JE %s for invoice %s: %v\n", jeID.String()[:8], inv.InvoiceNumber, rErr)
+		}
+	}
+
+	// Update invoice status
+	_, err = s.db.Exec(ctx, `UPDATE purchase_invoices SET status = 'CANCELLED', updated_at = NOW() WHERE id = $1`, invoiceID)
+	return err
+}
+
+func (s *PurchaseService) PostInvoice(ctx context.Context, orgID, invoiceID, userID uuid.UUID) error {
+	// Get invoice
+	inv, err := s.repo.GetInvoice(ctx, invoiceID, orgID)
+	if err != nil {
+		return fmt.Errorf("get invoice: %w", err)
+	}
+
+	if inv.Status == "POSTED" || inv.Status == "CLEARED" {
+		return fmt.Errorf("invoice %s is already %s", inv.InvoiceNumber, inv.Status)
+	}
+	if inv.MatchStatus == "PRICE_MISMATCH" {
+		return fmt.Errorf("invoice %s has price mismatch, cannot post until resolved", inv.InvoiceNumber)
+	}
+
+	// Build request for GL posting
+	req := &purchasemodels.CreateInvoiceRequest{
+		InvoiceNumber: inv.InvoiceNumber,
+		VendorID:      inv.VendorID,
+		POID:          inv.POID,
+		TotalAmount:   inv.TotalAmount,
+		TaxAmount:     inv.TaxAmount,
+		Currency:      inv.Currency,
+		InvoiceDate:   inv.InvoiceDate.Format("2006-01-02"),
+	}
+
+	if err := s.createInvoiceJournalEntry(ctx, orgID, inv, req, &userID); err != nil {
+		return err
+	}
+
+	// Update invoice status
+	_, err = s.db.Exec(ctx, `UPDATE purchase_invoices SET status = 'POSTED', updated_at = NOW() WHERE id = $1`, invoiceID)
+	return err
+}
+
 func (s *PurchaseService) createInvoiceJournalEntry(ctx context.Context, invoiceOrgID uuid.UUID, invoice *purchasemodels.PurchaseInvoice, req *purchasemodels.CreateInvoiceRequest, userID *uuid.UUID) error {
 	if req.POID == nil {
 		return nil
@@ -303,6 +383,7 @@ func (s *PurchaseService) createInvoiceJournalEntry(ctx context.Context, invoice
 	description := fmt.Sprintf("Invoice %s - PO %s / Vendor %s", invoice.InvoiceNumber, invoice.PONumber, req.VendorID.String()[:8])
 	amount := req.TotalAmount
 
+	// Dr: GR/IR clearing, Cr: Vendor AP (reconciliation account allowed for purchase source)
 	lines := []glmodels.CreateJournalLineRequest{
 		{
 			AccountID:   grIrID,
@@ -325,7 +406,6 @@ func (s *PurchaseService) createInvoiceJournalEntry(ctx context.Context, invoice
 	// Price difference line
 	if totalPriceDiff != 0 && priceDifID != nil {
 		if totalPriceDiff > 0 {
-			// Invoice price > PO price → Dr PRICE_DIF
 			lines = append(lines, glmodels.CreateJournalLineRequest{
 				AccountID:   *priceDifID,
 				Debit:       totalPriceDiff,
@@ -335,7 +415,6 @@ func (s *PurchaseService) createInvoiceJournalEntry(ctx context.Context, invoice
 				PartnerType: "vendor",
 			})
 		} else {
-			// Invoice price < PO price → Cr PRICE_DIF
 			lines = append(lines, glmodels.CreateJournalLineRequest{
 				AccountID:   *priceDifID,
 				Debit:       0,
@@ -393,6 +472,401 @@ func (s *PurchaseService) GetAttachment(ctx context.Context, orgID, poID, attach
 }
 
 // ── Receipt → Journal Entry ──
+
+// ── Down Payments ──
+
+func (s *PurchaseService) CreateDownPayment(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreateDownPaymentRequest, userID *uuid.UUID) (*purchasemodels.DownPayment, error) {
+	// 1. Ensure DP tables exist
+	if err := s.repo.EnsureDownPaymentTable(ctx); err != nil {
+		return nil, fmt.Errorf("ensure dp table: %w", err)
+	}
+
+	// 2. Validate PO exists and get its details
+	po, err := s.repo.GetPO(ctx, req.POID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("get po: %w", err)
+	}
+
+	// 3. Get vendor for reconciliation account details
+	vendor, err := s.repo.GetVendor(ctx, req.VendorID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("get vendor: %w", err)
+	}
+	if !vendor.IsActive {
+		return nil, fmt.Errorf("vendor %s is inactive", vendor.VendorCode)
+	}
+
+	currency := req.Currency
+	if currency == "" {
+		currency = po.Currency
+	}
+	if currency == "" {
+		currency = "USD"
+	}
+
+	exchangeRate := req.ExchangeRate
+	if exchangeRate <= 0 {
+		exchangeRate = 1
+	}
+
+	// 4. Resolve real org ID for GL posting
+	realOrgID := orgID
+	if po.OrganizationID != nil && *po.OrganizationID != uuid.Nil {
+		realOrgID = *po.OrganizationID
+	}
+
+	// 5. Resolve tenant_id for GL account lookup
+	var glTenantID uuid.UUID
+	err = s.db.QueryRow(ctx, `SELECT COALESCE((SELECT tenant_id FROM organizations WHERE id = $1), $1::uuid)`, realOrgID).Scan(&glTenantID)
+	if err != nil {
+		glTenantID = realOrgID
+	}
+
+	// 6. Get AP_DP account from org_reconciliation_accounts
+	var apDpAccountID uuid.UUID
+	err = s.db.QueryRow(ctx, `SELECT account_id FROM org_reconciliation_accounts WHERE org_id = $1 AND account_type = 'AP_DP'`, realOrgID).Scan(&apDpAccountID)
+	if err != nil {
+		// Fallback: try tenant-level lookup
+		err = s.db.QueryRow(ctx, `SELECT account_id FROM org_reconciliation_accounts WHERE org_id = $1 AND account_type = 'AP_DP'`, glTenantID).Scan(&apDpAccountID)
+		if err != nil {
+			return nil, fmt.Errorf("no AP_DP (预付款统驭科目) configured for org %s (or tenant %s). Go to Finance Settings > Account Types to add one", realOrgID, glTenantID)
+		}
+	}
+
+	// 7. Generate DP number: DP-YYYYMMDD-XXXX
+	dpNumber := s.generateDPNumber(ctx)
+
+	// 8. Create DP record
+	dpID := uuid.New()
+	now := time.Now()
+	paymentStatus := "UNPAID"
+	dpStatus := "DRAFT"
+	if req.PostImmediately {
+		dpStatus = "POSTED"
+		paymentStatus = "PAID"
+	}
+
+	dp := &purchasemodels.DownPayment{
+		ID:                 dpID,
+		OrgID:              orgID,
+		DPNumber:           dpNumber,
+		VendorID:           req.VendorID,
+		POID:               req.POID,
+		TotalAmount:        req.Amount,
+		PaidAmount:         req.Amount,
+		RefundedAmount:     0,
+		ClearedAmount:      0,
+		RemainingAmount:    req.Amount,
+		Currency:           currency,
+		ExchangeRate:       exchangeRate,
+		APDPAccountID:      apDpAccountID,
+		CreditAccountID:    req.CreditAccountID,
+		Status:             dpStatus,
+		PaymentStatus:      paymentStatus,
+		Description:        req.Description,
+		ReferenceNo:        req.ReferenceNo,
+		SpecialGLIndicator: "A",
+		CreatedBy:          userID,
+		CreatedAt:          now,
+	}
+
+	if err := s.repo.CreateDownPayment(ctx, orgID, dp, nil); err != nil {
+		return nil, fmt.Errorf("create dp: %w", err)
+	}
+
+	// 9. If post_immediately, create and post the JE
+	if req.PostImmediately {
+		glUserID := uuid.Nil
+		if userID != nil {
+			glUserID = *userID
+		}
+		if glUserID == uuid.Nil {
+			_ = s.db.QueryRow(ctx, `SELECT id FROM users WHERE tenant_id = $1 LIMIT 1`, glTenantID).Scan(&glUserID)
+		}
+
+		description := fmt.Sprintf("Down Payment %s - PO %s / Vendor %s", dpNumber, po.PONumber, vendor.Name)
+		entryReq := &glmodels.CreateJournalEntryRequest{
+			PostingDate:    now,
+			Description:    description,
+			Reference:      dpNumber,
+			EntryType:      "normal",
+			Source:         "purchase",
+			OrganizationID: &realOrgID,
+			Lines: []glmodels.CreateJournalLineRequest{
+				{
+					AccountID:   apDpAccountID,
+					Debit:       req.Amount,
+					Credit:      0,
+					Description: fmt.Sprintf("DP %s: Prepayment to %s", dpNumber, vendor.Name),
+					PartnerID:   &req.VendorID,
+					PartnerType: "vendor",
+				},
+				{
+					AccountID:   req.CreditAccountID,
+					Debit:       0,
+					Credit:      req.Amount,
+					Description: fmt.Sprintf("DP %s: Payment source", dpNumber),
+					PartnerID:   &req.VendorID,
+					PartnerType: "vendor",
+				},
+			},
+		}
+
+		entry, err := s.glSvc.CreateJournalEntry(ctx, glTenantID, glUserID, entryReq)
+		if err != nil {
+			return nil, fmt.Errorf("create journal entry: %w", err)
+		}
+
+		_, err = s.glSvc.UpdateJournalEntryStatus(ctx, entry.ID, glTenantID, glUserID, "posted")
+		if err != nil {
+			return nil, fmt.Errorf("post journal entry: %w", err)
+		}
+
+		// Link GL JE to DP
+		_ = s.repo.UpdateDownPaymentGLJE(ctx, dpID, entry.ID, nil, &glUserID, nil)
+
+		// Reload to get updated fields
+		dp, err = s.repo.GetDownPayment(ctx, dpID, orgID)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return dp, nil
+}
+
+func (s *PurchaseService) generateDPNumber(ctx context.Context) string {
+	today := time.Now().Format("20060102")
+	var seq int
+	_ = s.db.QueryRow(ctx, `
+		SELECT COALESCE(MAX(CAST(SUBSTRING(dp_number FROM '....$') AS INTEGER)), 0) + 1
+		FROM down_payments WHERE dp_number LIKE $1
+	`, "DP-"+today+"-%").Scan(&seq)
+	if seq < 1 {
+		seq = 1
+	}
+	if seq > 9999 {
+		seq = 1 // wrap around
+	}
+	return fmt.Sprintf("DP-%s-%04d", today, seq)
+}
+
+func (s *PurchaseService) PostDownPayment(ctx context.Context, orgID uuid.UUID, dpID uuid.UUID, userID *uuid.UUID) (*purchasemodels.DownPayment, error) {
+	dp, err := s.repo.GetDownPayment(ctx, dpID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("get down payment: %w", err)
+	}
+	if dp.Status != "DRAFT" {
+		return nil, fmt.Errorf("down payment %s is already %s, cannot post", dp.DPNumber, dp.Status)
+	}
+
+	// Resolve tenant ID (fallback to orgID itself if organizations table has no entry)
+	var glTenantID uuid.UUID
+	err = s.db.QueryRow(ctx, `SELECT COALESCE((SELECT tenant_id FROM organizations WHERE id = $1), $1::uuid)`, orgID).Scan(&glTenantID)
+	if err != nil {
+		glTenantID = orgID
+	}
+
+	// Resolve userID
+	glUserID := uuid.Nil
+	if userID != nil {
+		glUserID = *userID
+	}
+	if glUserID == uuid.Nil {
+		_ = s.db.QueryRow(ctx, `SELECT id FROM users WHERE tenant_id = $1 LIMIT 1`, glTenantID).Scan(&glUserID)
+	}
+
+	// Create Journal Entry: Dr AP_DP (prepayment reconciliation account), Cr user-specified account
+	description := fmt.Sprintf("Down Payment %s - PO %s / Vendor %s", dp.DPNumber, dp.PONumber, dp.VendorName)
+	entryReq := &glmodels.CreateJournalEntryRequest{
+		PostingDate:    time.Now(),
+		Description:    description,
+		Reference:      dp.DPNumber,
+		EntryType:      "normal",
+		Source:         "purchase",
+		Lines: []glmodels.CreateJournalLineRequest{
+			{
+				AccountID:   dp.APDPAccountID, // Dr: AP_DP (vendor prepayment reconciliation)
+				Debit:       dp.TotalAmount,
+				Credit:      0,
+				Description: fmt.Sprintf("DP %s: Prepayment to vendor", dp.DPNumber),
+				PartnerID:   &dp.VendorID,
+				PartnerType: "vendor",
+			},
+			{
+				AccountID:   dp.CreditAccountID, // Cr: user-selected account (bank/cash)
+				Debit:       0,
+				Credit:      dp.TotalAmount,
+				Description: fmt.Sprintf("DP %s: Payment source", dp.DPNumber),
+				PartnerID:   &dp.VendorID,
+				PartnerType: "vendor",
+			},
+		},
+	}
+
+	entry, err := s.glSvc.CreateJournalEntry(ctx, glTenantID, glUserID, entryReq)
+	if err != nil {
+		return nil, fmt.Errorf("create journal entry: %w", err)
+	}
+
+	// Post the journal entry immediately
+	_, err = s.glSvc.UpdateJournalEntryStatus(ctx, entry.ID, glTenantID, glUserID, "posted")
+	if err != nil {
+		return nil, fmt.Errorf("post journal entry: %w", err)
+	}
+
+	// Update DP: status -> POSTED, payment_status -> PAID, link JE
+	paymentStatus := "PAID"
+	err = s.repo.UpdateDownPaymentStatus(ctx, dpID, "POSTED", paymentStatus, 0, nil)
+	if err != nil {
+		return nil, fmt.Errorf("update dp status: %w", err)
+	}
+
+	// Link GL JE
+	glJEID := entry.ID
+	updatedBy := glUserID
+	err = s.repo.UpdateDownPaymentGLJE(ctx, dpID, glJEID, nil, &updatedBy, nil)
+	if err != nil {
+		return nil, fmt.Errorf("link gl je: %w", err)
+	}
+
+	return s.repo.GetDownPayment(ctx, dpID, orgID)
+}
+
+func (s *PurchaseService) DeleteDownPayment(ctx context.Context, id, orgID uuid.UUID) error {
+	return s.repo.DeleteDownPayment(ctx, id, orgID)
+}
+
+func (s *PurchaseService) ListDownPayments(ctx context.Context, orgID uuid.UUID, vendorID uuid.UUID, status, dateFrom, dateTo string, minAmount, maxAmount float64) ([]*purchasemodels.DownPayment, error) {
+	return s.repo.ListDownPayments(ctx, orgID, vendorID, status, dateFrom, dateTo, minAmount, maxAmount)
+}
+
+func (s *PurchaseService) GetDownPayment(ctx context.Context, id, orgID uuid.UUID) (*purchasemodels.DownPayment, error) {
+	return s.repo.GetDownPayment(ctx, id, orgID)
+}
+
+func (s *PurchaseService) RefundDownPayment(ctx context.Context, orgID uuid.UUID, dpID uuid.UUID, req *purchasemodels.CreateDownPaymentRefundRequest, userID *uuid.UUID) (*purchasemodels.DownPayment, error) {
+	dp, err := s.repo.GetDownPayment(ctx, dpID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("get down payment: %w", err)
+	}
+
+	// Validate refund amount
+	if req.RefundAmount > dp.RemainingAmount {
+		return nil, fmt.Errorf("refund amount %.2f exceeds remaining amount %.2f", req.RefundAmount, dp.RemainingAmount)
+	}
+
+	if dp.PaymentStatus != "PAID" {
+		return nil, fmt.Errorf("down payment %s has not been paid yet (status: %s)", dp.DPNumber, dp.PaymentStatus)
+	}
+
+	// Resolve tenant
+	var glTenantID uuid.UUID
+	err = s.db.QueryRow(ctx, `SELECT COALESCE((SELECT tenant_id FROM organizations WHERE id = $1), $1::uuid)`, orgID).Scan(&glTenantID)
+	if err != nil {
+		glTenantID = orgID
+	}
+
+	glUserID := uuid.Nil
+	if userID != nil {
+		glUserID = *userID
+	}
+	if glUserID == uuid.Nil {
+		_ = s.db.QueryRow(ctx, `SELECT id FROM users WHERE tenant_id = $1 LIMIT 1`, glTenantID).Scan(&glUserID)
+	}
+
+	refundDate := time.Now()
+	if req.RefundDate != "" {
+		if parsed, err := time.Parse("2006-01-02", req.RefundDate); err == nil {
+			refundDate = parsed
+		}
+	}
+
+	// Create refund journal entry: Dr credit account (reverse of original Cr), Cr AP_DP (reverse of original Dr)
+	description := fmt.Sprintf("Down Payment Refund %s - %s", dp.DPNumber, req.Reason)
+	entryReq := &glmodels.CreateJournalEntryRequest{
+		PostingDate:    refundDate,
+		Description:    description,
+		Reference:      dp.DPNumber,
+		EntryType:      "normal",
+		Source:         "purchase",
+		Lines: []glmodels.CreateJournalLineRequest{
+			{
+				AccountID:   dp.CreditAccountID, // Dr: original credit account (money comes back)
+				Debit:       req.RefundAmount,
+				Credit:      0,
+				Description: fmt.Sprintf("DP Refund %s: Refund from vendor", dp.DPNumber),
+				PartnerID:   &dp.VendorID,
+				PartnerType: "vendor",
+			},
+			{
+				AccountID:   dp.APDPAccountID, // Cr: AP_DP (reduce prepayment)
+				Debit:       0,
+				Credit:      req.RefundAmount,
+				Description: fmt.Sprintf("DP Refund %s: Reverse prepayment", dp.DPNumber),
+				PartnerID:   &dp.VendorID,
+				PartnerType: "vendor",
+			},
+		},
+	}
+
+	entry, err := s.glSvc.CreateJournalEntry(ctx, glTenantID, glUserID, entryReq)
+	if err != nil {
+		return nil, fmt.Errorf("create refund journal entry: %w", err)
+	}
+
+	_, err = s.glSvc.UpdateJournalEntryStatus(ctx, entry.ID, glTenantID, glUserID, "posted")
+	if err != nil {
+		return nil, fmt.Errorf("post refund journal entry: %w", err)
+	}
+
+	// Create refund record
+	refundID := uuid.New()
+	refund := &purchasemodels.DownPaymentRefund{
+		ID:               refundID,
+		DPID:             dpID,
+		RefundAmount:     req.RefundAmount,
+		RefundDate:       refundDate,
+		RefundMethod:     req.RefundMethod,
+		SourceAccountID:  req.SourceAccountID,
+		GLJEID:           &entry.ID,
+		Reason:           req.Reason,
+		CreatedBy:        userID,
+		CreatedAt:        time.Now(),
+	}
+	if err := s.repo.CreateDownPaymentRefund(ctx, refund); err != nil {
+		return nil, fmt.Errorf("create refund record: %w", err)
+	}
+
+	// Update DP: refunded_amount += refund, remaining_amount -= refund, status
+	newRefundedAmount := dp.RefundedAmount + req.RefundAmount
+	newRemainingAmount := dp.RemainingAmount - req.RefundAmount
+
+	// Determine new status
+	newStatus := "POSTED"
+	newPaymentStatus := "PAID"
+	if newRemainingAmount <= 0.001 {
+		newStatus = "FULLY_REFUNDED"
+		newPaymentStatus = "REFUNDED"
+	} else {
+		newStatus = "PARTIALLY_REFUNDED"
+	}
+
+	// Update refunded amount and remaining amount directly
+	_, err = s.db.Exec(ctx, `
+		UPDATE down_payments SET refunded_amount = $2, remaining_amount = $3, status = $4, payment_status = $5, updated_at = NOW()
+		WHERE id = $1
+	`, dpID, newRefundedAmount, newRemainingAmount, newStatus, newPaymentStatus)
+	if err != nil {
+		return nil, fmt.Errorf("update dp after refund: %w", err)
+	}
+
+	return s.repo.GetDownPayment(ctx, dpID, orgID)
+}
+
+func (s *PurchaseService) GetDPClearings(ctx context.Context, dpID uuid.UUID) ([]*purchasemodels.DownPaymentClearing, error) {
+	return s.repo.ListDPClearings(ctx, dpID)
+}
 
 func (s *PurchaseService) FindJournalEntryForReceipt(ctx context.Context, receiptID uuid.UUID) (map[string]interface{}, error) {
 	je, err := s.repo.FindJournalEntryForReceipt(ctx, receiptID)

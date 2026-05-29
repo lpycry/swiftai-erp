@@ -297,6 +297,8 @@ func main() {
 		protected.GET("/purchase/orders/:id/attachments", purchaseHandler.ListPOAttachments)
 		protected.GET("/purchase/orders/:id/attachments/:attachId/download", purchaseHandler.DownloadPOAttachment)
 
+		protected.GET("/purchase/pending-invoice-pos", purchaseHandler.ListPendingInvoicePOs)
+
 		protected.POST("/purchase/receipts", purchaseHandler.ExecuteGoodsReceipt)
 		protected.GET("/purchase/receipts", purchaseHandler.ListReceipts)
 		protected.GET("/purchase/receipts/:id/journal", purchaseHandler.GetReceiptJournalEntry)
@@ -305,6 +307,16 @@ func main() {
 		protected.POST("/purchase/invoices", purchaseHandler.CreateInvoice)
 		protected.GET("/purchase/invoices", purchaseHandler.ListInvoices)
 		protected.GET("/purchase/invoices/:id", purchaseHandler.GetInvoice)
+		protected.POST("/purchase/invoices/:id/post", purchaseHandler.PostInvoice)
+		protected.POST("/purchase/invoices/:id/cancel", purchaseHandler.CancelInvoice)
+
+		protected.POST("/purchase/down-payments", purchaseHandler.CreateDownPayment)
+		protected.GET("/purchase/down-payments", purchaseHandler.ListDownPayments)
+		protected.GET("/purchase/down-payments/:id", purchaseHandler.GetDownPayment)
+		protected.POST("/purchase/down-payments/:id/post", purchaseHandler.PostDownPayment)
+		protected.POST("/purchase/down-payments/:id/refund", purchaseHandler.RefundDownPayment)
+		protected.GET("/purchase/down-payments/:id/clearings", purchaseHandler.GetDPClearings)
+		protected.DELETE("/purchase/down-payments/:id", purchaseHandler.DeleteDownPayment)
 
 		// ---- Finance Settings: Payment Terms ----
 		protected.GET("/finance-settings/payment-terms", financeSettingsHandler.ListPaymentTerms)

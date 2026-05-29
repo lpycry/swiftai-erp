@@ -1011,7 +1011,9 @@ const Map<String, String> _accountTypes = {
   'GR_IR': 'GR/IR Clearing',
   'INVENTORY': 'Inventory',
   'AP_RECON': 'AP Reconciliation',
+  'AP_DP': 'AP Down Payment',
   'AR_RECON': 'AR Reconciliation',
+  'AR_DP': 'AR Down Payment',
   'CASH': 'Cash / Bank Clearing',
   'TAX_INPUT': 'Input Tax (VAT/GST)',
   'TAX_OUTPUT': 'Output Tax (VAT/GST)',
@@ -1024,7 +1026,9 @@ Color _typeColor(String type) {
     case 'GR_IR':       return Colors.orange;
     case 'INVENTORY':    return Colors.teal;
     case 'AP_RECON':     return Colors.blue;
+    case 'AP_DP':        return Colors.lightBlue;
     case 'AR_RECON':     return Colors.indigo;
+    case 'AR_DP':        return Colors.deepPurple;
     case 'CASH':         return Colors.green;
     case 'TAX_INPUT':    return Colors.deepOrange;
     case 'TAX_OUTPUT':   return Colors.red;

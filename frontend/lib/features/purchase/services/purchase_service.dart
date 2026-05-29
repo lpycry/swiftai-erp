@@ -155,6 +155,8 @@ class PurchaseOrderItemModel {
   final double quantity;
   final double unitPrice;
   final double receivedQuantity;
+  final double invoicedQuantity;
+  final double openInvoiceQty;
   final String unitOfMeasure;
   final double lineTotal;
   final String? expectedDeliveryDate;
@@ -169,6 +171,8 @@ class PurchaseOrderItemModel {
     this.quantity = 0,
     this.unitPrice = 0,
     this.receivedQuantity = 0,
+    this.invoicedQuantity = 0,
+    this.openInvoiceQty = 0,
     this.unitOfMeasure = 'EA',
     this.lineTotal = 0,
     this.expectedDeliveryDate,
@@ -185,6 +189,8 @@ class PurchaseOrderItemModel {
       quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
       unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
       receivedQuantity: (json['received_quantity'] as num?)?.toDouble() ?? 0,
+      invoicedQuantity: (json['invoiced_quantity'] as num?)?.toDouble() ?? 0,
+      openInvoiceQty: (json['open_invoice_qty'] as num?)?.toDouble() ?? 0,
       unitOfMeasure: json['unit_of_measure']?.toString() ?? 'EA',
       lineTotal: (json['line_total'] as num?)?.toDouble() ?? 0,
       expectedDeliveryDate: json['expected_delivery_date']?.toString(),
@@ -258,6 +264,53 @@ class PurchaseReceiptModel {
   }
 }
 
+class InvoiceItemModel {
+  final String id;
+  final String invoiceId;
+  final String? poItemId;
+  final String itemId;
+  final String itemSku;
+  final String itemName;
+  final double quantity;
+  final double unitPrice;
+  final double lineTotal;
+  final double grQuantity;
+  final double poUnitPrice;
+  final double priceDiff;
+
+  InvoiceItemModel({
+    required this.id,
+    required this.invoiceId,
+    this.poItemId,
+    required this.itemId,
+    this.itemSku = '',
+    this.itemName = '',
+    this.quantity = 0,
+    this.unitPrice = 0,
+    this.lineTotal = 0,
+    this.grQuantity = 0,
+    this.poUnitPrice = 0,
+    this.priceDiff = 0,
+  });
+
+  factory InvoiceItemModel.fromJson(Map<String, dynamic> json) {
+    return InvoiceItemModel(
+      id: json['id']?.toString() ?? '',
+      invoiceId: json['invoice_id']?.toString() ?? '',
+      poItemId: json['po_item_id']?.toString(),
+      itemId: json['item_id']?.toString() ?? '',
+      itemSku: json['item_sku']?.toString() ?? '',
+      itemName: json['item_name']?.toString() ?? '',
+      quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
+      unitPrice: (json['unit_price'] as num?)?.toDouble() ?? 0,
+      lineTotal: (json['line_total'] as num?)?.toDouble() ?? 0,
+      grQuantity: (json['gr_quantity'] as num?)?.toDouble() ?? 0,
+      poUnitPrice: (json['po_unit_price'] as num?)?.toDouble() ?? 0,
+      priceDiff: (json['price_diff'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
 class PurchaseInvoiceModel {
   final String id;
   final String orgId;
@@ -273,6 +326,7 @@ class PurchaseInvoiceModel {
   final String notes;
   final String vendorName;
   final String poNumber;
+  final List<InvoiceItemModel> items;
 
   PurchaseInvoiceModel({
     required this.id,
@@ -289,6 +343,7 @@ class PurchaseInvoiceModel {
     this.notes = '',
     this.vendorName = '',
     this.poNumber = '',
+    this.items = const [],
   });
 
   factory PurchaseInvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -307,6 +362,10 @@ class PurchaseInvoiceModel {
       notes: json['notes']?.toString() ?? '',
       vendorName: json['vendor_name']?.toString() ?? '',
       poNumber: json['po_number']?.toString() ?? '',
+      items: (json['items'] as List<dynamic>?)
+              ?.map((e) => InvoiceItemModel.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 }
@@ -489,6 +548,22 @@ class PurchaseService {
     return jsonDecode(resp.body);
   }
 
+  Future<void> postInvoice(String id) async {
+    final resp = await http.post(Uri.parse('$_baseUrl/purchase/invoices/$id/post'), headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Post invoice failed');
+    }
+  }
+
+  Future<void> cancelInvoice(String id) async {
+    final resp = await http.post(Uri.parse('$_baseUrl/purchase/invoices/$id/cancel'), headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Cancel invoice failed');
+    }
+  }
+
   Future<List<PurchaseInvoiceModel>> listInvoices({String? vendorId}) async {
     final params = <String, String>{};
     if (vendorId != null && vendorId.isNotEmpty) params['vendor_id'] = vendorId;
@@ -525,6 +600,21 @@ class PurchaseService {
     final streamedResp = await request.send();
     final resp = await http.Response.fromStream(streamedResp);
     if (resp.statusCode >= 400) throw Exception('Upload failed: ${resp.statusCode}');
+  }
+
+  // ══════════════════════════════════════════
+  //  PENDING INVOICE POs
+  // ══════════════════════════════════════════
+
+  Future<List<PurchaseOrderModel>> listPendingInvoicePOs() async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/purchase/pending-invoice-pos'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    final body = jsonDecode(resp.body);
+    final data = body['data'] as List<dynamic>? ?? [];
+    return data.map((e) => PurchaseOrderModel.fromJson(e as Map<String, dynamic>)).toList();
   }
 
   /// Format amount with thousand separators

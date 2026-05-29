@@ -74,7 +74,8 @@ func (s *GLService) CreateJournalEntry(ctx context.Context, tenantID, userID uui
 		if !acc.IsLeaf {
 			return nil, fmt.Errorf("%w: %s (%s)", ErrAccountNotLeaf, acc.AccountCode, acc.AccountName)
 		}
-		if acc.ReconciliationType != "" && acc.ReconciliationType != "none" {
+		// Allow reconciliation accounts for system-generated postings (e.g. purchase subledger)
+		if acc.ReconciliationType != "" && acc.ReconciliationType != "none" && req.Source != "purchase" {
 			return nil, fmt.Errorf("%w: %s (%s, type=%s)", ErrAccountIsReconciliation, acc.AccountCode, acc.AccountName, acc.ReconciliationType)
 		}
 	}
