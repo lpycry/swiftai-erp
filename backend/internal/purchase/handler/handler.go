@@ -302,6 +302,37 @@ func (h *PurchaseHandler) PostInvoice(c *gin.Context) {
 	response.OK(c, map[string]string{"status": "POSTED"})
 }
 
+func (h *PurchaseHandler) ListPaymentHistory(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil { response.BadRequest(c, "missing org context"); return }
+	vendorID := c.Query("vendor_id")
+	dateFrom := c.Query("date_from")
+	dateTo := c.Query("date_to")
+	items, err := h.svc.ListPaymentHistory(c.Request.Context(), orgID.String(), vendorID, dateFrom, dateTo)
+	if err != nil {
+		log.Err(err).Msg("list payment history failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, items)
+}
+
+func (h *PurchaseHandler) ListOutstandingInvoices(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil { response.BadRequest(c, "missing org context"); return }
+	vendorID := c.Query("vendor_id")
+	itemID := c.Query("item_id")
+	dateFrom := c.Query("date_from")
+	dateTo := c.Query("date_to")
+	invoices, err := h.svc.ListOutstandingInvoices(c.Request.Context(), orgID.String(), vendorID, itemID, dateFrom, dateTo)
+	if err != nil {
+		log.Err(err).Msg("list outstanding invoices failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, invoices)
+}
+
 func (h *PurchaseHandler) CancelInvoice(c *gin.Context) {
 	orgID, err := getOrgID(c)
 	if err != nil { response.BadRequest(c, "missing org context"); return }
@@ -548,6 +579,21 @@ func (h *PurchaseHandler) RefundDownPayment(c *gin.Context) {
 	response.OK(c, dp)
 }
 
+func (h *PurchaseHandler) ReverseDownPayment(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil { response.BadRequest(c, "missing org context"); return }
+	userID := getUserIDPtr(c)
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid down payment id"); return }
+	dp, err := h.svc.ReverseDownPayment(c.Request.Context(), orgID, id, userID)
+	if err != nil {
+		log.Err(err).Msg("reverse down payment failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, dp)
+}
+
 func (h *PurchaseHandler) GetDPClearings(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil { response.BadRequest(c, "invalid down payment id"); return }
@@ -582,6 +628,43 @@ func (h *PurchaseHandler) DeleteDownPayment(c *gin.Context) {
 		return
 	}
 	response.OK(c, map[string]string{"status": "deleted"})
+}
+
+// ══════════════════════════════════════════
+//  VENDOR PAYMENTS
+// ══════════════════════════════════════════
+
+func (h *PurchaseHandler) GetVendorOpenItems(c *gin.Context) {
+	vendorID := c.Query("vendor_id")
+	if vendorID == "" {
+		response.BadRequest(c, "vendor_id is required")
+		return
+	}
+	orgID, err := getOrgID(c)
+	if err != nil { response.BadRequest(c, "missing org context"); return }
+	items, err := h.svc.GetVendorOpenItems(c.Request.Context(), vendorID, orgID.String())
+	if err != nil {
+		log.Err(err).Msg("get vendor open items failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, items)
+}
+
+func (h *PurchaseHandler) CreateVendorPayment(c *gin.Context) {
+	userID := getUserIDPtr(c)
+	var req purchasemodels.CreateVendorPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	payment, err := h.svc.CreateVendorPayment(c.Request.Context(), &req, userID)
+	if err != nil {
+		log.Err(err).Msg("create vendor payment failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, payment)
 }
 
 // ══════════════════════════════════════════

@@ -23,7 +23,7 @@ class AppLayout extends StatelessWidget {
     _NavDef(Icons.dashboard_rounded, 'Dashboard', AppRouter.dashboard),
     _NavDef(Icons.account_balance_rounded, 'Finance', AppRouter.financeRoute),
     _NavDef(Icons.inventory_2_rounded, 'Logistics', AppRouter.logisticsRoute),
-    _NavDef(Icons.shopping_cart_rounded, 'Sales', null),
+    _NavDef(Icons.shopping_cart_rounded, 'Sales', AppRouter.salesRoute),
 
     _NavDef(Icons.settings_rounded, 'Settings', AppRouter.settingsRoute),
   ];

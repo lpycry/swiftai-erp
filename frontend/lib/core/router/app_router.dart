@@ -20,6 +20,8 @@ import '../../features/settings/screens/finance_settings/finance_settings_screen
 import '../../features/settings/services/org_service.dart';
 import '../../features/settings/services/finance_settings_service.dart';
 import '../../features/settings/screens/settings_screen.dart';
+import '../../features/sales/services/sales_service.dart';
+import '../../features/sales/screens/sales_screen.dart';
 import '../services/auth_service.dart';
 
 class AppRouter {
@@ -40,6 +42,7 @@ class AppRouter {
   static const String financeBalances = '/finance/balances';
   static const String logisticsRoute = '/logistics';
   static const String financeSettingsRoute = '/settings/finance';
+  static const String salesRoute = '/sales';
 
   final AuthService _authService;
 
@@ -165,6 +168,14 @@ class AppRouter {
           builder: (_) => LogisticsScreen(
             authService: _authService,
             warehouseService: WarehouseService(_authService.accessToken ?? ''),
+          ),
+          settings: settings,
+        );
+      case salesRoute:
+        return MaterialPageRoute(
+          builder: (_) => SalesScreen(
+            authService: _authService,
+            salesService: SalesService(_authService.accessToken ?? ''),
           ),
           settings: settings,
         );

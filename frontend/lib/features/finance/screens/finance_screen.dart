@@ -4,6 +4,7 @@ import 'package:swiftai_erp/core/theme/app_theme.dart';
 import 'package:swiftai_erp/core/widgets/app_layout.dart';
 import 'package:swiftai_erp/features/finance/services/gl_service.dart';
 import 'package:swiftai_erp/features/finance/screens/chart_of_accounts_screen.dart';
+import 'package:swiftai_erp/features/finance/screens/tax_management_screen.dart';
 import 'package:swiftai_erp/features/finance/screens/journal_entry_screen.dart';
 import 'package:swiftai_erp/features/finance/screens/journal_entry_list_screen.dart';
 import 'package:swiftai_erp/features/finance/screens/account_ledger_screen.dart';
@@ -11,9 +12,18 @@ import 'package:swiftai_erp/features/finance/screens/account_balance_screen.dart
 import 'package:swiftai_erp/features/finance/screens/balance_sheet_screen.dart';
 import 'package:swiftai_erp/features/finance/screens/profit_loss_screen.dart';
 import 'package:swiftai_erp/features/finance/screens/gl_dashboard_screen.dart';
-import 'package:swiftai_erp/features/finance/screens/ap/ap_screen.dart';
-import 'package:swiftai_erp/features/finance/services/ap_service.dart';
 import 'package:swiftai_erp/features/settings/services/org_service.dart';
+import 'package:swiftai_erp/features/finance/services/ap_service.dart';
+import 'package:swiftai_erp/features/finance/screens/ap/dp_create_screen.dart';
+import 'package:swiftai_erp/features/finance/screens/ap/dp_list_screen.dart';
+import 'package:swiftai_erp/features/finance/screens/ap/vendor_payment_screen.dart';
+import 'package:swiftai_erp/features/finance/screens/ap/outstanding_invoices_screen.dart';
+import 'package:swiftai_erp/features/finance/screens/ap/payment_history_screen.dart';
+import 'package:swiftai_erp/features/purchase/services/purchase_service.dart';
+import 'package:swiftai_erp/features/purchase/screens/invoice_list_screen.dart';
+import 'package:swiftai_erp/features/purchase/screens/invoice_document_screen.dart';
+import 'package:swiftai_erp/features/purchase/screens/invoice_overview_screen.dart';
+import 'package:swiftai_erp/features/settings/services/finance_settings_service.dart';
 
 class FinanceScreen extends StatelessWidget {
   final AuthService authService;
@@ -79,6 +89,17 @@ class FinanceScreen extends StatelessWidget {
                 onTap: () => Navigator.push(context, MaterialPageRoute(
                     builder: (_) => ChartOfAccountsScreen(
                         authService: authService, glService: glService))),
+              ),
+              _FinanceCard(
+                icon: Icons.percent_rounded,
+                title: 'Tax Rate Management',
+                subtitle: 'Tax jurisdictions & nexus setup',
+                color: Colors.indigo,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => TaxManagementScreen(
+                        authService: authService,
+                        financeSettingsService: FinanceSettingsService(authService.accessToken ?? '')
+                    ))),
               ),
             ]),
 
@@ -182,21 +203,86 @@ class FinanceScreen extends StatelessWidget {
                           color: Colors.white)),
                 ]),
                 const SizedBox(height: 4),
-                Text('Vendor down payments, refunds & invoice clearing',
+                Text('Down payments, supplier invoices, payments & auto-clearing',
                     style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.8))),
               ]),
             ),
             const SizedBox(height: 16),
             Wrap(spacing: 16, runSpacing: 16, children: [
               _FinanceCard(
-                icon: Icons.payments,
-                title: 'Down Payments',
-                subtitle: 'Vendor prepayments with auto GL posting',
-                color: Colors.blue.shade700,
+                icon: Icons.add_circle_outline,
+                title: 'Create Down Payment',
+                subtitle: 'Vendor prepayment with auto GL posting',
+                color: Colors.blue,
                 onTap: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => APScreen(
+                    builder: (_) => DPCreateScreen(
+                        authService: authService, apService: ApService(authService.accessToken ?? '')))),
+              ),
+              _FinanceCard(
+                icon: Icons.list_alt,
+                title: 'Down Payment List',
+                subtitle: 'View, search & manage down payments',
+                color: Colors.teal,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => DPListScreen(
+                        authService: authService, apService: ApService(authService.accessToken ?? '')))),
+              ),
+              _FinanceCard(
+                icon: Icons.receipt,
+                title: 'Invoices',
+                subtitle: 'Supplier invoices with 3-way matching',
+                color: Colors.orange,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => InvoiceListScreen(
                         authService: authService,
-                        apService: ApService(authService.accessToken ?? '')))),
+                        purchaseService: PurchaseService(authService.accessToken ?? '')))),
+              ),
+              _FinanceCard(
+                icon: Icons.article,
+                title: 'Display Invoice Document',
+                subtitle: 'View invoice details, items & 3-way match info',
+                color: Colors.deepOrange,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => InvoiceDocumentScreen(
+                        authService: authService,
+                        purchaseService: PurchaseService(authService.accessToken ?? '')))),
+              ),
+              _FinanceCard(
+                icon: Icons.pending_actions,
+                title: 'Uninvoiced Goods Receipt',
+                subtitle: 'Goods received, awaiting supplier invoice',
+                color: Colors.brown,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => InvoiceOverviewScreen(
+                        authService: authService,
+                        purchaseService: PurchaseService(authService.accessToken ?? '')))),
+              ),
+              _FinanceCard(
+                icon: Icons.payments,
+                title: 'Vendor Payment',
+                subtitle: 'Pay vendor with auto-clearing & prepayment deduction',
+                color: Colors.green,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => VendorPaymentScreen(
+                        authService: authService, apService: ApService(authService.accessToken ?? '')))),
+              ),
+              _FinanceCard(
+                icon: Icons.receipt_long,
+                title: 'Payment History',
+                subtitle: 'View all vendor payment records',
+                color: Colors.teal,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => PaymentHistoryScreen(
+                        authService: authService, apService: ApService(authService.accessToken ?? '')))),
+              ),
+              _FinanceCard(
+                icon: Icons.warning_amber_rounded,
+                title: 'Outstanding Invoices',
+                subtitle: 'AP aging report with overdue indicators',
+                color: Colors.red,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => OutstandingInvoicesScreen(
+                        authService: authService, apService: ApService(authService.accessToken ?? '')))),
               ),
             ]),
 

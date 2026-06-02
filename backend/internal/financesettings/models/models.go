@@ -86,6 +86,76 @@ type OrgReconAccount struct {
 	AccountName      string `json:"account_name,omitempty"`
 }
 
+// ── Tax Jurisdiction ──
+
+type TaxJurisdiction struct {
+	ID              uuid.UUID  `json:"id"`
+	TenantID        uuid.UUID  `json:"tenant_id"`
+	State           string     `json:"state"`
+	County          string     `json:"county"`
+	City            string     `json:"city"`
+	ZipCode         string     `json:"zip_code"`
+	TaxRate         float64    `json:"tax_rate"`
+	EffectiveDate   time.Time  `json:"effective_date"`
+	ExpirationDate  *time.Time `json:"expiration_date,omitempty"`
+	IsActive        bool       `json:"is_active"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+type CreateTaxJurisdictionRequest struct {
+	State          string  `json:"state" binding:"required"`
+	County         string  `json:"county"`
+	City           string  `json:"city"`
+	ZipCode        string  `json:"zip_code"`
+	TaxRate        float64 `json:"tax_rate" binding:"required,gt=0,lte=1"`
+	EffectiveDate  string  `json:"effective_date" binding:"required"`
+	ExpirationDate string  `json:"expiration_date,omitempty"`
+}
+
+type UpdateTaxJurisdictionRequest struct {
+	State          *string  `json:"state,omitempty"`
+	County         *string  `json:"county,omitempty"`
+	City           *string  `json:"city,omitempty"`
+	ZipCode        *string  `json:"zip_code,omitempty"`
+	TaxRate        *float64 `json:"tax_rate,omitempty"`
+	EffectiveDate  *string  `json:"effective_date,omitempty"`
+	ExpirationDate *string  `json:"expiration_date,omitempty"`
+	IsActive       *bool    `json:"is_active,omitempty"`
+}
+
+// ── Tax Nexus ──
+
+type TaxNexus struct {
+	ID              uuid.UUID  `json:"id"`
+	TenantID        uuid.UUID  `json:"tenant_id"`
+	State           string     `json:"state"`
+	NexusType       string     `json:"nexus_type"`
+	SubType         string     `json:"sub_type"`
+	ThresholdAmount *float64   `json:"threshold_amount,omitempty"`
+	EffectiveDate   time.Time  `json:"effective_date"`
+	IsActive        bool       `json:"is_active"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+type CreateTaxNexusRequest struct {
+	State           string  `json:"state" binding:"required"`
+	NexusType       string  `json:"nexus_type" binding:"required,oneof=PHYSICAL ECONOMIC"`
+	SubType         string  `json:"sub_type"`
+	ThresholdAmount *float64 `json:"threshold_amount,omitempty"`
+	EffectiveDate   string  `json:"effective_date" binding:"required"`
+}
+
+type UpdateTaxNexusRequest struct {
+	State           *string  `json:"state,omitempty"`
+	NexusType       *string  `json:"nexus_type,omitempty"`
+	SubType         *string  `json:"sub_type,omitempty"`
+	ThresholdAmount *float64 `json:"threshold_amount,omitempty"`
+	EffectiveDate   *string  `json:"effective_date,omitempty"`
+	IsActive        *bool    `json:"is_active,omitempty"`
+}
+
 type CreateOrgReconAccountRequest struct {
 	OrgID              uuid.UUID `json:"org_id" binding:"required"`
 	AccountID          uuid.UUID `json:"account_id" binding:"required"`

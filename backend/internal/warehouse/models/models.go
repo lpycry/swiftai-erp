@@ -24,6 +24,12 @@ type Product struct {
 	IsSerialized  bool       `json:"is_serialized"`
 	IsBlocked     bool       `json:"is_blocked"`
 	BlockReason   string     `json:"block_reason,omitempty"`
+	// Product Taxability
+	TaxCategory            string     `json:"tax_category"`
+	TaxRate                *float64   `json:"tax_rate,omitempty"`
+	TaxType                string     `json:"tax_type"`
+	TaxExemptReason        string     `json:"tax_exempt_reason,omitempty"`
+	DefaultTaxJurisdictionID *uuid.UUID `json:"default_tax_jurisdiction_id,omitempty"`
 	DimensionLength *float64 `json:"dimension_length,omitempty"`
 	DimensionWidth  *float64 `json:"dimension_width,omitempty"`
 	DimensionHeight *float64 `json:"dimension_height,omitempty"`
@@ -56,6 +62,11 @@ type Product struct {
 }
 
 type CreateProductRequest struct {
+	TaxCategory            string     `json:"tax_category,omitempty"`
+	TaxRate                *float64   `json:"tax_rate,omitempty"`
+	TaxType                string     `json:"tax_type,omitempty"`
+	TaxExemptReason        string     `json:"tax_exempt_reason,omitempty"`
+	DefaultTaxJurisdictionID *string  `json:"default_tax_jurisdiction_id,omitempty"`
 	CategoryID    *uuid.UUID `json:"category_id,omitempty"`
 	SKU           string     `json:"sku" binding:"required"`
 	Barcode       string     `json:"barcode,omitempty"`
@@ -94,6 +105,11 @@ type CreateProductRequest struct {
 }
 
 type UpdateProductRequest struct {
+	TaxCategory            *string    `json:"tax_category,omitempty"`
+	TaxRate                *float64   `json:"tax_rate,omitempty"`
+	TaxType                *string    `json:"tax_type,omitempty"`
+	TaxExemptReason        *string    `json:"tax_exempt_reason,omitempty"`
+	DefaultTaxJurisdictionID *string  `json:"default_tax_jurisdiction_id,omitempty"`
 	CategoryID    *uuid.UUID `json:"category_id,omitempty"`
 	Barcode       string     `json:"barcode,omitempty"`
 	Name          string     `json:"name,omitempty"`

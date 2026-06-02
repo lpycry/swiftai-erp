@@ -26,6 +26,7 @@ class _DPListScreenState extends State<DPListScreen> {
     'PARTIALLY_CLEARED': 'Partially Cleared',
     'FULLY_CLEARED': 'Fully Cleared',
     'PARTIALLY_REFUNDED': 'Partially Refunded',
+    'REVERSED': 'Reversed',
     'FULLY_REFUNDED': 'Fully Refunded',
   };
 
@@ -52,6 +53,7 @@ class _DPListScreenState extends State<DPListScreen> {
       case 'PARTIALLY_CLEARED': return Colors.orange;
       case 'FULLY_CLEARED': return Colors.green;
       case 'PARTIALLY_REFUNDED': return Colors.pink;
+      case 'REVERSED': return const Color(0xFF6A1B9A);
       case 'FULLY_REFUNDED': return Colors.red;
       default: return Colors.grey;
     }
@@ -121,7 +123,7 @@ class _DPListScreenState extends State<DPListScreen> {
                   style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10))),
               Expanded(flex: 1, child: Text('Status', textAlign: TextAlign.center,
                   style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 10))),
-              const SizedBox(width: 60),
+              const SizedBox(width: 92),
             ]),
           ),
 
@@ -159,6 +161,43 @@ class _DPListScreenState extends State<DPListScreen> {
     );
   }
 
+  Future<void> _confirmReverse(DownPaymentModel dp) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reverse Down Payment'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Reverse ${dp.dpNumber} (${ApService.fmtAmount(dp.totalAmount)})?'),
+          const SizedBox(height: 8),
+          const Text('This will post a 红字冲销 (negative reversal) journal entry to cancel the original posting.',
+              style: TextStyle(fontSize: 12, color: Colors.grey)),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.purple),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Confirm Reverse')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    try {
+      await widget.apService.reverseDownPayment(dp.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Down payment reversed successfully'), backgroundColor: Colors.green));
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$e'), backgroundColor: Colors.red));
+      }
+    }
+  }
+
   Widget _buildRow(DownPaymentModel dp) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -188,8 +227,8 @@ class _DPListScreenState extends State<DPListScreen> {
           ),
         )),
         SizedBox(
-          width: 60,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
+          width: 92,
+          child: Row(mainAxisSize: MainAxisSize.min, mainAxisAlignment: MainAxisAlignment.end, children: [
             IconButton(
               icon: Icon(Icons.visibility, size: 16, color: Colors.grey.shade600),
               onPressed: () => Navigator.push(context, MaterialPageRoute(
@@ -203,6 +242,14 @@ class _DPListScreenState extends State<DPListScreen> {
               constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
               tooltip: 'View Detail',
             ),
+            if (dp.canReverse)
+              IconButton(
+                icon: Icon(Icons.replay, size: 16, color: Colors.purple.shade400),
+                onPressed: () => _confirmReverse(dp),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                tooltip: 'Reverse (红字冲销)',
+              ),
             if (dp.canRefund)
               IconButton(
                 icon: Icon(Icons.money_off, size: 16, color: Colors.red.shade400),

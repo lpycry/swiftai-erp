@@ -76,6 +76,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       null,
     ),
     _ModuleDef(
+      'Sales',
+      'Customers & sales documents',
+      Icons.store_rounded,
+      AppTheme.accentBlue,
+      '/sales',
+    ),
+    _ModuleDef(
       'Settings',
       'Org & configuration',
       Icons.settings_rounded,

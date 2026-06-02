@@ -39,7 +39,7 @@ func (r *PurchaseRepo) CreateVendor(ctx context.Context, orgID uuid.UUID, req *p
 		ContactPerson:          req.ContactPerson,
 		ContactEmail:           req.ContactEmail,
 		ContactPhone:           req.ContactPhone,
-		ReconciliationAccountID: req.ReconciliationAccountID,
+
 		IsActive:               true,
 		CreatedAt:              time.Now(),
 		UpdatedAt:              time.Now(),
@@ -49,10 +49,10 @@ func (r *PurchaseRepo) CreateVendor(ctx context.Context, orgID uuid.UUID, req *p
 
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO vendors(id, org_id, vendor_code, name, tax_number, currency, payment_terms, status,
-			lead_time_days, address, contact_person, contact_email, contact_phone, reconciliation_account_id, is_active, created_at, updated_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+			lead_time_days, address, contact_person, contact_email, contact_phone, is_active, created_at, updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
 	`, v.ID, v.OrgID, v.VendorCode, v.Name, v.TaxNumber, v.Currency, v.PaymentTerms, v.Status,
-		v.LeadTimeDays, v.Address, v.ContactPerson, v.ContactEmail, v.ContactPhone, v.ReconciliationAccountID, v.IsActive, v.CreatedAt, v.UpdatedAt)
+		v.LeadTimeDays, v.Address, v.ContactPerson, v.ContactEmail, v.ContactPhone, v.IsActive, v.CreatedAt, v.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("create vendor: %w", err)
 	}
@@ -64,16 +64,11 @@ func (r *PurchaseRepo) GetVendor(ctx context.Context, id, orgID uuid.UUID) (*pur
 	err := r.db.QueryRow(ctx, `
 		SELECT v.id, v.org_id, v.vendor_code, v.name, COALESCE(v.tax_number,''), v.currency, v.payment_terms, v.status,
 			v.ai_rating, v.lead_time_days, COALESCE(v.address,''), COALESCE(v.contact_person,''),
-			COALESCE(v.contact_email,''), COALESCE(v.contact_phone,''), v.reconciliation_account_id,
-			COALESCE(a.account_code,''), COALESCE(a.account_name,''), v.is_active, v.created_at, v.updated_at
+			COALESCE(v.contact_email,''), COALESCE(v.contact_phone,''), v.is_active, v.created_at, v.updated_at
 		FROM vendors v
-		LEFT JOIN gl_accounts a ON a.id = v.reconciliation_account_id
 		WHERE v.id = $1 AND v.org_id = $2
 	`, id, orgID).Scan(
-		&v.ID, &v.OrgID, &v.VendorCode, &v.Name, &v.TaxNumber, &v.Currency, &v.PaymentTerms, &v.Status,
-		&v.AIRating, &v.LeadTimeDays, &v.Address, &v.ContactPerson, &v.ContactEmail, &v.ContactPhone,
-		&v.ReconciliationAccountID, &v.ReconciliationAccountCode, &v.ReconciliationAccountName,
-		&v.IsActive, &v.CreatedAt, &v.UpdatedAt)
+		&v.ID, &v.OrgID, &v.VendorCode, &v.Name, &v.TaxNumber, &v.Currency, &v.PaymentTerms, &v.Status,&v.AIRating, &v.LeadTimeDays, &v.Address, &v.ContactPerson, &v.ContactEmail, &v.ContactPhone, &v.IsActive, &v.CreatedAt, &v.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get vendor: %w", err)
 	}
@@ -83,10 +78,10 @@ func (r *PurchaseRepo) GetVendor(ctx context.Context, id, orgID uuid.UUID) (*pur
 func (r *PurchaseRepo) ListVendors(ctx context.Context, orgID uuid.UUID, search string) ([]*purchasemodels.Vendor, error) {
 	query := `SELECT v.id, v.org_id, v.vendor_code, v.name, COALESCE(v.tax_number,''), v.currency, v.payment_terms, v.status,
 		v.ai_rating, v.lead_time_days, COALESCE(v.address,''), COALESCE(v.contact_person,''),
-		COALESCE(v.contact_email,''), COALESCE(v.contact_phone,''), v.reconciliation_account_id,
-		COALESCE(a.account_code,''), COALESCE(a.account_name,''), v.is_active, v.created_at, v.updated_at
+		COALESCE(v.contact_email,''), COALESCE(v.contact_phone,''), 
+		v.is_active, v.created_at, v.updated_at
 		FROM vendors v
-		LEFT JOIN gl_accounts a ON a.id = v.reconciliation_account_id
+		
 		WHERE v.org_id = $1`
 	args := []interface{}{orgID}
 	argIdx := 2
@@ -106,8 +101,7 @@ func (r *PurchaseRepo) ListVendors(ctx context.Context, orgID uuid.UUID, search 
 		v := &purchasemodels.Vendor{}
 		if err := rows.Scan(&v.ID, &v.OrgID, &v.VendorCode, &v.Name, &v.TaxNumber, &v.Currency,
 			&v.PaymentTerms, &v.Status, &v.AIRating, &v.LeadTimeDays, &v.Address, &v.ContactPerson,
-			&v.ContactEmail, &v.ContactPhone, &v.ReconciliationAccountID, &v.ReconciliationAccountCode, &v.ReconciliationAccountName,
-			&v.IsActive, &v.CreatedAt, &v.UpdatedAt); err != nil {
+			&v.ContactEmail, &v.ContactPhone, &v.IsActive, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		list = append(list, v)
@@ -128,12 +122,12 @@ func (r *PurchaseRepo) UpdateVendor(ctx context.Context, id, orgID uuid.UUID, re
 			contact_person = COALESCE($10, contact_person),
 			contact_email = COALESCE($11, contact_email),
 			contact_phone = COALESCE($12, contact_phone),
-			reconciliation_account_id = COALESCE($13, reconciliation_account_id),
-			is_active    = COALESCE($14, is_active),
+
+			is_active    = COALESCE($13, is_active),
 			updated_at   = NOW()
 		WHERE id = $1 AND org_id = $2
 	`, id, orgID, req.Name, req.TaxNumber, req.Currency, req.PaymentTerms, req.Status,
-		req.LeadTimeDays, req.Address, req.ContactPerson, req.ContactEmail, req.ContactPhone, req.ReconciliationAccountID, req.IsActive)
+		req.LeadTimeDays, req.Address, req.ContactPerson, req.ContactEmail, req.ContactPhone, req.IsActive)
 	return err
 }
 
@@ -167,7 +161,7 @@ func (r *PurchaseRepo) DeleteVendor(ctx context.Context, id, orgID uuid.UUID) er
 
 func (r *PurchaseRepo) CreatePO(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreatePORequest, createdBy *uuid.UUID) (*purchasemodels.PurchaseOrder, error) {
 	poID := uuid.New()
-	poNumber := "PO-" + poID.String()[:8]
+	poNumber := r.generatePONumber(ctx)
 	totalAmount := 0.0
 	for _, it := range req.Items {
 		totalAmount += it.Quantity * it.UnitPrice
@@ -912,6 +906,77 @@ func (r *PurchaseRepo) ListInvoices(ctx context.Context, orgID uuid.UUID, vendor
 	return list, nil
 }
 
+func (r *PurchaseRepo) ListOutstandingInvoices(ctx context.Context, orgID uuid.UUID, vendorID, itemID string, dateFrom, dateTo time.Time) ([]*purchasemodels.OutstandingInvoice, error) {
+	query := `
+		SELECT pi.id::text, pi.org_id::text, COALESCE(o.org_code,''), COALESCE(o.org_name,''),
+		       pi.invoice_number, pi.invoice_date::text,
+		       (pi.invoice_date + COALESCE(
+		           (SELECT due_days FROM payment_terms pt WHERE pt.code = v.payment_terms AND pt.tenant_id = t.id LIMIT 1),
+		           30
+		       ))::text AS due_date,
+		       pi.total_amount, COALESCE(pi.paid_amount, 0),
+		       (pi.total_amount - COALESCE(pi.paid_amount, 0)),
+		       pi.currency,
+		       pi.vendor_id::text, v.vendor_code, v.name,
+		       COALESCE(po.po_number,''), pi.status
+		FROM purchase_invoices pi
+		JOIN vendors v ON v.id = pi.vendor_id
+		LEFT JOIN purchase_orders po ON po.id = pi.po_id
+		LEFT JOIN organizations o ON o.id = $2
+		JOIN tenants t ON t.id = pi.org_id
+		WHERE pi.org_id = $1 AND pi.status NOT IN ('CANCELLED','DRAFT')
+		  AND (pi.total_amount - COALESCE(pi.paid_amount, 0)) > 0.001`
+	args := []interface{}{orgID, orgID}
+	argIdx := 3
+
+	if vendorID != "" {
+		query += fmt.Sprintf(" AND pi.vendor_id = $%d::uuid", argIdx)
+		args = append(args, vendorID)
+		argIdx++
+	}
+	if itemID != "" {
+		query += fmt.Sprintf(` AND pi.id IN (SELECT invoice_id FROM invoice_items WHERE item_id = $%d::uuid)`, argIdx)
+		args = append(args, itemID)
+		argIdx++
+	}
+	if !dateFrom.IsZero() {
+		query += fmt.Sprintf(" AND pi.invoice_date >= $%d", argIdx)
+		args = append(args, dateFrom)
+		argIdx++
+	}
+	if !dateTo.IsZero() {
+		query += fmt.Sprintf(" AND pi.invoice_date <= $%d", argIdx)
+		args = append(args, dateTo)
+		argIdx++
+	}
+	query += ` ORDER BY due_date ASC`
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	now := time.Now()
+	var list []*purchasemodels.OutstandingInvoice
+	for rows.Next() {
+		inv := &purchasemodels.OutstandingInvoice{}
+		if err := rows.Scan(&inv.ID, &inv.OrgID, &inv.OrgCode, &inv.OrgName,
+			&inv.InvoiceNumber, &inv.InvoiceDate,
+			&inv.DueDate,
+			&inv.TotalAmount, &inv.PaidAmount, &inv.OpenAmount,
+			&inv.Currency,
+			&inv.VendorID, &inv.VendorCode, &inv.VendorName,
+			&inv.PONumber, &inv.Status); err != nil {
+			return nil, err
+		}
+		// Calculate days overdue
+		if dueDate, err := time.Parse("2006-01-02", inv.DueDate); err == nil {
+			inv.DaysOverdue = int(now.Sub(dueDate).Hours() / 24)
+		}
+		list = append(list, inv)
+	}
+	return list, nil
+}
+
 // ══════════════════════════════════════════
 //  PO ATTACHMENTS
 // ══════════════════════════════════════════
@@ -1473,6 +1538,212 @@ func (r *PurchaseRepo) ListDPRefunds(ctx context.Context, dpID uuid.UUID) ([]*pu
 	return list, nil
 }
 
+
+
+// ══════════════════════════════════════════
+//  VENDOR PAYMENTS & OPEN ITEMS
+// ══════════════════════════════════════════
+
+func (r *PurchaseRepo) GetVendorOpenItems(ctx context.Context, vendorID, orgID uuid.UUID) ([]*purchasemodels.OpenItem, error) {
+	invRows, err := r.db.Query(ctx, `
+		SELECT i.id::text, i.invoice_number, i.invoice_date::text, i.invoice_date::text,
+		       i.total_amount, (i.total_amount - COALESCE(i.paid_amount, 0)), i.currency
+		FROM purchase_invoices i
+		WHERE i.vendor_id = $1 AND i.org_id = $2 AND i.status = 'POSTED'
+		  AND i.total_amount - COALESCE(i.paid_amount, 0) > 0.001
+		ORDER BY i.invoice_date ASC
+	`, vendorID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("query open invoices: %w", err)
+	}
+	defer invRows.Close()
+
+	var items []*purchasemodels.OpenItem
+	for invRows.Next() {
+		item := &purchasemodels.OpenItem{Type: "INVOICE", IsDownPayment: false}
+		if err := invRows.Scan(&item.ID, &item.DocumentNo, &item.Date, &item.DueDate,
+			&item.TotalAmount, &item.OpenAmount, &item.Currency); err != nil {
+			return nil, fmt.Errorf("scan open invoice: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	dpRows, err := r.db.Query(ctx, `
+		SELECT d.id::text, d.dp_number, COALESCE(d.posted_at, d.created_at)::text, COALESCE(d.posted_at, d.created_at)::text,
+		       d.total_amount, d.remaining_amount, d.currency
+		FROM down_payments d
+		WHERE d.vendor_id = $1 AND d.org_id = $2 AND d.status IN ('POSTED','PARTIALLY_CLEARED')
+		  AND d.remaining_amount > 0.001
+		ORDER BY COALESCE(d.posted_at, d.created_at) ASC
+	`, vendorID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("query open down payments: %w", err)
+	}
+	defer dpRows.Close()
+
+	for dpRows.Next() {
+		item := &purchasemodels.OpenItem{Type: "DOWN_PAYMENT", IsDownPayment: true}
+		if err := dpRows.Scan(&item.ID, &item.DocumentNo, &item.Date, &item.DueDate,
+			&item.TotalAmount, &item.OpenAmount, &item.Currency); err != nil {
+			return nil, fmt.Errorf("scan open dp: %w", err)
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func (r *PurchaseRepo) CreateVendorPayment(ctx context.Context, payment *purchasemodels.VendorPayment) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO vendor_payments (id, org_id, vendor_id, bank_account_id, payment_amount, payment_date, currency, status, gl_je_id, description, created_by, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+	`, payment.ID, payment.OrgID, payment.VendorID, payment.BankAccountID,
+		payment.PaymentAmount, payment.PaymentDate, payment.Currency, payment.Status,
+		payment.GLJEID, payment.Description, payment.CreatedBy, payment.CreatedAt, payment.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("create vendor payment: %w", err)
+	}
+	return nil
+}
+
+func (r *PurchaseRepo) CreateVendorPaymentAllocation(ctx context.Context, alloc *purchasemodels.VendorPaymentAllocation) error {
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO vendor_payment_allocations (id, payment_id, source_type, source_id, allocated_amount, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6)
+	`, alloc.ID, alloc.PaymentID, alloc.SourceType, alloc.SourceID, alloc.AllocatedAmount, alloc.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("create payment allocation: %w", err)
+	}
+	return nil
+}
+
+func (r *PurchaseRepo) GetVendorPayment(ctx context.Context, id uuid.UUID) (*purchasemodels.VendorPayment, error) {
+	p := &purchasemodels.VendorPayment{}
+	var glJeID *uuid.UUID
+	err := r.db.QueryRow(ctx, `
+		SELECT vp.id, vp.org_id, vp.vendor_id, v.vendor_code, COALESCE(v.name, ''),
+		       vp.bank_account_id, vp.payment_amount, vp.payment_date, vp.currency, vp.status,
+		       vp.gl_je_id, COALESCE(vp.description, ''),
+		       vp.created_by, vp.created_at, vp.updated_at
+		FROM vendor_payments vp
+		LEFT JOIN vendors v ON v.id = vp.vendor_id
+		WHERE vp.id = $1
+	`, id).Scan(
+		&p.ID, &p.OrgID, &p.VendorID, &p.VendorCode, &p.VendorName,
+		&p.BankAccountID, &p.PaymentAmount, &p.PaymentDate, &p.Currency, &p.Status,
+		&glJeID, &p.Description,
+		&p.CreatedBy, &p.CreatedAt, &p.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get vendor payment: %w", err)
+	}
+	if glJeID != nil && *glJeID != uuid.Nil {
+		p.GLJEID = glJeID
+	}
+
+	allocRows, err := r.db.Query(ctx, `
+		SELECT id, payment_id, source_type, source_id, allocated_amount, created_at
+		FROM vendor_payment_allocations WHERE payment_id = $1
+	`, id)
+	if err != nil {
+		return nil, fmt.Errorf("load allocations: %w", err)
+	}
+	defer allocRows.Close()
+	for allocRows.Next() {
+		a := purchasemodels.VendorPaymentAllocation{}
+		if err := allocRows.Scan(&a.ID, &a.PaymentID, &a.SourceType, &a.SourceID, &a.AllocatedAmount, &a.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan allocation: %w", err)
+		}
+		p.Allocations = append(p.Allocations, a)
+	}
+	return p, nil
+}
+
+func (r *PurchaseRepo) UpdateInvoicePaidAmount(ctx context.Context, invoiceID uuid.UUID, paidAmount float64) error {
+	_, err := r.db.Exec(ctx, `UPDATE purchase_invoices SET paid_amount = $2 WHERE id = $1`, invoiceID, paidAmount)
+	if err != nil {
+		return fmt.Errorf("update invoice paid amount: %w", err)
+	}
+	return nil
+}
+
+func (r *PurchaseRepo) GetInvoicePaidAmount(ctx context.Context, invoiceID uuid.UUID) (float64, error) {
+	var paid float64
+	err := r.db.QueryRow(ctx, `SELECT COALESCE(paid_amount, 0) FROM purchase_invoices WHERE id = $1`, invoiceID).Scan(&paid)
+	if err != nil {
+		return 0, fmt.Errorf("get invoice paid amount: %w", err)
+	}
+	return paid, nil
+}
+
+func (r *PurchaseRepo) UpdateDownPaymentCleared(ctx context.Context, id uuid.UUID, clearedAmount, remainingAmount float64, status string) error {
+	_, err := r.db.Exec(ctx, `UPDATE down_payments SET cleared_amount = $2, remaining_amount = $3, status = $4, updated_at = NOW() WHERE id = $1`, id, clearedAmount, remainingAmount, status)
+	if err != nil {
+		return fmt.Errorf("update dp cleared amount: %w", err)
+	}
+	return nil
+}
+
+func (r *PurchaseRepo) ListPaymentHistory(ctx context.Context, orgID uuid.UUID, vendorID string, dateFrom, dateTo time.Time) ([]*purchasemodels.PaymentHistoryItem, error) {
+	query := `
+		SELECT vp.id::text, vp.org_id::text, COALESCE(o.org_code,''), COALESCE(o.org_name,''),
+		       vp.vendor_id::text, v.vendor_code, COALESCE(v.name,''),
+		       vp.payment_amount, vp.payment_date::text, vp.currency, vp.status,
+		       COALESCE(vp.description,''), COALESCE(vp.gl_je_id::text,'')
+		FROM vendor_payments vp
+		LEFT JOIN vendors v ON v.id = vp.vendor_id
+		LEFT JOIN organizations o ON o.id = vp.org_id
+		WHERE vp.org_id = $1`
+	args := []interface{}{orgID}
+	argIdx := 2
+
+	if vendorID != "" && vendorID != "all" {
+		query += fmt.Sprintf(" AND vp.vendor_id = $%d::uuid", argIdx)
+		args = append(args, vendorID)
+		argIdx++
+	}
+	if !dateFrom.IsZero() {
+		query += fmt.Sprintf(" AND vp.payment_date >= $%d", argIdx)
+		args = append(args, dateFrom)
+		argIdx++
+	}
+	if !dateTo.IsZero() {
+		query += fmt.Sprintf(" AND vp.payment_date <= $%d", argIdx)
+		args = append(args, dateTo)
+		argIdx++
+	}
+	query += ` ORDER BY vp.payment_date DESC, vp.created_at DESC`
+
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil { return nil, err }
+	defer rows.Close()
+
+	var list []*purchasemodels.PaymentHistoryItem
+	for rows.Next() {
+		p := &purchasemodels.PaymentHistoryItem{}
+		if err := rows.Scan(&p.ID, &p.OrgID, &p.OrgCode, &p.OrgName,
+			&p.VendorID, &p.VendorCode, &p.VendorName,
+			&p.PaymentAmount, &p.PaymentDate, &p.Currency, &p.Status,
+			&p.Description, &p.GLJEID); err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, nil
+}
+
+// generatePONumber creates a PO number in format PO-YYMMDDNNNN (daily sequential)
+func (r *PurchaseRepo) generatePONumber(ctx context.Context) string {
+	today := time.Now().Format("060102") // YYMMDD
+	var seq int
+	_ = r.db.QueryRow(ctx, `
+		SELECT COALESCE(MAX(CAST(SUBSTRING(po_number FROM '.{4}$') AS INTEGER)), 0) + 1
+		FROM purchase_orders WHERE po_number LIKE $1
+	`, "PO-"+today+"%").Scan(&seq)
+	if seq < 1 { seq = 1 }
+	if seq > 9999 { seq = 1 }
+	return fmt.Sprintf("PO-%s%04d", today, seq)
+}
+
 // nilIfUUID returns nil for zero UUID (for nullable DB columns)
 func nilIfUUID(id uuid.UUID) *uuid.UUID {
 	if id == uuid.Nil {
@@ -1480,3 +1751,7 @@ func nilIfUUID(id uuid.UUID) *uuid.UUID {
 	}
 	return &id
 }
+
+
+
+

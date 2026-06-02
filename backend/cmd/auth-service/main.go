@@ -36,6 +36,10 @@ import (
 	fsrepo "github.com/swiftai-erp/backend/internal/financesettings/repository"
 	fssvc "github.com/swiftai-erp/backend/internal/financesettings/service"
 	fshandler "github.com/swiftai-erp/backend/internal/financesettings/handler"
+
+	salesrepo "github.com/swiftai-erp/backend/internal/sales/repository"
+	salessvc "github.com/swiftai-erp/backend/internal/sales/service"
+	saleshandler "github.com/swiftai-erp/backend/internal/sales/handler"
 )
 
 func main() {
@@ -109,6 +113,11 @@ func main() {
 	financeSettingsRepo := fsrepo.NewFinanceSettingsRepo(pool)
 	financeSettingsSvc := fssvc.NewFinanceSettingsService(financeSettingsRepo)
 	financeSettingsHandler := fshandler.NewFinanceSettingsHandler(financeSettingsSvc)
+
+	// Sales
+	salesRepo := salesrepo.NewSalesRepo(pool)
+	salesSvc := salessvc.NewSalesService(salesRepo)
+	salesHandler := saleshandler.NewSalesHandler(salesSvc)
 
 	// Router
 	r := gin.New()
@@ -298,6 +307,8 @@ func main() {
 		protected.GET("/purchase/orders/:id/attachments/:attachId/download", purchaseHandler.DownloadPOAttachment)
 
 		protected.GET("/purchase/pending-invoice-pos", purchaseHandler.ListPendingInvoicePOs)
+		protected.GET("/purchase/outstanding-invoices", purchaseHandler.ListOutstandingInvoices)
+		protected.GET("/purchase/payment-history", purchaseHandler.ListPaymentHistory)
 
 		protected.POST("/purchase/receipts", purchaseHandler.ExecuteGoodsReceipt)
 		protected.GET("/purchase/receipts", purchaseHandler.ListReceipts)
@@ -315,8 +326,11 @@ func main() {
 		protected.GET("/purchase/down-payments/:id", purchaseHandler.GetDownPayment)
 		protected.POST("/purchase/down-payments/:id/post", purchaseHandler.PostDownPayment)
 		protected.POST("/purchase/down-payments/:id/refund", purchaseHandler.RefundDownPayment)
+		protected.POST("/purchase/down-payments/:id/reverse", purchaseHandler.ReverseDownPayment)
 		protected.GET("/purchase/down-payments/:id/clearings", purchaseHandler.GetDPClearings)
 		protected.DELETE("/purchase/down-payments/:id", purchaseHandler.DeleteDownPayment)
+		protected.GET("/purchase/vendor-open-items", purchaseHandler.GetVendorOpenItems)
+		protected.POST("/purchase/vendor-payments", purchaseHandler.CreateVendorPayment)
 
 		// ---- Finance Settings: Payment Terms ----
 		protected.GET("/finance-settings/payment-terms", financeSettingsHandler.ListPaymentTerms)
@@ -335,6 +349,40 @@ func main() {
 		protected.POST("/finance-settings/org-recon-accounts", financeSettingsHandler.CreateOrgReconAccount)
 		protected.PUT("/finance-settings/org-recon-accounts/:id", financeSettingsHandler.UpdateOrgReconAccount)
 		protected.DELETE("/finance-settings/org-recon-accounts/:id", financeSettingsHandler.DeleteOrgReconAccount)
+
+		// ---- Tax Jurisdictions ----
+		protected.GET("/finance-settings/tax-jurisdictions", financeSettingsHandler.ListTaxJurisdictions)
+		protected.GET("/finance-settings/tax-jurisdictions/:id", financeSettingsHandler.GetTaxJurisdiction)
+		protected.POST("/finance-settings/tax-jurisdictions", financeSettingsHandler.CreateTaxJurisdiction)
+		protected.PUT("/finance-settings/tax-jurisdictions/:id", financeSettingsHandler.UpdateTaxJurisdiction)
+		protected.DELETE("/finance-settings/tax-jurisdictions/:id", financeSettingsHandler.DeleteTaxJurisdiction)
+
+		// ---- Tax Nexus ----
+		protected.GET("/finance-settings/tax-nexus", financeSettingsHandler.ListTaxNexus)
+		protected.GET("/finance-settings/tax-nexus/:id", financeSettingsHandler.GetTaxNexus)
+		protected.POST("/finance-settings/tax-nexus", financeSettingsHandler.CreateTaxNexus)
+		protected.PUT("/finance-settings/tax-nexus/:id", financeSettingsHandler.UpdateTaxNexus)
+		protected.DELETE("/finance-settings/tax-nexus/:id", financeSettingsHandler.DeleteTaxNexus)
+
+		// ---- Sales: Customer Certificates ----
+		protected.POST("/sales/customers/:id/certificates", salesHandler.UploadCertificate)
+		protected.GET("/sales/customers/:id/certificates", salesHandler.ListCertificates)
+		protected.DELETE("/sales/customers/:id/certificates/:certId", salesHandler.DeleteCertificate)
+
+		// ---- Sales: Customers ----
+		protected.POST("/sales/customers", salesHandler.CreateCustomer)
+		protected.GET("/sales/customers", salesHandler.ListCustomers)
+		protected.GET("/sales/customers/:id", salesHandler.GetCustomer)
+		protected.PUT("/sales/customers/:id", salesHandler.UpdateCustomer)
+		protected.DELETE("/sales/customers/:id", salesHandler.DeleteCustomer)
+
+		// ---- Sales: Material Prices ----
+		protected.POST("/sales/material-prices", salesHandler.CreateMaterialPrice)
+		protected.GET("/sales/material-prices", salesHandler.ListMaterialPrices)
+		protected.GET("/sales/material-prices/:id", salesHandler.GetMaterialPrice)
+		protected.PUT("/sales/material-prices/:id", salesHandler.UpdateMaterialPrice)
+		protected.DELETE("/sales/material-prices/:id", salesHandler.DeleteMaterialPrice)
+
 	}
 
 	srv := &http.Server{

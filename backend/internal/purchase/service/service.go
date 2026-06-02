@@ -199,17 +199,43 @@ func (s *PurchaseService) ListReceipts(ctx context.Context, orgID uuid.UUID, poI
 // ── Receipt Reversal ──
 
 func (s *PurchaseService) ReverseGoodsReceipt(ctx context.Context, orgID uuid.UUID, receiptID uuid.UUID, userID *uuid.UUID) error {
-	// 1. Reverse receipt (PO, stock) in DB transaction
+	// 0. Get receipt to find PO ID
+	var poID uuid.UUID
+	err := s.db.QueryRow(ctx, `SELECT po_id FROM purchase_receipts WHERE id = $1 AND org_id = $2`, receiptID, orgID).Scan(&poID)
+	if err != nil {
+		return fmt.Errorf("get receipt po: %w", err)
+	}
+
+	// 1. Cancel any POSTED invoices for this PO first (reverse invoice before reversing receipt)
+	invRows, err := s.db.Query(ctx, `SELECT pi.id, COALESCE(pi.paid_amount, 0) FROM purchase_invoices pi WHERE pi.po_id = $1 AND pi.org_id = $2 AND pi.status = 'POSTED'`, poID, orgID)
+	if err == nil {
+		for invRows.Next() {
+			var invID uuid.UUID
+			var paidAmt float64
+			if err := invRows.Scan(&invID, &paidAmt); err == nil {
+				if paidAmt > 0.005 {
+					invRows.Close()
+					return fmt.Errorf("cannot reverse receipt: invoice %s has been paid (paid=%.2f). Reverse the payment(s) first", invID.String()[:8], paidAmt)
+				}
+				if cErr := s.CancelInvoice(ctx, orgID, invID, uuid.Nil); cErr != nil {
+					invRows.Close()
+					return fmt.Errorf("failed to cancel invoice before receipt reversal: %w", cErr)
+				}
+			}
+		}
+		invRows.Close()
+	}
+
+	// 2. Reverse receipt (PO, stock) in DB transaction
 	if err := s.repo.ReverseGoodsReceipt(ctx, receiptID, orgID, userID); err != nil {
 		return err
 	}
 
-	// 2. Find and reverse the GL journal entry
+	// 3. Find and reverse the GL journal entry
 	je, err := s.repo.FindJournalEntryForReceipt(ctx, receiptID)
 	if err == nil {
 		jeID, _ := uuid.Parse(je["id"].(string))
 		jeTenantID := orgID
-		// Try to resolve tenant_id for GL reversal
 		if err := s.db.QueryRow(ctx, `SELECT COALESCE((SELECT tenant_id FROM organizations WHERE id = $1), $1::uuid)`, orgID).Scan(&jeTenantID); err != nil {
 			jeTenantID = orgID
 		}
@@ -261,6 +287,24 @@ func (s *PurchaseService) ListInvoices(ctx context.Context, orgID uuid.UUID, ven
 	return s.repo.ListInvoices(ctx, orgID, vendorID)
 }
 
+func (s *PurchaseService) ListOutstandingInvoices(ctx context.Context, orgIDStr, vendorID, itemID, dateFrom, dateTo string) ([]*purchasemodels.OutstandingInvoice, error) {
+	orgID, err := uuid.Parse(orgIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid org id: %w", err)
+	}
+	var vID, iID string
+	if vendorID != "" && vendorID != "all" { vID = vendorID }
+	if itemID != "" && itemID != "all" { iID = itemID }
+	var df, dt time.Time
+	if dateFrom != "" {
+		df, _ = time.Parse("2006-01-02", dateFrom)
+	}
+	if dateTo != "" {
+		dt, _ = time.Parse("2006-01-02", dateTo)
+	}
+	return s.repo.ListOutstandingInvoices(ctx, orgID, vID, iID, df, dt)
+}
+
 func (s *PurchaseService) CancelInvoice(ctx context.Context, orgID, invoiceID, userID uuid.UUID) error {
 	inv, err := s.repo.GetInvoice(ctx, invoiceID, orgID)
 	if err != nil {
@@ -268,6 +312,13 @@ func (s *PurchaseService) CancelInvoice(ctx context.Context, orgID, invoiceID, u
 	}
 	if inv.Status == "CANCELLED" || inv.Status == "REJECTED" {
 		return fmt.Errorf("invoice %s is already %s", inv.InvoiceNumber, inv.Status)
+	}
+
+	// Check if invoice has been paid (fully or partially)
+	var paidAmt float64
+	_ = s.db.QueryRow(ctx, `SELECT COALESCE(paid_amount, 0) FROM purchase_invoices WHERE id = $1`, invoiceID).Scan(&paidAmt)
+	if paidAmt > 0.005 {
+		return fmt.Errorf("invoice %s has been paid (paid=%.2f), cannot cancel. Reverse the payment first", inv.InvoiceNumber, paidAmt)
 	}
 
 	// Reverse invoiced quantities on PO items
@@ -361,11 +412,11 @@ func (s *PurchaseService) createInvoiceJournalEntry(ctx context.Context, invoice
 		return fmt.Errorf("no GR_IR account configured: %w", err)
 	}
 
-	// Get AP account from vendor
+	// Get AP reconciliation account from Finance Settings (Account Types: AP_RECON)
 	var apAccountID uuid.UUID
-	err = s.db.QueryRow(ctx, `SELECT reconciliation_account_id FROM vendors WHERE id = $1`, req.VendorID).Scan(&apAccountID)
-	if err != nil {
-		return fmt.Errorf("no reconciliation account for vendor %s: %w", req.VendorID, err)
+	err = s.db.QueryRow(ctx, `SELECT account_id FROM org_reconciliation_accounts WHERE org_id = $1 AND account_type = 'AP_RECON'`, realOrgID).Scan(&apAccountID)
+	if err != nil || apAccountID == uuid.Nil {
+		return fmt.Errorf("no AP_RECON account configured for org %s in Finance Settings (Account Types tab)", realOrgID)
 	}
 
 	// Get PRICE_DIF account (if price diff exists)
@@ -864,6 +915,62 @@ func (s *PurchaseService) RefundDownPayment(ctx context.Context, orgID uuid.UUID
 	return s.repo.GetDownPayment(ctx, dpID, orgID)
 }
 
+// ReverseDownPayment reverses a posted down payment using 红字冲销 (negative reversal).
+// Creates a reversal journal entry (negative amounts) on the original DP JE and marks the DP as REVERSED.
+func (s *PurchaseService) ReverseDownPayment(ctx context.Context, orgID uuid.UUID, dpID uuid.UUID, userID *uuid.UUID) (*purchasemodels.DownPayment, error) {
+	dp, err := s.repo.GetDownPayment(ctx, dpID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("get down payment: %w", err)
+	}
+
+	// Only POSTED or PARTIALLY_CLEARED DPs without refunds can be reversed
+	if dp.Status != "POSTED" && dp.Status != "PARTIALLY_CLEARED" {
+		return nil, fmt.Errorf("down payment %s is in status %s, cannot reverse", dp.DPNumber, dp.Status)
+	}
+	if dp.RefundedAmount > 0 {
+		return nil, fmt.Errorf("down payment %s has refunds (%s), cannot reverse", dp.DPNumber, dp.Status)
+	}
+
+	// Resolve tenant
+	var glTenantID uuid.UUID
+	err = s.db.QueryRow(ctx, `SELECT COALESCE((SELECT tenant_id FROM organizations WHERE id = $1), $1::uuid)`, orgID).Scan(&glTenantID)
+	if err != nil {
+		glTenantID = orgID
+	}
+
+	glUserID := uuid.Nil
+	if userID != nil {
+		glUserID = *userID
+	}
+	if glUserID == uuid.Nil {
+		_ = s.db.QueryRow(ctx, `SELECT id FROM users WHERE tenant_id = $1 LIMIT 1`, glTenantID).Scan(&glUserID)
+	}
+
+	// Reverse the original DP journal entry (红字冲销: negative amounts)
+	if dp.GLJEID != nil {
+		if _, err := s.glSvc.ReverseJournalEntry(ctx, glTenantID, glUserID, *dp.GLJEID, "negative"); err != nil {
+			return nil, fmt.Errorf("reverse DP journal entry: %w", err)
+		}
+	}
+
+	// Update DP status to REVERSED, remaining amount to 0
+	var newPaymentStatus string
+	if dp.PaymentStatus == "PAID" {
+		newPaymentStatus = "REVERSED"
+	} else {
+		newPaymentStatus = dp.PaymentStatus
+	}
+	_, err = s.db.Exec(ctx, `
+		UPDATE down_payments SET status = $2, payment_status = $3, remaining_amount = 0, updated_at = NOW()
+		WHERE id = $1
+	`, dpID, "REVERSED", newPaymentStatus)
+	if err != nil {
+		return nil, fmt.Errorf("update dp status after reversal: %w", err)
+	}
+
+	return s.repo.GetDownPayment(ctx, dpID, orgID)
+}
+
 func (s *PurchaseService) GetDPClearings(ctx context.Context, dpID uuid.UUID) ([]*purchasemodels.DownPaymentClearing, error) {
 	return s.repo.ListDPClearings(ctx, dpID)
 }
@@ -880,4 +987,282 @@ func (s *PurchaseService) FindJournalEntryForReceipt(ctx context.Context, receip
 	}
 	je["lines"] = lines
 	return je, nil
+}
+
+// ══════════════════════════════════════════
+//  VENDOR PAYMENTS & AUTO-CLEARING
+// ══════════════════════════════════════════
+
+func (s *PurchaseService) ListPaymentHistory(ctx context.Context, orgIDStr, vendorID, dateFrom, dateTo string) ([]*purchasemodels.PaymentHistoryItem, error) {
+	orgID, err := uuid.Parse(orgIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid org id: %w", err)
+	}
+	var vID string
+	if vendorID != "" && vendorID != "all" { vID = vendorID }
+	var df, dt time.Time
+	if dateFrom != "" {
+		df, _ = time.Parse("2006-01-02", dateFrom)
+	}
+	if dateTo != "" {
+		dt, _ = time.Parse("2006-01-02", dateTo)
+	}
+	return s.repo.ListPaymentHistory(ctx, orgID, vID, df, dt)
+}
+
+func (s *PurchaseService) GetVendorOpenItems(ctx context.Context, vendorIDStr, orgIDStr string) ([]*purchasemodels.OpenItem, error) {
+	vendorID, err := uuid.Parse(vendorIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid vendor id: %w", err)
+	}
+	orgID, err := uuid.Parse(orgIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid org id: %w", err)
+	}
+	return s.repo.GetVendorOpenItems(ctx, vendorID, orgID)
+}
+
+func (s *PurchaseService) CreateVendorPayment(ctx context.Context, req *purchasemodels.CreateVendorPaymentRequest, userID *uuid.UUID) (*purchasemodels.VendorPayment, error) {
+	vendorID, err := uuid.Parse(req.VendorID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid vendor id: %w", err)
+	}
+	orgID, err := uuid.Parse(req.OrgID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid org id: %w", err)
+	}
+	bankAcctID, err := uuid.Parse(req.BankAccountID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid bank account id: %w", err)
+	}
+
+	// Resolve tenant
+	var glTenantID uuid.UUID
+	err = s.db.QueryRow(ctx, `SELECT COALESCE((SELECT tenant_id FROM organizations WHERE id = $1), $1::uuid)`, orgID).Scan(&glTenantID)
+	if err != nil {
+		glTenantID = orgID
+	}
+
+	glUserID := uuid.Nil
+	if userID != nil {
+		glUserID = *userID
+	}
+	if glUserID == uuid.Nil {
+		_ = s.db.QueryRow(ctx, `SELECT id FROM users WHERE tenant_id = $1 LIMIT 1`, glTenantID).Scan(&glUserID)
+	}
+
+	// Load open items to validate selections
+	openItems, err := s.repo.GetVendorOpenItems(ctx, vendorID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("get open items: %w", err)
+	}
+
+	// Build lookup
+	itemMap := make(map[string]*purchasemodels.OpenItem)
+	for _, item := range openItems {
+		itemMap[item.ID] = item
+	}
+
+	// Validate selected items and compute allocations
+	var totalAllocated float64
+	type allocation struct {
+		sourceType string
+		sourceID   uuid.UUID
+		amount     float64
+	}
+	var allocs []allocation
+
+	// Prioritize: down payments first (prepayment deduction), then invoices
+	var selectedDPs []string
+	var selectedInvs []string
+	for _, sid := range req.SelectedItemIDs {
+		item, ok := itemMap[sid]
+		if !ok {
+			return nil, fmt.Errorf("selected item %s not found in open items", sid)
+		}
+		if item.IsDownPayment {
+			selectedDPs = append(selectedDPs, sid)
+		} else {
+			selectedInvs = append(selectedInvs, sid)
+		}
+	}
+
+	// 1) First allocate to down payments (prepayment deduction)
+	remainingAmount := req.PaymentAmount
+	for _, dpID := range selectedDPs {
+		item := itemMap[dpID]
+		allocAmt := min(item.OpenAmount, remainingAmount)
+		if allocAmt <= 0 {
+			continue
+		}
+		parsedID, _ := uuid.Parse(dpID)
+		allocs = append(allocs, allocation{sourceType: "DOWN_PAYMENT", sourceID: parsedID, amount: allocAmt})
+		totalAllocated += allocAmt
+		remainingAmount -= allocAmt
+	}
+
+	// 2) Then allocate to invoices (net payment)
+	for _, invID := range selectedInvs {
+		item := itemMap[invID]
+		allocAmt := min(item.OpenAmount, remainingAmount)
+		if allocAmt <= 0 {
+			continue
+		}
+		parsedID, _ := uuid.Parse(invID)
+		allocs = append(allocs, allocation{sourceType: "INVOICE", sourceID: parsedID, amount: allocAmt})
+		totalAllocated += allocAmt
+		remainingAmount -= allocAmt
+	}
+
+	if remainingAmount > 0.01 {
+		return nil, fmt.Errorf("payment amount $%.2f exceeds total open amount of selected items", req.PaymentAmount)
+	}
+
+	// Get vendor info for description
+	var vendorName string
+	_ = s.db.QueryRow(ctx, `SELECT name FROM vendors WHERE id = $1`, vendorID).Scan(&vendorName)
+
+	paymentDate := time.Now()
+	if req.PaymentDate != "" {
+		if parsed, err := time.Parse("2006-01-02", req.PaymentDate); err == nil {
+			paymentDate = parsed
+		}
+	}
+
+	description := req.Description
+	if description == "" {
+		description = fmt.Sprintf("Vendor Payment - %s", vendorName)
+	}
+
+	// Create journal entry
+	// Dr AP control account (invoice total) / Dr Down Payment (DP deduction)
+	// Cr Bank account
+	// Get AP reconciliation account from Finance Settings (Account Types: AP_RECON)
+	var realOrgID uuid.UUID
+	_ = s.db.QueryRow(ctx, `SELECT id FROM organizations WHERE tenant_id = $1 LIMIT 1`, glTenantID).Scan(&realOrgID)
+	if realOrgID == uuid.Nil {
+		realOrgID = orgID
+	}
+	var apAccountID uuid.UUID
+	err = s.db.QueryRow(ctx, `SELECT account_id FROM org_reconciliation_accounts WHERE org_id = $1 AND account_type = 'AP_RECON'`, realOrgID).Scan(&apAccountID)
+	if err != nil || apAccountID == uuid.Nil {
+		return nil, fmt.Errorf("no AP_RECON account configured for org %s in Finance Settings (Account Types tab)", realOrgID)
+	}
+
+	// Build journal lines: for each allocation, create a Dr line
+	jeLines := []glmodels.CreateJournalLineRequest{}
+	for _, alloc := range allocs {
+		var lineDesc string
+		if alloc.sourceType == "DOWN_PAYMENT" {
+			lineDesc = fmt.Sprintf("DP clearing: %s", alloc.sourceID.String()[:8])
+			// Dr the AP-DP account (reduce prepayment)
+			jeLines = append(jeLines, glmodels.CreateJournalLineRequest{
+				AccountID:   apAccountID,
+				Debit:       alloc.amount,
+				Credit:      0,
+				Description: lineDesc,
+				PartnerID:   &vendorID,
+				PartnerType: "vendor",
+			})
+		} else {
+			lineDesc = fmt.Sprintf("Invoice payment: %s", alloc.sourceID.String()[:8])
+			jeLines = append(jeLines, glmodels.CreateJournalLineRequest{
+				AccountID:   apAccountID,
+				Debit:       alloc.amount,
+				Credit:      0,
+				Description: lineDesc,
+				PartnerID:   &vendorID,
+				PartnerType: "vendor",
+			})
+		}
+	}
+	// Cr Bank account (total payment)
+	jeLines = append(jeLines, glmodels.CreateJournalLineRequest{
+		AccountID:   bankAcctID,
+		Debit:       0,
+		Credit:      totalAllocated,
+		Description: fmt.Sprintf("Vendor payment to %s", vendorName),
+		PartnerID:   &vendorID,
+		PartnerType: "vendor",
+	})
+
+	entryReq := &glmodels.CreateJournalEntryRequest{
+		PostingDate: paymentDate,
+		Description: description,
+		Reference:   fmt.Sprintf("PMT-%s", time.Now().Format("20060102-150405")),
+		EntryType:   "normal",
+		Source:      "purchase",
+		Lines:       jeLines,
+	}
+
+	entry, err := s.glSvc.CreateJournalEntry(ctx, glTenantID, glUserID, entryReq)
+	if err != nil {
+		return nil, fmt.Errorf("create payment journal entry: %w", err)
+	}
+
+	_, err = s.glSvc.UpdateJournalEntryStatus(ctx, entry.ID, glTenantID, glUserID, "posted")
+	if err != nil {
+		return nil, fmt.Errorf("post payment journal entry: %w", err)
+	}
+
+	now := time.Now()
+	payment := &purchasemodels.VendorPayment{
+		ID:            uuid.New(),
+		OrgID:         orgID,
+		VendorID:      vendorID,
+		BankAccountID: bankAcctID,
+		PaymentAmount: totalAllocated,
+		PaymentDate:   paymentDate,
+		Currency:      "USD",
+		Status:        "POSTED",
+		GLJEID:        &entry.ID,
+		Description:   description,
+		CreatedBy:     userID,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+
+	// Save payment record
+	if err := s.repo.CreateVendorPayment(ctx, payment); err != nil {
+		return nil, fmt.Errorf("create payment record: %w", err)
+	}
+
+	// Save allocations and update source documents
+	for _, alloc := range allocs {
+		allocRec := &purchasemodels.VendorPaymentAllocation{
+			ID:              uuid.New(),
+			PaymentID:       payment.ID,
+			SourceType:      alloc.sourceType,
+			SourceID:        alloc.sourceID,
+			AllocatedAmount: alloc.amount,
+			CreatedAt:       now,
+		}
+		if err := s.repo.CreateVendorPaymentAllocation(ctx, allocRec); err != nil {
+			return nil, fmt.Errorf("create allocation record: %w", err)
+		}
+
+		// Update source document paid/cleared amounts
+		if alloc.sourceType == "INVOICE" {
+			currentPaid, _ := s.repo.GetInvoicePaidAmount(ctx, alloc.sourceID)
+			if err := s.repo.UpdateInvoicePaidAmount(ctx, alloc.sourceID, currentPaid+alloc.amount); err != nil {
+				return nil, fmt.Errorf("update invoice paid amount: %w", err)
+			}
+		} else if alloc.sourceType == "DOWN_PAYMENT" {
+			dp, err := s.repo.GetDownPayment(ctx, alloc.sourceID, orgID)
+			if err != nil {
+				continue
+			}
+			newCleared := dp.ClearedAmount + alloc.amount
+			newRemaining := dp.RemainingAmount - alloc.amount
+			newStatus := dp.Status
+			if newRemaining <= 0.001 {
+				newStatus = "FULLY_CLEARED"
+			} else if newStatus != "PARTIALLY_CLEARED" {
+				newStatus = "PARTIALLY_CLEARED"
+			}
+			_ = s.repo.UpdateDownPaymentCleared(ctx, alloc.sourceID, newCleared, newRemaining, newStatus)
+		}
+	}
+
+	return s.repo.GetVendorPayment(ctx, payment.ID)
 }

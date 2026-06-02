@@ -4,6 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const ContextKeyOrgID = "organization_id"
+
 // ProxyContext reads forwarded headers from the API gateway
 // and sets them as Gin context values for downstream handlers.
 // This allows the auth-service handlers to use c.GetString("tenant_id")
@@ -19,6 +21,9 @@ func ProxyContext() gin.HandlerFunc {
 		}
 		if email := c.GetHeader("X-Email"); email != "" {
 			c.Set(ContextKeyEmail, email)
+		}
+		if oid := c.GetHeader("X-Org-Id"); oid != "" {
+			c.Set(ContextKeyOrgID, oid)
 		}
 		c.Next()
 	}

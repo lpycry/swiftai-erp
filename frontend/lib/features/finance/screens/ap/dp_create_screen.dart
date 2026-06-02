@@ -9,8 +9,13 @@ import 'package:swiftai_erp/features/finance/screens/ap/dp_voucher_screen.dart';
 class DPCreateScreen extends StatefulWidget {
   final AuthService authService;
   final ApService apService;
-  const DPCreateScreen({super.key, required this.authService, required this.apService});
-  @override State<DPCreateScreen> createState() => _DPCreateScreenState();
+  const DPCreateScreen({
+    super.key,
+    required this.authService,
+    required this.apService,
+  });
+  @override
+  State<DPCreateScreen> createState() => _DPCreateScreenState();
 }
 
 class _DPCreateScreenState extends State<DPCreateScreen> {
@@ -55,15 +60,21 @@ class _DPCreateScreenState extends State<DPCreateScreen> {
     setState(() => _loading = true);
     try {
       final vResp = await http.get(
-        Uri.parse('http://localhost:8080/api/v1/purchase/vendors'), headers: _headers);
+        Uri.parse('http://localhost:8080/api/v1/purchase/vendors'),
+        headers: _headers,
+      );
       if (vResp.statusCode < 400) {
-        _vendors = ((jsonDecode(vResp.body)['data'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+        _vendors = ((jsonDecode(vResp.body)['data'] as List<dynamic>?) ?? [])
+            .cast<Map<String, dynamic>>();
       }
 
       final poResp = await http.get(
-        Uri.parse('http://localhost:8080/api/v1/purchase/pending-invoice-pos'), headers: _headers);
+        Uri.parse('http://localhost:8080/api/v1/purchase/pending-invoice-pos'),
+        headers: _headers,
+      );
       if (poResp.statusCode < 400) {
-        _pos = ((jsonDecode(poResp.body)['data'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+        _pos = ((jsonDecode(poResp.body)['data'] as List<dynamic>?) ?? [])
+            .cast<Map<String, dynamic>>();
       }
 
       final glService = GlService(_token);
@@ -82,7 +93,9 @@ class _DPCreateScreenState extends State<DPCreateScreen> {
 
   List<Map<String, dynamic>> _filteredPOs() {
     if (_selectedVendorId == null) return [];
-    return _pos.where((p) => p['vendor_id']?.toString() == _selectedVendorId).toList();
+    return _pos
+        .where((p) => p['vendor_id']?.toString() == _selectedVendorId)
+        .toList();
   }
 
   double _calcPoRemaining(Map<String, dynamic> po) {
@@ -112,7 +125,10 @@ class _DPCreateScreenState extends State<DPCreateScreen> {
           (v) => v['id']?.toString() == vendorId,
           orElse: () => <String, dynamic>{},
         );
-        _selectedVendorName = vendor['name']?.toString() ?? vendor['vendor_code']?.toString() ?? '';
+        _selectedVendorName =
+            vendor['name']?.toString() ??
+            vendor['vendor_code']?.toString() ??
+            '';
       }
     });
   }
@@ -150,11 +166,13 @@ class _DPCreateScreenState extends State<DPCreateScreen> {
       _amountError = _amountCtrl.text.isEmpty || amt == null || amt <= 0
           ? 'Enter a valid amount > 0'
           : (amt > _poRemainingAmount
-              ? 'Amount exceeds PO remaining (${ApService.fmtAmount(_poRemainingAmount)})'
-              : null);
+                ? 'Amount exceeds PO remaining (${ApService.fmtAmount(_poRemainingAmount)})'
+                : null);
       if (_amountError != null) ok = false;
 
-      _creditAccountError = _selectedCreditAccountId == null ? 'Credit account is required' : null;
+      _creditAccountError = _selectedCreditAccountId == null
+          ? 'Credit account is required'
+          : null;
       if (_creditAccountError != null) ok = false;
     });
     return ok;
@@ -173,24 +191,44 @@ class _DPCreateScreenState extends State<DPCreateScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('$modeLabel'),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _confirmRow('Amount', '\$${ApService.fmtAmount(amount)}'),
-          _confirmRow('Vendor', _selectedVendorName ?? ''),
-          _confirmRow('PO', _selectedPoData?['po_number']?.toString() ?? ''),
-          _confirmRow('PO Remaining', '\$${ApService.fmtAmount(_poRemainingAmount)}'),
-          const SizedBox(height: 12),
-          const Divider(),
-          const SizedBox(height: 8),
-          const Text('Journal Entry:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-          const SizedBox(height: 4),
-          Text('Dr  AP Down Payment  \$${ApService.fmtAmount(amount)}',
-              style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
-          Text('Cr  Selected Account  \$${ApService.fmtAmount(amount)}',
-              style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
-        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _confirmRow('Amount', '\$${ApService.fmtAmount(amount)}'),
+            _confirmRow('Vendor', _selectedVendorName ?? ''),
+            _confirmRow('PO', _selectedPoData?['po_number']?.toString() ?? ''),
+            _confirmRow(
+              'PO Remaining',
+              '\$${ApService.fmtAmount(_poRemainingAmount)}',
+            ),
+            const SizedBox(height: 12),
+            const Divider(),
+            const SizedBox(height: 8),
+            const Text(
+              'Journal Entry:',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Dr  AP Down Payment  \$${ApService.fmtAmount(amount)}',
+              style: TextStyle(fontSize: 12, color: Colors.green.shade700),
+            ),
+            Text(
+              'Cr  Selected Account  \$${ApService.fmtAmount(amount)}',
+              style: TextStyle(fontSize: 12, color: Colors.red.shade700),
+            ),
+          ],
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Confirm & Post')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Confirm & Post'),
+          ),
         ],
       ),
     );
@@ -205,18 +243,23 @@ class _DPCreateScreenState extends State<DPCreateScreen> {
         'currency': _currency,
         'credit_account_id': _selectedCreditAccountId,
         'post_immediately': postImmediately,
-        'description': _descCtrl.text.isNotEmpty ? _descCtrl.text : 'Vendor down payment',
+        'description': _descCtrl.text.isNotEmpty
+            ? _descCtrl.text
+            : 'Vendor down payment',
         'reference_no': _refCtrl.text,
       };
       final dp = await widget.apService.createDownPayment(data);
       if (mounted) {
-        Navigator.pushReplacement(context, MaterialPageRoute(
-          builder: (_) => DPVoucherScreen(
-            authService: widget.authService,
-            apService: widget.apService,
-            downPayment: dp,
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => DPVoucherScreen(
+              authService: widget.authService,
+              apService: widget.apService,
+              downPayment: dp,
+            ),
           ),
-        ));
+        );
       }
     } catch (e) {
       if (mounted) _msg('$e', isError: true);
@@ -228,19 +271,34 @@ class _DPCreateScreenState extends State<DPCreateScreen> {
   Widget _confirmRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
-      child: Row(children: [
-        SizedBox(width: 100, child: Text(label,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600))),
-        Expanded(child: Text(value,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-      ]),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   void _msg(String m, {bool isError = false}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(m), backgroundColor: isError ? Colors.red : Colors.green));
+      SnackBar(
+        content: Text(m),
+        backgroundColor: isError ? Colors.red : Colors.green,
+      ),
+    );
   }
 
   @override
@@ -262,287 +320,416 @@ class _DPCreateScreenState extends State<DPCreateScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                // ── Info Banner ──
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blue.shade100),
-                  ),
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Icon(Icons.info_outline, color: Colors.blue.shade700, size: 18),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Dr: AP Down Payment (Special GL Indicator A)\nCr: Selected Account\n'
-                        'AP_DP is a reconciliation account allowing special GL posting.',
-                        style: TextStyle(fontSize: 11, color: Colors.blue.shade800),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Vendor Selection ──
+                    _sectionLabel('VENDOR *'),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: _selectedVendorId,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        hintText: 'Select vendor',
+                        errorText: _vendorError,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                       ),
+                      isExpanded: true,
+                      items: _vendors
+                          .map(
+                            (v) => DropdownMenuItem(
+                              value: v['id']?.toString(),
+                              child: Text(
+                                '${v['vendor_code']} - ${v['name']}',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: _onVendorChanged,
                     ),
-                  ]),
-                ),
-                const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                // ── Vendor Selection Card ──
-                _sectionLabel('VENDOR *'),
-                const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  value: _selectedVendorId,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    hintText: 'Select vendor',
-                    errorText: _vendorError,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  ),
-                  isExpanded: true,
-                  items: _vendors.map((v) => DropdownMenuItem(
-                    value: v['id']?.toString(),
-                    child: Text('${v['vendor_code']} - ${v['name']}', style: const TextStyle(fontSize: 13)),
-                  )).toList(),
-                  onChanged: _onVendorChanged,
-                ),
-                const SizedBox(height: 20),
-
-                // ── PO Selection Card ──
-                _sectionLabel('PURCHASE ORDER *'),
-                const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  value: _selectedPoId,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    hintText: _selectedVendorId == null ? 'Select vendor first' : 'Select PO',
-                    errorText: _poError,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  ),
-                  isExpanded: true,
-                  items: _filteredPOs().map((po) {
-                    final remaining = _calcPoRemaining(po);
-                    final total = (po['total_amount'] as num?)?.toDouble() ?? 0;
-                    return DropdownMenuItem(
-                      value: po['id']?.toString(),
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                        Text(po['po_number'] ?? '', style: const TextStyle(fontSize: 13)),
-                        Text('Total: \$${ApService.fmtAmount(total)}  |  Open: \$${ApService.fmtAmount(remaining)}',
-                            style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-                      ]),
-                    );
-                  }).toList(),
-                  onChanged: _onPoChanged,
-                ),
-
-                // ── PO Summary Card ──
-                if (_selectedPoData != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.shade100),
+                    // ── PO Selection Card ──
+                    _sectionLabel('PURCHASE ORDER *'),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: _selectedPoId,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        hintText: _selectedVendorId == null
+                            ? 'Select vendor first'
+                            : 'Select PO',
+                        errorText: _poError,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
+                      ),
+                      isExpanded: true,
+                      items: _filteredPOs().map((po) {
+                        return DropdownMenuItem(
+                          value: po['id']?.toString(),
+                          child: Text(
+                            po['po_number'] ?? '',
+                            style: const TextStyle(fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: _onPoChanged,
                     ),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('PO Summary',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.blue.shade800)),
+
+                    // ── PO Summary (compact) ──
+                    if (_selectedPoData != null) ...[
                       const SizedBox(height: 8),
-                      _summaryRow('Total Amount', '\$${ApService.fmtAmount((_selectedPoData!['total_amount'] as num?)?.toDouble() ?? 0)}'),
-                      _summaryRow('Open for Invoice', '\$${ApService.fmtAmount(_poRemainingAmount)}',
-                          valueColor: Colors.orange.shade700),
-                      const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                         decoration: BoxDecoration(
-                          color: Colors.amber.shade50,
-                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.blue.shade100),
                         ),
-                        child: Row(children: [
-                          Icon(Icons.lightbulb_outline, size: 14, color: Colors.amber.shade700),
-                          const SizedBox(width: 6),
-                          Text('Max DP amount: \$${ApService.fmtAmount(_poRemainingAmount)}',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.amber.shade800)),
-                        ]),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _summaryRow(
+                                    'Total',
+                                    '\$${ApService.fmtAmount((_selectedPoData!['total_amount'] as num?)?.toDouble() ?? 0)}',
+                                  ),
+                                  const SizedBox(height: 2),
+                                  _summaryRow(
+                                    'Open',
+                                    '\$${ApService.fmtAmount(_poRemainingAmount)}',
+                                    valueColor: Colors.orange.shade700,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.lightbulb_outline, size: 13, color: Colors.amber.shade700),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Max: \$${ApService.fmtAmount(_poRemainingAmount)}',
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: Colors.amber.shade800),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ]),
-                  ),
-                ],
-                const SizedBox(height: 20),
+                    ],
 
-                // ── Amount ──
-                _sectionLabel('AMOUNT *'),
-                const SizedBox(height: 6),
-                Row(children: [
-                  SizedBox(
-                    width: 80,
-                    child: DropdownButtonFormField<String>(
-                      value: _currency,
+                    // ── Amount ──
+                    const SizedBox(height: 16),
+                    _sectionLabel('AMOUNT *'),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 80,
+                          child: DropdownButtonFormField<String>(
+                            value: _currency,
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 12,
+                              ),
+                            ),
+                            items: ['USD', 'EUR', 'CNY', 'JPY', 'GBP']
+                                .map(
+                                  (c) => DropdownMenuItem(
+                                    value: c,
+                                    child: Text(
+                                      c,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _currency = v ?? 'USD'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _amountCtrl,
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              hintText: '0.00',
+                              errorText: _amountError,
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            onChanged: (_) =>
+                                setState(() => _amountError = null),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // ── Credit Account ──
+                    _sectionLabel('CREDIT ACCOUNT (Cr) *'),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: _selectedCreditAccountId,
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        hintText: 'Select account to credit',
+                        errorText: _creditAccountError,
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                       ),
-                      items: ['USD', 'EUR', 'CNY', 'JPY', 'GBP'].map((c) => DropdownMenuItem(
-                        value: c, child: Text(c, style: const TextStyle(fontSize: 13)),
-                      )).toList(),
-                      onChanged: (v) => setState(() => _currency = v ?? 'USD'),
+                      isExpanded: true,
+                      items: _creditAccounts
+                          .where((a) => a.isLeaf)
+                          .map(
+                            (a) => DropdownMenuItem(
+                              value: a.id,
+                              child: Text(
+                                '${a.code} - ${a.name}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AccountModel.typeColor(a.type),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) {
+                        setState(() {
+                          _selectedCreditAccountId = v;
+                          _creditAccountError = null;
+                        });
+                      },
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _amountCtrl,
+                    const SizedBox(height: 16),
+
+                    // ── Optional Fields ──
+                    _sectionLabel('DESCRIPTION'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _descCtrl,
                       decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        hintText: '0.00',
-                        errorText: _amountError,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        hintText: 'Vendor down payment (optional)',
                         isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (_) => setState(() => _amountError = null),
+                      maxLines: 2,
                     ),
-                  ),
-                ]),
-                const SizedBox(height: 20),
-
-                // ── Credit Account ──
-                _sectionLabel('CREDIT ACCOUNT (Cr) *'),
-                const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  value: _selectedCreditAccountId,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    hintText: 'Select account to credit',
-                    errorText: _creditAccountError,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  ),
-                  isExpanded: true,
-                  items: _creditAccounts.where((a) => a.isLeaf).map((a) => DropdownMenuItem(
-                    value: a.id,
-                    child: Text('${a.code} - ${a.name}',
-                        style: TextStyle(fontSize: 12, color: AccountModel.typeColor(a.type))),
-                  )).toList(),
-                  onChanged: (v) {
-                    setState(() { _selectedCreditAccountId = v; _creditAccountError = null; });
-                  },
-                ),
-                const SizedBox(height: 20),
-
-                // ── Optional Fields ──
-                _sectionLabel('DESCRIPTION'),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _descCtrl,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    hintText: 'Vendor down payment (optional)',
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 16),
-                _sectionLabel('REFERENCE NO.'),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _refCtrl,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                    hintText: 'External reference (optional)',
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  ),
-                ),
-                const SizedBox(height: 28),
-
-                // ── Journal Entry Preview ──
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Icon(Icons.account_balance, size: 16, color: Colors.grey.shade700),
-                      const SizedBox(width: 6),
-                      Text('Journal Entry Preview',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700)),
-                    ]),
-                    const Divider(height: 16),
-                    _jeLine('Dr  AP Down Payment (Special GL: A)', amount, isDebit: true),
-                    const SizedBox(height: 4),
-                    _jeLine('Cr  Selected Account', amount, isDebit: false),
-                  ]),
-                ),
-                const SizedBox(height: 28),
-
-                // ── Action Buttons ──
-                if (_submitting)
-                  const Center(child: CircularProgressIndicator())
-                else ...[                   
-                  Row(children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.save_outlined, size: 18),
-                        label: const Text('Save as Draft'),
-                        onPressed: () => _submit(postImmediately: false),
-                        style: OutlinedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
+                    const SizedBox(height: 12),
+                    _sectionLabel('REFERENCE NO.'),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _refCtrl,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        hintText: 'External reference (optional)',
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton.icon(
-                        icon: const Icon(Icons.payments, size: 18),
-                        label: const Text('Post & Create'),
-                        onPressed: () => _submit(postImmediately: true),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(48),
-                        ),
+                    const SizedBox(height: 20),
+
+                    // ── Journal Entry Preview ──
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.account_balance,
+                                size: 16,
+                                color: Colors.grey.shade700,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Journal Entry Preview',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 12),
+                          _jeLine(
+                            'Dr  AP Down Payment (Special GL: A)',
+                            amount,
+                            isDebit: true,
+                          ),
+                          const SizedBox(height: 4),
+                          _jeLine(
+                            'Cr  Selected Account',
+                            amount,
+                            isDebit: false,
+                          ),
+                        ],
                       ),
                     ),
-                  ]),
-                ],
-                const SizedBox(height: 20),
-              ]),
-            ),
-        ),
+                    const SizedBox(height: 20),
+
+                    // ── Action Buttons ──
+                    if (_submitting)
+                      const Center(child: CircularProgressIndicator())
+                    else ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              icon: const Icon(Icons.save_outlined, size: 18),
+                              label: const Text('Save as Draft'),
+                              onPressed: () => _submit(postImmediately: false),
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(44),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: FilledButton.icon(
+                              icon: const Icon(Icons.payments, size: 18),
+                              label: const Text('Post & Create'),
+                              onPressed: () => _submit(postImmediately: true),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size.fromHeight(44),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+      ),
     );
   }
 
   Widget _sectionLabel(String text) {
-    return Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-        color: Colors.grey.shade600, letterSpacing: 0.8));
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: Colors.grey.shade600,
+        letterSpacing: 0.8,
+      ),
+    );
   }
 
   Widget _summaryRow(String label, String value, {Color? valueColor}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(children: [
-        Expanded(child: Text(label, style: TextStyle(fontSize: 12, color: Colors.blue.shade800))),
-        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: valueColor)),
-      ]),
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 40,
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 11, color: Colors.blue.shade800),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: valueColor,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _jeLine(String label, double amount, {required bool isDebit}) {
-    return Row(children: [
-      Icon(isDebit ? Icons.arrow_downward : Icons.arrow_upward,
-          size: 14, color: isDebit ? Colors.green.shade700 : Colors.red.shade400),
-      const SizedBox(width: 6),
-      Expanded(child: Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700))),
-      Text('\$${ApService.fmtAmount(amount)}',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
-              color: isDebit ? Colors.green.shade700 : Colors.red.shade700)),
-    ]);
+    return Row(
+      children: [
+        Icon(
+          isDebit ? Icons.arrow_downward : Icons.arrow_upward,
+          size: 14,
+          color: isDebit ? Colors.green.shade700 : Colors.red.shade400,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+        ),
+        Text(
+          '\$${ApService.fmtAmount(amount)}',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isDebit ? Colors.green.shade700 : Colors.red.shade700,
+          ),
+        ),
+      ],
+    );
   }
 }

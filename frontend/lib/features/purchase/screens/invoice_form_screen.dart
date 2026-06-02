@@ -9,7 +9,8 @@ class InvoiceFormScreen extends StatefulWidget {
   final AuthService authService;
   final PurchaseService purchaseService;
   final Map<String, dynamic>? vendors;
-  const InvoiceFormScreen({super.key, required this.authService, required this.purchaseService, this.vendors});
+  final Map<String, dynamic>? prefillData;
+  const InvoiceFormScreen({super.key, required this.authService, required this.purchaseService, this.vendors, this.prefillData});
   @override State<InvoiceFormScreen> createState() => _InvoiceFormScreenState();
 }
 
@@ -37,7 +38,36 @@ class _InvoiceFormScreenState extends State<InvoiceFormScreen> {
   void initState() {
     super.initState();
     _token = widget.authService.accessToken;
-    _load();
+    _load().then((_) => _applyPrefill());
+  }
+
+  void _applyPrefill() {
+    final pre = widget.prefillData;
+    if (pre == null) return;
+    
+    // Auto-select vendor
+    final vId = pre['vendor_id']?.toString();
+    if (vId != null) {
+      setState(() => _selectedVendorId = vId);
+    }
+    
+    // Auto-select PO and trigger item loading
+    final poId = pre['po_id']?.toString();
+    if (poId != null) {
+      _onPoSelected(poId);
+    }
+    
+    // Pre-fill total and invoice number
+    final amt = (pre['total_amount'] as num?)?.toDouble();
+    if (amt != null && amt > 0) {
+      _totalAmtCtrl.text = amt.toStringAsFixed(2);
+    }
+    
+    // Generate invoice number hint
+    final poNum = pre['po_number']?.toString() ?? '';
+    if (poNum.isNotEmpty) {
+      _invNumCtrl.text = 'INV-${poNum.substring(3)}';
+    }
   }
 
   String get _tokenVal => _token ?? '';

@@ -23,9 +23,6 @@ type Vendor struct {
 	ContactPerson          string     `json:"contact_person,omitempty"`
 	ContactEmail           string     `json:"contact_email,omitempty"`
 	ContactPhone           string     `json:"contact_phone,omitempty"`
-	ReconciliationAccountID *uuid.UUID `json:"reconciliation_account_id,omitempty"`
-	ReconciliationAccountCode string  `json:"reconciliation_account_code,omitempty"`
-	ReconciliationAccountName string  `json:"reconciliation_account_name,omitempty"`
 	IsActive               bool       `json:"is_active"`
 	CreatedAt              time.Time  `json:"created_at"`
 	UpdatedAt              time.Time  `json:"updated_at"`
@@ -42,7 +39,6 @@ type CreateVendorRequest struct {
 	ContactPerson          string     `json:"contact_person,omitempty"`
 	ContactEmail           string     `json:"contact_email,omitempty"`
 	ContactPhone           string     `json:"contact_phone,omitempty"`
-	ReconciliationAccountID *uuid.UUID `json:"reconciliation_account_id,omitempty"`
 }
 
 type UpdateVendorRequest struct {
@@ -56,7 +52,6 @@ type UpdateVendorRequest struct {
 	ContactPerson          *string   `json:"contact_person,omitempty"`
 	ContactEmail           *string   `json:"contact_email,omitempty"`
 	ContactPhone           *string   `json:"contact_phone,omitempty"`
-	ReconciliationAccountID *uuid.UUID `json:"reconciliation_account_id,omitempty"`
 	IsActive               *bool     `json:"is_active,omitempty"`
 }
 
@@ -230,6 +225,28 @@ type CreateInvoiceRequest struct {
 	Items         []CreateInvoiceItemRequest `json:"items,omitempty"`
 }
 
+// ── Outstanding Invoice (for AP aging report) ──
+
+type OutstandingInvoice struct {
+	ID            string    `json:"id"`
+	OrgID         string    `json:"org_id"`
+	OrgCode       string    `json:"org_code"`
+	OrgName       string    `json:"org_name"`
+	InvoiceNumber string    `json:"invoice_number"`
+	InvoiceDate   string    `json:"invoice_date"`
+	DueDate       string    `json:"due_date"`
+	TotalAmount   float64   `json:"total_amount"`
+	PaidAmount    float64   `json:"paid_amount"`
+	OpenAmount    float64   `json:"open_amount"`
+	Currency      string    `json:"currency"`
+	VendorID      string    `json:"vendor_id"`
+	VendorCode    string    `json:"vendor_code"`
+	VendorName    string    `json:"vendor_name"`
+	PONumber      string    `json:"po_number"`
+	Status        string    `json:"status"`
+	DaysOverdue   int       `json:"days_overdue"`
+}
+
 // ── Business Event (async GL posting trigger) ──
 
 type BusinessEvent struct {
@@ -338,6 +355,78 @@ type CreateDownPaymentRefundRequest struct {
 type CreateDPClearingRequest struct {
 	InvoiceID      string  `json:"invoice_id" binding:"required"`
 	ClearingAmount float64 `json:"clearing_amount" binding:"required,gt=0"`
+}
+
+
+
+// ── Vendor Payment & Open Items ──
+
+type OpenItem struct {
+	ID           string  `json:"id"`
+	Type         string  `json:"type"`
+	DocumentNo   string  `json:"document_no"`
+	Date         string  `json:"date"`
+	DueDate      string  `json:"due_date"`
+	TotalAmount  float64 `json:"total_amount"`
+	OpenAmount   float64 `json:"open_amount"`
+	Currency     string  `json:"currency"`
+	IsDownPayment bool  `json:"is_down_payment"`
+}
+
+type CreateVendorPaymentRequest struct {
+	VendorID        string   `json:"vendor_id" binding:"required"`
+	OrgID           string   `json:"org_id" binding:"required"`
+	BankAccountID   string   `json:"bank_account_id" binding:"required"`
+	PaymentAmount   float64  `json:"payment_amount" binding:"required,gt=0"`
+	SelectedItemIDs []string `json:"selected_item_ids" binding:"required,min=1"`
+	PaymentDate     string   `json:"payment_date,omitempty"`
+	Description     string   `json:"description,omitempty"`
+}
+
+type VendorPayment struct {
+	ID            uuid.UUID  `json:"id"`
+	OrgID         uuid.UUID  `json:"org_id"`
+	VendorID      uuid.UUID  `json:"vendor_id"`
+	VendorCode    string     `json:"vendor_code,omitempty"`
+	VendorName    string     `json:"vendor_name,omitempty"`
+	BankAccountID uuid.UUID  `json:"bank_account_id"`
+	PaymentAmount float64    `json:"payment_amount"`
+	PaymentDate   time.Time  `json:"payment_date"`
+	Currency      string     `json:"currency"`
+	Status        string     `json:"status"`
+	GLJEID        *uuid.UUID `json:"gl_je_id,omitempty"`
+	Description   string     `json:"description,omitempty"`
+	CreatedBy     *uuid.UUID `json:"created_by,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
+	Allocations   []VendorPaymentAllocation `json:"allocations,omitempty"`
+}
+
+type VendorPaymentAllocation struct {
+	ID               uuid.UUID `json:"id"`
+	PaymentID        uuid.UUID `json:"payment_id"`
+	SourceType       string    `json:"source_type"`
+	SourceID         uuid.UUID `json:"source_id"`
+	AllocatedAmount  float64   `json:"allocated_amount"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+// ── Payment History ──
+
+type PaymentHistoryItem struct {
+	ID            string  `json:"id"`
+	OrgID         string  `json:"org_id"`
+	OrgCode       string  `json:"org_code"`
+	OrgName       string  `json:"org_name"`
+	VendorID      string  `json:"vendor_id"`
+	VendorCode    string  `json:"vendor_code"`
+	VendorName    string  `json:"vendor_name"`
+	PaymentAmount float64 `json:"payment_amount"`
+	PaymentDate   string  `json:"payment_date"`
+	Currency      string  `json:"currency"`
+	Status        string  `json:"status"`
+	Description   string  `json:"description"`
+	GLJEID        string  `json:"gl_je_id,omitempty"`
 }
 
 // ── AI Vendor Recommendation ──

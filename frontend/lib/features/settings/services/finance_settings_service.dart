@@ -120,4 +120,80 @@ class FinanceSettingsService {
       throw Exception(body['message'] ?? 'Delete failed');
     }
   }
+
+  // ══════════════════════════════════════════
+  //  TAX JURISDICTIONS
+  // ══════════════════════════════════════════
+
+  Future<List<dynamic>> listTaxJurisdictions({bool activeOnly = false}) async {
+    final params = <String, String>{};
+    if (activeOnly) params['active_only'] = 'true';
+    final uri = Uri.parse('$_baseUrl/finance-settings/tax-jurisdictions').replace(queryParameters: params);
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    return (jsonDecode(resp.body)['data'] as List<dynamic>?) ?? [];
+  }
+
+  Future<Map<String, dynamic>> createTaxJurisdiction(Map<String, dynamic> data) async {
+    final resp = await http.post(Uri.parse('$_baseUrl/finance-settings/tax-jurisdictions'), headers: _headers, body: jsonEncode(data));
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Create failed');
+    }
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<void> updateTaxJurisdiction(String id, Map<String, dynamic> data) async {
+    final resp = await http.put(Uri.parse('$_baseUrl/finance-settings/tax-jurisdictions/$id'), headers: _headers, body: jsonEncode(data));
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Update failed');
+    }
+  }
+
+  Future<void> deleteTaxJurisdiction(String id) async {
+    final resp = await http.delete(Uri.parse('$_baseUrl/finance-settings/tax-jurisdictions/$id'), headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Delete failed');
+    }
+  }
+
+  // ══════════════════════════════════════════
+  //  TAX NEXUS
+  // ══════════════════════════════════════════
+
+  Future<List<dynamic>> listTaxNexus({bool activeOnly = false}) async {
+    final params = <String, String>{};
+    if (activeOnly) params['active_only'] = 'true';
+    final uri = Uri.parse('$_baseUrl/finance-settings/tax-nexus').replace(queryParameters: params);
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    return (jsonDecode(resp.body)['data'] as List<dynamic>?) ?? [];
+  }
+
+  Future<Map<String, dynamic>> createTaxNexus(Map<String, dynamic> data) async {
+    final resp = await http.post(Uri.parse('$_baseUrl/finance-settings/tax-nexus'), headers: _headers, body: jsonEncode(data));
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Create failed');
+    }
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<void> updateTaxNexus(String id, Map<String, dynamic> data) async {
+    final resp = await http.put(Uri.parse('$_baseUrl/finance-settings/tax-nexus/$id'), headers: _headers, body: jsonEncode(data));
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Update failed');
+    }
+  }
+
+  Future<void> deleteTaxNexus(String id) async {
+    final resp = await http.delete(Uri.parse('$_baseUrl/finance-settings/tax-nexus/$id'), headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Delete failed');
+    }
+  }
 }

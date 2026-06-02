@@ -54,6 +54,7 @@ class _FinanceSettingsScreenState extends State<FinanceSettingsScreen>
             Tab(text: 'Payment Terms'),
             Tab(text: 'Incoterms'),
             Tab(text: 'Account Types'),
+
           ],
         ),
       ),
@@ -65,9 +66,11 @@ class _FinanceSettingsScreenState extends State<FinanceSettingsScreen>
           _PaymentTermsTab(authService: widget.authService, svc: widget.financeSettingsService),
           _IncotermsTab(authService: widget.authService, svc: widget.financeSettingsService),
           _ReconAccountsTab(authService: widget.authService, orgService: widget.orgService, svc: widget.financeSettingsService),
+
         ],
       ),
     );
+
   }
 }
 
@@ -1362,6 +1365,105 @@ class _ReconAccountsTabState extends State<_ReconAccountsTab> {
           );
         },
       ),
+    );
+  }
+}
+
+class _TaxRateDialog extends StatefulWidget {
+  final Map<String, dynamic>? existing;
+  const _TaxRateDialog({this.existing});
+  @override State<_TaxRateDialog> createState() => _TaxRateDialogState();
+}
+
+class _TaxRateDialogState extends State<_TaxRateDialog> {
+  final _jurCtrl = TextEditingController();
+  final _zipCtrl = TextEditingController();
+  final _cityCtrl = TextEditingController();
+  final _rateCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  DateTime _effDate = DateTime.now();
+  DateTime? _endDate;
+  bool _isActive = true;
+
+  @override void initState() {
+    super.initState();
+    if (widget.existing != null) {
+      final e = widget.existing!;
+      _jurCtrl.text = e['jurisdiction_name']?.toString() ?? '';
+      _zipCtrl.text = e['zip_code']?.toString() ?? '';
+      _cityCtrl.text = e['city']?.toString() ?? '';
+      final r = ((e['tax_rate'] as num?)?.toDouble() ?? 0) * 100;
+      _rateCtrl.text = r.toStringAsFixed(2);
+      _descCtrl.text = e['description']?.toString() ?? '';
+      if (e['effective_date'] != null) { _effDate = DateTime.parse(e['effective_date'].toString()); }
+      if (e['end_date'] != null) { _endDate = DateTime.parse(e['end_date'].toString()); }
+      _isActive = e['is_active'] == true;
+    }
+  }
+
+  @override void dispose() { _jurCtrl.dispose(); _zipCtrl.dispose(); _cityCtrl.dispose(); _rateCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.existing != null;
+    return AlertDialog(
+      title: Text(isEdit ? 'Edit Tax Rate' : 'Add Tax Rate'),
+      content: SizedBox(
+        width: 400,
+        child: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: _jurCtrl, decoration: const InputDecoration(labelText: 'Jurisdiction Name *', isDense: true), style: const TextStyle(fontSize: 13)),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: TextField(controller: _zipCtrl, decoration: const InputDecoration(labelText: 'Zip Code *', isDense: true), style: TextStyle(fontSize: 13, fontFamily: 'monospace'))),
+              const SizedBox(width: 8),
+              Expanded(child: TextField(controller: _cityCtrl, decoration: const InputDecoration(labelText: 'City', isDense: true), style: const TextStyle(fontSize: 13))),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: TextField(controller: _rateCtrl, decoration: const InputDecoration(labelText: 'Tax Rate % *', isDense: true, suffixText: '%'), keyboardType: TextInputType.number, style: const TextStyle(fontSize: 13))),
+              const SizedBox(width: 8),
+              Expanded(child: InkWell(
+                onTap: () async { final d = await showDatePicker(context: context, initialDate: _effDate, firstDate: DateTime(2020), lastDate: DateTime(2030)); if (d != null) setState(() => _effDate = d); },
+                child: InputDecorator(decoration: const InputDecoration(labelText: 'Effective *', isDense: true),
+                  child: Text('${_effDate.year}-${_effDate.month.toString().padLeft(2,'0')}-${_effDate.day.toString().padLeft(2,'0')}', style: const TextStyle(fontSize: 11, fontFamily: 'monospace'))),
+              )),
+            ]),
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: InkWell(
+                onTap: () async { final d = await showDatePicker(context: context, initialDate: _endDate ?? DateTime.now().add(const Duration(days: 365)), firstDate: DateTime(2020), lastDate: DateTime(2030)); if (d != null) setState(() => _endDate = d); },
+                child: InputDecorator(decoration: const InputDecoration(labelText: 'End Date (optional)', isDense: true),
+                child: Builder(builder: (ctx) { final d = _endDate; return Text(d == null ? "No end date" : "${d.year}-${d.month.toString().padLeft(2,"0")}-${d.day.toString().padLeft(2,"0")}", style: TextStyle(fontSize: 11, fontFamily: "monospace")); })),
+              )),
+              const SizedBox(width: 8),
+              Row(children: [
+                const Text('Active', style: TextStyle(fontSize: 12)),
+                Switch(value: _isActive, onChanged: (v) => setState(() => _isActive = v), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              ]),
+            ]),
+            TextField(controller: _descCtrl, decoration: const InputDecoration(labelText: 'Description', isDense: true), style: const TextStyle(fontSize: 12), maxLines: 2),
+          ]),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: () {
+          if (_jurCtrl.text.isEmpty || _zipCtrl.text.isEmpty || _rateCtrl.text.isEmpty) { return; }
+          final rate = double.tryParse(_rateCtrl.text);
+          if (rate == null || rate <= 0) { return; }
+          Navigator.pop(context, {
+            'jurisdiction_name': _jurCtrl.text.trim(),
+            'zip_code': _zipCtrl.text.trim(),
+            'city': _cityCtrl.text.trim(),
+            'tax_rate': rate / 100.0,
+            'effective_date': '${_effDate.year}-${_effDate.month.toString().padLeft(2,'0')}-${_effDate.day.toString().padLeft(2,'0')}',
+            "end_date": _endDate == null ? "" : (() { final d = _endDate!; return "${d.year}-${d.month.toString().padLeft(2,"0")}-${d.day.toString().padLeft(2,"0")}"; })(),
+            'description': _descCtrl.text.trim(),
+            'is_active': _isActive,
+          });
+        }, child: Text(isEdit ? 'Update' : 'Create')),
+      ],
     );
   }
 }

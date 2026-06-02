@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"fmt"
 	"time"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -259,7 +259,179 @@ func (r *FinanceSettingsRepo) UpdateOrgReconAccount(ctx context.Context, id uuid
 	}, nil
 }
 
+// ══════════════════════════════════════════
+//  TAX JURISDICTIONS
+// ══════════════════════════════════════════
+
+func (r *FinanceSettingsRepo) ListTaxJurisdictions(ctx context.Context, tenantID uuid.UUID, activeOnly bool) ([]*fsmodels.TaxJurisdiction, error) {
+	query := "SELECT id, tenant_id, state, county, city, zip_code, tax_rate, effective_date, expiration_date, is_active, created_at, updated_at FROM tax_jurisdictions WHERE tenant_id = $1"
+	args := []interface{}{tenantID}
+	if activeOnly {
+		query += " AND is_active = true"
+	}
+	query += " ORDER BY state, county, city"
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*fsmodels.TaxJurisdiction
+	for rows.Next() {
+		j := &fsmodels.TaxJurisdiction{}
+		if err := rows.Scan(&j.ID, &j.TenantID, &j.State, &j.County, &j.City, &j.ZipCode,
+			&j.TaxRate, &j.EffectiveDate, &j.ExpirationDate, &j.IsActive, &j.CreatedAt, &j.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, j)
+	}
+	return list, nil
+}
+
+func (r *FinanceSettingsRepo) GetTaxJurisdiction(ctx context.Context, id uuid.UUID) (*fsmodels.TaxJurisdiction, error) {
+	j := &fsmodels.TaxJurisdiction{}
+	err := r.db.QueryRow(ctx, "SELECT id, tenant_id, state, county, city, zip_code, tax_rate, effective_date, expiration_date, is_active, created_at, updated_at FROM tax_jurisdictions WHERE id = $1", id).Scan(
+		&j.ID, &j.TenantID, &j.State, &j.County, &j.City, &j.ZipCode, &j.TaxRate, &j.EffectiveDate, &j.ExpirationDate, &j.IsActive, &j.CreatedAt, &j.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+func (r *FinanceSettingsRepo) CreateTaxJurisdiction(ctx context.Context, tenantID uuid.UUID, req *fsmodels.CreateTaxJurisdictionRequest) (*fsmodels.TaxJurisdiction, error) {
+	effDate, _ := time.Parse("2006-01-02", req.EffectiveDate)
+	j := &fsmodels.TaxJurisdiction{
+		ID:            uuid.New(),
+		TenantID:      tenantID,
+		State:         req.State,
+		County:        req.County,
+		City:          req.City,
+		ZipCode:       req.ZipCode,
+		TaxRate:       req.TaxRate,
+		EffectiveDate: effDate,
+		IsActive:      true,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	if req.ExpirationDate != "" {
+		if d, err := time.Parse("2006-01-02", req.ExpirationDate); err == nil {
+			j.ExpirationDate = &d
+		}
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO tax_jurisdictions(id, tenant_id, state, county, city, zip_code, tax_rate, effective_date, expiration_date, is_active, created_at, updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+	`, j.ID, j.TenantID, j.State, j.County, j.City, j.ZipCode, j.TaxRate, j.EffectiveDate, j.ExpirationDate, j.IsActive, j.CreatedAt, j.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create tax jurisdiction: %w", err)
+	}
+	return j, nil
+}
+
+func (r *FinanceSettingsRepo) UpdateTaxJurisdiction(ctx context.Context, id, tenantID uuid.UUID, req *fsmodels.UpdateTaxJurisdictionRequest) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE tax_jurisdictions SET
+			state           = COALESCE($3, state),
+			county          = COALESCE($4, county),
+			city            = COALESCE($5, city),
+			zip_code        = COALESCE($6, zip_code),
+			tax_rate        = COALESCE($7, tax_rate),
+			effective_date  = COALESCE($8, effective_date),
+			expiration_date = COALESCE($9, expiration_date),
+			is_active       = COALESCE($10, is_active),
+			updated_at      = NOW()
+		WHERE id = $1 AND tenant_id = $2
+	`, id, tenantID, req.State, req.County, req.City, req.ZipCode, req.TaxRate, req.EffectiveDate, req.ExpirationDate, req.IsActive)
+	return err
+}
+
+func (r *FinanceSettingsRepo) DeleteTaxJurisdiction(ctx context.Context, id, tenantID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM tax_jurisdictions WHERE id = $1 AND tenant_id = $2", id, tenantID)
+	return err
+}
+
+// ══════════════════════════════════════════
+//  TAX NEXUS
+// ══════════════════════════════════════════
+
+func (r *FinanceSettingsRepo) ListTaxNexus(ctx context.Context, tenantID uuid.UUID, activeOnly bool) ([]*fsmodels.TaxNexus, error) {
+	query := "SELECT id, tenant_id, state, nexus_type, sub_type, threshold_amount, effective_date, is_active, created_at, updated_at FROM tax_nexus WHERE tenant_id = $1"
+	args := []interface{}{tenantID}
+	if activeOnly {
+		query += " AND is_active = true"
+	}
+	query += " ORDER BY state, nexus_type"
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*fsmodels.TaxNexus
+	for rows.Next() {
+		n := &fsmodels.TaxNexus{}
+		if err := rows.Scan(&n.ID, &n.TenantID, &n.State, &n.NexusType, &n.SubType, &n.ThresholdAmount, &n.EffectiveDate, &n.IsActive, &n.CreatedAt, &n.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, n)
+	}
+	return list, nil
+}
+
+func (r *FinanceSettingsRepo) GetTaxNexus(ctx context.Context, id uuid.UUID) (*fsmodels.TaxNexus, error) {
+	n := &fsmodels.TaxNexus{}
+	err := r.db.QueryRow(ctx, "SELECT id, tenant_id, state, nexus_type, sub_type, threshold_amount, effective_date, is_active, created_at, updated_at FROM tax_nexus WHERE id = $1", id).Scan(
+		&n.ID, &n.TenantID, &n.State, &n.NexusType, &n.SubType, &n.ThresholdAmount, &n.EffectiveDate, &n.IsActive, &n.CreatedAt, &n.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return n, nil
+}
+
+func (r *FinanceSettingsRepo) CreateTaxNexus(ctx context.Context, tenantID uuid.UUID, req *fsmodels.CreateTaxNexusRequest) (*fsmodels.TaxNexus, error) {
+	effDate, _ := time.Parse("2006-01-02", req.EffectiveDate)
+	n := &fsmodels.TaxNexus{
+		ID:        uuid.New(),
+		TenantID:  tenantID,
+		State:     req.State,
+		NexusType: req.NexusType,
+		SubType:   req.SubType,
+		ThresholdAmount: req.ThresholdAmount,
+		EffectiveDate:   effDate,
+		IsActive:  true,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO tax_nexus(id, tenant_id, state, nexus_type, sub_type, threshold_amount, effective_date, is_active, created_at, updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+	`, n.ID, n.TenantID, n.State, n.NexusType, n.SubType, n.ThresholdAmount, n.EffectiveDate, n.IsActive, n.CreatedAt, n.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create tax nexus: %w", err)
+	}
+	return n, nil
+}
+
+func (r *FinanceSettingsRepo) UpdateTaxNexus(ctx context.Context, id, tenantID uuid.UUID, req *fsmodels.UpdateTaxNexusRequest) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE tax_nexus SET
+			state           = COALESCE($3, state),
+			nexus_type      = COALESCE($4, nexus_type),
+			sub_type        = COALESCE($5, sub_type),
+			threshold_amount= COALESCE($6, threshold_amount),
+			effective_date  = COALESCE($7, effective_date),
+			is_active       = COALESCE($8, is_active),
+			updated_at      = NOW()
+		WHERE id = $1 AND tenant_id = $2
+	`, id, tenantID, req.State, req.NexusType, req.SubType, req.ThresholdAmount, req.EffectiveDate, req.IsActive)
+	return err
+}
+
+func (r *FinanceSettingsRepo) DeleteTaxNexus(ctx context.Context, id, tenantID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM tax_nexus WHERE id = $1 AND tenant_id = $2", id, tenantID)
+	return err
+}
+
 func (r *FinanceSettingsRepo) DeleteOrgReconAccount(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM org_reconciliation_accounts WHERE id = $1`, id)
 	return err
 }
+

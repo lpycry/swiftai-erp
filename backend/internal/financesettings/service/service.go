@@ -67,6 +67,51 @@ func (s *FinanceSettingsService) UpdateOrgReconAccount(ctx context.Context, id u
 	return s.repo.UpdateOrgReconAccount(ctx, id, req)
 }
 
+// ── Tax Jurisdictions ──
+
+func (s *FinanceSettingsService) ListTaxJurisdictions(ctx context.Context, tenantID uuid.UUID, activeOnly bool) ([]*fsmodels.TaxJurisdiction, error) {
+	return s.repo.ListTaxJurisdictions(ctx, tenantID, activeOnly)
+}
+
+func (s *FinanceSettingsService) GetTaxJurisdiction(ctx context.Context, id uuid.UUID) (*fsmodels.TaxJurisdiction, error) {
+	return s.repo.GetTaxJurisdiction(ctx, id)
+}
+
+func (s *FinanceSettingsService) CreateTaxJurisdiction(ctx context.Context, tenantID uuid.UUID, req *fsmodels.CreateTaxJurisdictionRequest) (*fsmodels.TaxJurisdiction, error) {
+	return s.repo.CreateTaxJurisdiction(ctx, tenantID, req)
+}
+
+func (s *FinanceSettingsService) UpdateTaxJurisdiction(ctx context.Context, id, tenantID uuid.UUID, req *fsmodels.UpdateTaxJurisdictionRequest) error {
+	return s.repo.UpdateTaxJurisdiction(ctx, id, tenantID, req)
+}
+
+func (s *FinanceSettingsService) DeleteTaxJurisdiction(ctx context.Context, id, tenantID uuid.UUID) error {
+	return s.repo.DeleteTaxJurisdiction(ctx, id, tenantID)
+}
+
+// ── Tax Nexus ──
+
+func (s *FinanceSettingsService) ListTaxNexus(ctx context.Context, tenantID uuid.UUID, activeOnly bool) ([]*fsmodels.TaxNexus, error) {
+	return s.repo.ListTaxNexus(ctx, tenantID, activeOnly)
+}
+
+func (s *FinanceSettingsService) GetTaxNexus(ctx context.Context, id uuid.UUID) (*fsmodels.TaxNexus, error) {
+	return s.repo.GetTaxNexus(ctx, id)
+}
+
+func (s *FinanceSettingsService) CreateTaxNexus(ctx context.Context, tenantID uuid.UUID, req *fsmodels.CreateTaxNexusRequest) (*fsmodels.TaxNexus, error) {
+	return s.repo.CreateTaxNexus(ctx, tenantID, req)
+}
+
+func (s *FinanceSettingsService) UpdateTaxNexus(ctx context.Context, id, tenantID uuid.UUID, req *fsmodels.UpdateTaxNexusRequest) error {
+	return s.repo.UpdateTaxNexus(ctx, id, tenantID, req)
+}
+
+func (s *FinanceSettingsService) DeleteTaxNexus(ctx context.Context, id, tenantID uuid.UUID) error {
+	return s.repo.DeleteTaxNexus(ctx, id, tenantID)
+}
+
 func (s *FinanceSettingsService) DeleteOrgReconAccount(ctx context.Context, id uuid.UUID) error {
 	return s.repo.DeleteOrgReconAccount(ctx, id)
 }
+

@@ -86,7 +86,7 @@ class _InvoiceOverviewScreenState extends State<InvoiceOverviewScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Invoice Overview'),
+        title: const Text('Uninvoiced Goods Receipt'),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
         ],
@@ -299,13 +299,37 @@ class _PODetailQuickView extends StatelessWidget {
               icon: const Icon(Icons.post_add, size: 18),
               label: const Text('Create Invoice'),
               onPressed: () async {
+                // Build prefill data from this PO
+                final prefillItems = po.items
+                  .where((item) => item.receivedQuantity > item.invoicedQuantity)
+                  .map((item) => {
+                    'item_id': item.itemId,
+                    'po_item_id': item.id,
+                    'item_sku': item.itemSku,
+                    'item_name': item.itemName,
+                    'unit_price': item.unitPrice,
+                    'open_qty': item.receivedQuantity - item.invoicedQuantity,
+                    'received_quantity': item.receivedQuantity,
+                    'invoiced_quantity': item.invoicedQuantity,
+                    'po_quantity': item.quantity,
+                    'unit_of_measure': item.unitOfMeasure,
+                  }).toList();
+                final prefillData = {
+                  'po_id': po.id,
+                  'po_number': po.poNumber,
+                  'vendor_id': po.vendorId,
+                  'vendor_name': po.vendorName,
+                  'vendor_code': po.vendorCode,
+                  'items': prefillItems,
+                  'total_amount': openAmount,
+                };
                 final result = await Navigator.push(context, MaterialPageRoute(
                   builder: (_) => InvoiceFormScreen(
                     authService: authService,
                     purchaseService: purchaseService,
+                    prefillData: prefillData,
                   ),
                 ));
-                // If the invoice was created, pop with refresh signal
                 if (result != null && context.mounted) {
                   Navigator.pop(context, true);
                 }

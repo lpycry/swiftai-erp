@@ -387,6 +387,17 @@ func (s *GLService) derivePeriod(ctx context.Context, tenantID uuid.UUID, postin
 		 LIMIT 1`,
 		tenantID, postingDate,
 	).Scan(&periodID)
+	if err == nil {
+		return periodID, nil
+	}
+
+	// Last resort: any period for this tenant + date, regardless of organization
+	err = s.db.QueryRow(ctx,
+		`SELECT id FROM gl_periods
+		 WHERE tenant_id = $1 AND start_date <= $2 AND end_date >= $2 AND is_open = true AND is_locked = false
+		 LIMIT 1`,
+		tenantID, postingDate,
+	).Scan(&periodID)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("no open period found for %s: %w", postingDate.Format("2006-01-02"), err)
 	}

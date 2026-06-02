@@ -13,9 +13,7 @@ import 'package:swiftai_erp/features/logistics/screens/cycle_count_screen.dart';
 import 'package:swiftai_erp/features/purchase/services/purchase_service.dart';
 import 'package:swiftai_erp/features/purchase/screens/vendor_list_screen.dart';
 import 'package:swiftai_erp/features/purchase/screens/po_list_screen.dart';
-import 'package:swiftai_erp/features/purchase/screens/invoice_list_screen.dart';
-import 'package:swiftai_erp/features/purchase/screens/invoice_document_screen.dart';
-import 'package:swiftai_erp/features/purchase/screens/invoice_overview_screen.dart';
+
 
 class LogisticsScreen extends StatelessWidget {
   final AuthService authService;
@@ -89,14 +87,7 @@ class LogisticsScreen extends StatelessWidget {
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VendorListScreen(authService: authService, purchaseService: PurchaseService(authService.accessToken ?? ''))))),
               _LogisticsCard(icon: Icons.description, title: 'Purchase Orders', subtitle: 'Create, manage & track PO lifecycle', color: Colors.blue,
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => POListScreen(authService: authService, purchaseService: PurchaseService(authService.accessToken ?? ''))))),
-              _LogisticsCard(icon: Icons.receipt, title: 'Invoices', subtitle: 'Supplier invoices with 3-way matching', color: Colors.orange,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceListScreen(authService: authService, purchaseService: PurchaseService(authService.accessToken ?? ''))))),
-              _LogisticsCard(icon: Icons.article, title: 'Display Invoice Document', subtitle: 'View invoice details, items & 3-way match info', color: Colors.deepOrange,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceDocumentScreen(
-                  authService: authService, purchaseService: PurchaseService(authService.accessToken ?? ''))))),
-              _LogisticsCard(icon: Icons.pending_actions, title: 'Invoice Overview', subtitle: 'POs received but not yet invoiced', color: Colors.brown,
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => InvoiceOverviewScreen(
-                  authService: authService, purchaseService: PurchaseService(authService.accessToken ?? ''))))),
+
             ]),
           ],
         ),

@@ -43,6 +43,8 @@ func (r *ProductRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, re
 		BatchTracked:  req.BatchTracked,
 		SerialTracked: req.SerialTracked,
 		ShelfLifeDays: req.ShelfLifeDays,
+		TaxCategory:   "STANDARD",
+		TaxType:       "SALES_TAX",
 		DimensionLength: req.DimensionLength,
 		DimensionWidth:  req.DimensionWidth,
 		DimensionHeight: req.DimensionHeight,
@@ -81,6 +83,17 @@ func (r *ProductRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, re
 	if p.WeightUnit == "" {
 		p.WeightUnit = "kg"
 	}
+	if req.TaxCategory != "" {
+		p.TaxCategory = req.TaxCategory
+	}
+	if req.TaxType != "" {
+		p.TaxType = req.TaxType
+	}
+	if req.DefaultTaxJurisdictionID != nil && *req.DefaultTaxJurisdictionID != "" {
+		if id, err := uuid.Parse(*req.DefaultTaxJurisdictionID); err == nil {
+			p.DefaultTaxJurisdictionID = &id
+		}
+	}
 
 	// Default UOM group to base UOM if not set
 	uomGroup := req.UOMGroup
@@ -99,9 +112,11 @@ func (r *ProductRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, re
 			abc_classification, valuation_class, hs_code, country_of_origin,
 			storage_condition, procurement_type,
 			min_stock_qty, max_stock_qty, reorder_point, reorder_qty, lead_time_days,
-			is_serialized, is_active, created_at, updated_at)
+			is_serialized, is_active,
+			tax_category, tax_rate, tax_type, tax_exempt_reason, default_tax_jurisdiction_id,
+			created_at, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
-			$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40)
+			$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45)
 	`, p.ID, p.TenantID, p.CategoryID, p.SKU, p.Barcode, p.Name, p.Description,
 		p.UnitOfMeasure, uomGroup, p.BatchTracked, p.SerialTracked, p.ShelfLifeDays,
 		p.DimensionLength, p.DimensionWidth, p.DimensionHeight, p.DimensionUnit,
@@ -111,7 +126,9 @@ func (r *ProductRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, re
 		p.ABCClassification, p.ValuationClass, p.HSCode, p.CountryOfOrigin,
 		p.StorageCondition, p.ProcurementType,
 		p.MinStockQty, p.MaxStockQty, p.ReorderPoint, p.ReorderQty, p.LeadTimeDays,
-		p.IsSerialized, p.IsActive, p.CreatedAt, p.UpdatedAt)
+		p.IsSerialized, p.IsActive,
+		p.TaxCategory, p.TaxRate, p.TaxType, p.TaxExemptReason, p.DefaultTaxJurisdictionID,
+		p.CreatedAt, p.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert product: %w", err)
 	}
@@ -132,7 +149,9 @@ func (r *ProductRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*whm
 		       COALESCE(p.hs_code,''), COALESCE(p.country_of_origin,''),
 		       COALESCE(p.storage_condition,''), COALESCE(p.procurement_type,''),
 		       p.min_stock_qty, p.max_stock_qty, p.reorder_point, p.reorder_qty, p.lead_time_days,
-		       p.is_serialized, p.is_active, p.created_at, p.updated_at
+		       p.is_serialized, p.is_active,
+		       p.tax_category, p.tax_rate, p.tax_type, COALESCE(p.tax_exempt_reason,''), p.default_tax_jurisdiction_id,
+		       p.created_at, p.updated_at
 		FROM products p
 		LEFT JOIN product_categories pc ON pc.id = p.category_id
 		WHERE p.id = $1 AND p.tenant_id = $2
@@ -148,7 +167,9 @@ func (r *ProductRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*whm
 		&p.HSCode, &p.CountryOfOrigin,
 		&p.StorageCondition, &p.ProcurementType,
 		&p.MinStockQty, &p.MaxStockQty, &p.ReorderPoint, &p.ReorderQty, &p.LeadTimeDays,
-		&p.IsSerialized, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+		&p.IsSerialized, &p.IsActive,
+		&p.TaxCategory, &p.TaxRate, &p.TaxType, &p.TaxExemptReason, &p.DefaultTaxJurisdictionID,
+		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get product: %w", err)
@@ -169,7 +190,9 @@ func (r *ProductRepo) List(ctx context.Context, tenantID uuid.UUID, search strin
 		       COALESCE(p.hs_code,''), COALESCE(p.country_of_origin,''),
 		       COALESCE(p.storage_condition,''), COALESCE(p.procurement_type,''),
 		       p.min_stock_qty, p.max_stock_qty, p.reorder_point, p.reorder_qty, p.lead_time_days,
-		       p.is_serialized, p.is_active, p.created_at, p.updated_at
+		       p.is_serialized, p.is_active,
+		       p.tax_category, p.tax_rate, p.tax_type, COALESCE(p.tax_exempt_reason,''), p.default_tax_jurisdiction_id,
+		       p.created_at, p.updated_at
 		FROM products p
 		LEFT JOIN product_categories pc ON pc.id = p.category_id
 		WHERE p.tenant_id = $1
@@ -205,7 +228,9 @@ func (r *ProductRepo) List(ctx context.Context, tenantID uuid.UUID, search strin
 			&p.HSCode, &p.CountryOfOrigin,
 			&p.StorageCondition, &p.ProcurementType,
 			&p.MinStockQty, &p.MaxStockQty, &p.ReorderPoint, &p.ReorderQty, &p.LeadTimeDays,
-			&p.IsSerialized, &p.IsActive, &p.CreatedAt, &p.UpdatedAt,
+			&p.IsSerialized, &p.IsActive,
+			&p.TaxCategory, &p.TaxRate, &p.TaxType, &p.TaxExemptReason, &p.DefaultTaxJurisdictionID,
+			&p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan product: %w", err)
@@ -368,9 +393,14 @@ func (r *ProductRepo) Update(ctx context.Context, id, tenantID uuid.UUID, req *w
 			reorder_point    = COALESCE($32, reorder_point),
 			reorder_qty      = COALESCE($33, reorder_qty),
 			lead_time_days   = COALESCE($34, lead_time_days),
-			is_serialized    = COALESCE($35, is_serialized),
-			is_active        = COALESCE($36, is_active),
-			updated_at       = NOW()
+			is_serialized                 = COALESCE($35, is_serialized),
+			is_active                     = COALESCE($36, is_active),
+			tax_category                  = COALESCE($37, tax_category),
+			tax_rate                      = COALESCE($38, tax_rate),
+			tax_type                      = COALESCE($39, tax_type),
+			tax_exempt_reason             = COALESCE($40, tax_exempt_reason),
+			default_tax_jurisdiction_id   = COALESCE($41, default_tax_jurisdiction_id),
+			updated_at                    = NOW()
 		WHERE id = $1 AND tenant_id = $2
 	`, id, tenantID,
 		req.CategoryID,
@@ -406,7 +436,12 @@ func (r *ProductRepo) Update(ctx context.Context, id, tenantID uuid.UUID, req *w
 		req.ReorderQty,
 		req.LeadTimeDays,
 		req.IsSerialized,
-		req.IsActive)
+		req.IsActive,
+		req.TaxCategory,
+		req.TaxRate,
+		req.TaxType,
+		req.TaxExemptReason,
+		req.DefaultTaxJurisdictionID)
 	return err
 }
 

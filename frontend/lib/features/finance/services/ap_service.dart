@@ -124,6 +124,7 @@ class DownPaymentModel {
       case 'PARTIALLY_CLEARED': return 'Partially Cleared';
       case 'FULLY_CLEARED': return 'Fully Cleared';
       case 'PARTIALLY_REFUNDED': return 'Partially Refunded';
+      case 'REVERSED': return 'Reversed';
       case 'FULLY_REFUNDED': return 'Fully Refunded';
       default: return status;
     }
@@ -131,6 +132,7 @@ class DownPaymentModel {
 
   bool get canRefund => status == 'POSTED' || status == 'PARTIALLY_CLEARED';
   bool get canClear => status == 'POSTED' || status == 'PARTIALLY_CLEARED';
+  bool get canReverse => status == 'POSTED'; // only clean POSTED DPs can be reversed
 }
 
 class JELineModel {
@@ -333,6 +335,17 @@ class ApService {
     }
   }
 
+  Future<void> reverseDownPayment(String id) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/down-payments/$id/reverse'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to reverse down payment');
+    }
+  }
+
   Future<Map<String, dynamic>> refundDownPayment(String id, Map<String, dynamic> data) async {
     final resp = await http.post(
       Uri.parse('$_baseUrl/purchase/down-payments/$id/refund'),
@@ -357,6 +370,31 @@ class ApService {
     return data.map((e) => DPClearingModel.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  // ── Vendor Payments & Open Items ──
+
+  Future<List<OpenItemModel>> getVendorOpenItems(String vendorId) async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/purchase/vendor-open-items?vendor_id=$vendorId'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    final body = jsonDecode(resp.body);
+    final data = body['data'] as List<dynamic>? ?? [];
+    return data.map((e) => OpenItemModel.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  Future<void> createVendorPayment(Map<String, dynamic> data) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/vendor-payments'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to create payment');
+    }
+  }
+
   static String fmtAmount(num? value) {
     final v = (value ?? 0).toDouble();
     if (v.isNaN || v.isInfinite) return "0.00";
@@ -369,4 +407,50 @@ class ApService {
     }
     return '${buf.toString()}.${parts[1]}';
   }
+}
+
+// ═══════════════════════════════════════════
+//  Open Item Model
+// ═══════════════════════════════════════════
+
+class OpenItemModel {
+  final String id;
+  final String type; // 'INVOICE' or 'DOWN_PAYMENT'
+  final String documentNo;
+  final String date;
+  final String dueDate;
+  final double totalAmount;
+  final double openAmount;
+  final String currency;
+  final bool isDownPayment;
+  bool selected;
+
+  OpenItemModel({
+    required this.id,
+    required this.type,
+    required this.documentNo,
+    required this.date,
+    required this.dueDate,
+    required this.totalAmount,
+    required this.openAmount,
+    required this.currency,
+    required this.isDownPayment,
+    this.selected = false,
+  });
+
+  factory OpenItemModel.fromJson(Map<String, dynamic> json) {
+    return OpenItemModel(
+      id: json['id']?.toString() ?? '',
+      type: json['type']?.toString() ?? '',
+      documentNo: json['document_no']?.toString() ?? '',
+      date: json['date']?.toString() ?? '',
+      dueDate: json['due_date']?.toString() ?? '',
+      totalAmount: (json['total_amount'] as num?)?.toDouble() ?? 0,
+      openAmount: (json['open_amount'] as num?)?.toDouble() ?? 0,
+      currency: json['currency']?.toString() ?? 'USD',
+      isDownPayment: json['is_down_payment'] as bool? ?? false,
+    );
+  }
+
+  String get typeLabel => isDownPayment ? 'Down Payment' : 'Invoice';
 }

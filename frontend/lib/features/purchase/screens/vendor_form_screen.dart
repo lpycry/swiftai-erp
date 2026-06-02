@@ -6,7 +6,12 @@ class VendorFormScreen extends StatefulWidget {
   final AuthService authService;
   final PurchaseService purchaseService;
   final VendorModel? vendor;
-  const VendorFormScreen({super.key, required this.authService, required this.purchaseService, this.vendor});
+  const VendorFormScreen({
+    super.key,
+    required this.authService,
+    required this.purchaseService,
+    this.vendor,
+  });
 
   @override
   State<VendorFormScreen> createState() => _VendorFormScreenState();
@@ -44,8 +49,12 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
     _contactPersonCtrl = TextEditingController(text: v?.contactPerson ?? '');
     _contactEmailCtrl = TextEditingController(text: v?.contactEmail ?? '');
     _contactPhoneCtrl = TextEditingController(text: v?.contactPhone ?? '');
-    _leadTimeCtrl = TextEditingController(text: v?.leadTimeDays.toString() ?? '');
-    _paymentTermsCtrl = TextEditingController(text: v?.paymentTerms ?? 'Net 30');
+    _leadTimeCtrl = TextEditingController(
+      text: v?.leadTimeDays.toString() ?? '',
+    );
+    _paymentTermsCtrl = TextEditingController(
+      text: v?.paymentTerms ?? 'Net 30',
+    );
     _currency = v?.currency ?? 'USD';
     _reconciliationAccountId = v?.reconciliationAccountId;
     _loadReconAccounts();
@@ -53,16 +62,22 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
 
   @override
   void dispose() {
-    _codeCtrl.dispose(); _nameCtrl.dispose(); _taxCtrl.dispose();
-    _addressCtrl.dispose(); _contactPersonCtrl.dispose();
-    _contactEmailCtrl.dispose(); _contactPhoneCtrl.dispose();
-    _leadTimeCtrl.dispose(); _paymentTermsCtrl.dispose();
+    _codeCtrl.dispose();
+    _nameCtrl.dispose();
+    _taxCtrl.dispose();
+    _addressCtrl.dispose();
+    _contactPersonCtrl.dispose();
+    _contactEmailCtrl.dispose();
+    _contactPhoneCtrl.dispose();
+    _leadTimeCtrl.dispose();
+    _paymentTermsCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadReconAccounts() async {
     try {
-      _reconAccounts = await widget.purchaseService.listVendorReconciliationAccounts();
+      _reconAccounts = await widget.purchaseService
+          .listVendorReconciliationAccounts();
     } catch (_) {
       _reconAccounts = [];
     }
@@ -87,7 +102,8 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
       };
 
       // Only send if a reconciliation account was actually selected
-      if (_reconciliationAccountId != null && _reconciliationAccountId!.isNotEmpty) {
+      if (_reconciliationAccountId != null &&
+          _reconciliationAccountId!.isNotEmpty) {
         data['reconciliation_account_id'] = _reconciliationAccountId;
       }
 
@@ -95,14 +111,20 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
         await widget.purchaseService.updateVendor(widget.vendor!.id, data);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Vendor updated'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('Vendor updated'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
       } else {
         await widget.purchaseService.createVendor(data);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Vendor created'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('Vendor created'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
       }
@@ -126,10 +148,15 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Vendor'),
-        content: Text('Are you sure you want to delete "${v.name}" (${v.vendorCode})?\n\n'
-            'This action cannot be undone. Vendors with existing purchase orders, receipts, or invoices cannot be deleted.'),
+        content: Text(
+          'Are you sure you want to delete "${v.name}" (${v.vendorCode})?\n\n'
+          'This action cannot be undone. Vendors with existing purchase orders, receipts, or invoices cannot be deleted.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
@@ -145,7 +172,10 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
       await widget.purchaseService.deleteVendor(v.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Vendor deleted'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Vendor deleted'),
+            backgroundColor: Colors.green,
+          ),
         );
         Navigator.pop(context, true);
       }
@@ -171,77 +201,120 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
           padding: const EdgeInsets.all(20),
           children: [
             // Code & Name
-            Row(children: [
-              Expanded(child: TextFormField(
-                controller: _codeCtrl,
-                decoration: const InputDecoration(labelText: 'Vendor Code *'),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: TextFormField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(labelText: 'Vendor Name *'),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-              )),
-            ]),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _codeCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Vendor Code *',
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Vendor Name *',
+                    ),
+                    validator: (v) =>
+                        (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             // Tax & Currency
-            Row(children: [
-              Expanded(child: TextFormField(
-                controller: _taxCtrl,
-                decoration: const InputDecoration(labelText: 'Tax Number'),
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: DropdownButtonFormField<String>(
-                value: _currency,
-                decoration: const InputDecoration(labelText: 'Currency'),
-                items: ['USD', 'EUR', 'GBP', 'CNY', 'JPY', 'HKD', 'SGD'].map((c) =>
-                    DropdownMenuItem(value: c, child: Text(c))).toList(),
-                onChanged: (v) => setState(() => _currency = v ?? 'USD'),
-              )),
-            ]),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _taxCtrl,
+                    decoration: const InputDecoration(labelText: 'Tax Number'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: _currency,
+                    decoration: const InputDecoration(labelText: 'Currency'),
+                    items: ['USD', 'EUR', 'GBP', 'CNY', 'JPY', 'HKD', 'SGD']
+                        .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (v) => setState(() => _currency = v ?? 'USD'),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             // Payment Terms & Lead Time
-            Row(children: [
-              Expanded(child: TextFormField(
-                controller: _paymentTermsCtrl,
-                decoration: const InputDecoration(labelText: 'Payment Terms'),
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: TextFormField(
-                controller: _leadTimeCtrl,
-                decoration: const InputDecoration(labelText: 'Lead Time (days)'),
-                keyboardType: TextInputType.number,
-              )),
-            ]),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _paymentTermsCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Payment Terms',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _leadTimeCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Lead Time (days)',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             // ── Reconciliation Account (must be a dropdown, user selects only) ──
             _loadingAccounts
-                ? const Center(child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                  ))
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  )
                 : DropdownButtonFormField<String>(
                     value: _reconciliationAccountId,
                     decoration: const InputDecoration(
                       labelText: 'Reconciliation Account',
                       hintText: 'Select vendor reconciliation account',
-                      helperText: 'Used for auto GL posting during invoice verification',
+                      helperText:
+                          'Used for auto GL posting during invoice verification',
                       helperMaxLines: 2,
                     ),
                     isExpanded: true,
                     items: [
-                      const DropdownMenuItem(value: '', child: Text('None (no auto GL posting)')),
+                      const DropdownMenuItem(
+                        value: '',
+                        child: Text('None (no auto GL posting)'),
+                      ),
                       ..._reconAccounts.map((a) {
                         final code = a['account_code']?.toString() ?? '';
                         final name = a['account_name']?.toString() ?? '';
                         return DropdownMenuItem(
                           value: a['id']?.toString(),
-                          child: Text('$code - $name', overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            '$code - $name',
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }),
                     ],
-                    onChanged: (v) => setState(() => _reconciliationAccountId = v),
+                    onChanged: (v) =>
+                        setState(() => _reconciliationAccountId = v),
                   ),
             const SizedBox(height: 16),
             // Contact info
@@ -250,19 +323,29 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
               decoration: const InputDecoration(labelText: 'Contact Person'),
             ),
             const SizedBox(height: 16),
-            Row(children: [
-              Expanded(child: TextFormField(
-                controller: _contactEmailCtrl,
-                decoration: const InputDecoration(labelText: 'Contact Email'),
-                keyboardType: TextInputType.emailAddress,
-              )),
-              const SizedBox(width: 12),
-              Expanded(child: TextFormField(
-                controller: _contactPhoneCtrl,
-                decoration: const InputDecoration(labelText: 'Contact Phone'),
-                keyboardType: TextInputType.phone,
-              )),
-            ]),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _contactEmailCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Contact Email',
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _contactPhoneCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Contact Phone',
+                    ),
+                    keyboardType: TextInputType.phone,
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _addressCtrl,
@@ -277,14 +360,29 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
                 decoration: BoxDecoration(
                   color: Colors.indigo.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.indigo.withValues(alpha: 0.15)),
+                  border: Border.all(
+                    color: Colors.indigo.withValues(alpha: 0.15),
+                  ),
                 ),
-                child: Row(children: [
-                  Icon(Icons.auto_awesome, color: Colors.indigo.shade400, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('Vendors with good data quality get higher AI ratings for smart recommendations',
-                      style: TextStyle(fontSize: 12, color: Colors.indigo.shade700))),
-                ]),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.auto_awesome,
+                      color: Colors.indigo.shade400,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Vendors with good data quality get higher AI ratings for smart recommendations',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.indigo.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
             const SizedBox(height: 24),
@@ -292,7 +390,14 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
             ElevatedButton(
               onPressed: (_saving || _deleting) ? null : _save,
               child: _saving
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
                   : Text(isEdit ? 'Update Vendor' : 'Create Vendor'),
             ),
             // Delete button (edit mode only)
@@ -301,7 +406,14 @@ class _VendorFormScreenState extends State<VendorFormScreen> {
               OutlinedButton.icon(
                 onPressed: (_saving || _deleting) ? null : _deleteVendor,
                 icon: _deleting
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.red,
+                        ),
+                      )
                     : const Icon(Icons.delete_outline, size: 18),
                 label: Text(_deleting ? 'Deleting...' : 'Delete Vendor'),
                 style: OutlinedButton.styleFrom(
