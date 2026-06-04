@@ -53,7 +53,7 @@ class _DateFormatScreenState extends State<DateFormatScreen> {
 
     showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) => AlertDialog(
       title: Text(isEditing ? 'Edit Date Format' : 'New Date Format'),
-      content: SizedBox(width: 420, child: Form(key: formKey, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      content: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420, maxHeight: 500), child: Form(key: formKey, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         if (!isEditing)
           TextFormField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Code *', hintText: 'DD_MM_YYYY'),
             style: const TextStyle(fontFamily: 'monospace', fontSize: 13), validator: (v) => v == null || v.isEmpty ? 'Required' : null),
