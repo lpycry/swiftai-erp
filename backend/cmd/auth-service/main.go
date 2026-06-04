@@ -510,6 +510,7 @@ func main() {
 		protected.GET("/date-formats", dateFormatHandler.List)
 		protected.GET("/date-formats/:id", dateFormatHandler.Get)
 		protected.PUT("/date-formats/:id", dateFormatHandler.Update)
+		protected.POST("/date-formats/:id/activate", dateFormatHandler.SetActive)
 		protected.DELETE("/date-formats/:id", dateFormatHandler.Delete)
 
 	}

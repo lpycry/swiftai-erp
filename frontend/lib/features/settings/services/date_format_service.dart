@@ -36,6 +36,15 @@ class DateFormatService {
     return (jsonDecode(resp.body)['data'] ?? {}) as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> activateDateFormat(String id) async {
+    final resp = await http.post(Uri.parse('$_baseUrl/date-formats/$id/activate'), headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to activate date format');
+    }
+    return (jsonDecode(resp.body)['data'] ?? {}) as Map<String, dynamic>;
+  }
+
   Future<void> deleteDateFormat(String id) async {
     final resp = await http.delete(Uri.parse('$_baseUrl/date-formats/$id'), headers: _headers);
     if (resp.statusCode >= 400) {

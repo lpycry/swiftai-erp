@@ -126,3 +126,21 @@ func (r *DateFormatRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) err
 	if err != nil { return fmt.Errorf("delete date format: %w", err) }
 	return nil
 }
+
+// SetActive sets one format as active and deactivates all others
+func (r *DateFormatRepo) SetActive(ctx context.Context, id, tenantID uuid.UUID) (*dfmodels.DateFormat, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil { return nil, fmt.Errorf("begin tx: %w", err) }
+	defer tx.Rollback(ctx)
+
+	// Deactivate all formats for this tenant
+	_, err = tx.Exec(ctx, "UPDATE date_formats SET is_active = false, updated_at = NOW() WHERE tenant_id = $1", tenantID)
+	if err != nil { return nil, fmt.Errorf("deactivate all: %w", err) }
+
+	// Activate target by just updating and re-fetching
+	_, err = tx.Exec(ctx, "UPDATE date_formats SET is_active = true, updated_at = NOW() WHERE id = $1 AND tenant_id = $2", id, tenantID)
+	if err != nil { return nil, fmt.Errorf("activate target: %w", err) }
+
+	if err := tx.Commit(ctx); err != nil { return nil, fmt.Errorf("commit: %w", err) }
+	return r.GetByID(ctx, id, tenantID)
+}

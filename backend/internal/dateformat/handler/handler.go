@@ -96,6 +96,17 @@ func (h *DateFormatHandler) Update(c *gin.Context) {
 	response.OK(c, df)
 }
 
+func (h *DateFormatHandler) SetActive(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	df, err := h.repo.SetActive(c.Request.Context(), id, tenantID)
+	if err != nil { response.InternalError(c, err.Error()); return }
+	if df == nil { response.NotFound(c, "date format not found"); return }
+	response.OK(c, df)
+}
+
 func (h *DateFormatHandler) Delete(c *gin.Context) {
 	tenantID, err := getTenantID(c)
 	if err != nil { response.BadRequest(c, "missing tenant context"); return }
