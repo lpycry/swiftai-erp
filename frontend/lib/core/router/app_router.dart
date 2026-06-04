@@ -22,6 +22,7 @@ import '../../features/settings/services/finance_settings_service.dart';
 import '../../features/settings/screens/settings_screen.dart';
 import '../../features/sales/services/sales_service.dart';
 import '../../features/sales/screens/sales_screen.dart';
+import '../../features/hr/screens/hr_dashboard_screen.dart';
 import '../services/auth_service.dart';
 
 class AppRouter {
@@ -43,6 +44,7 @@ class AppRouter {
   static const String logisticsRoute = '/logistics';
   static const String financeSettingsRoute = '/settings/finance';
   static const String salesRoute = '/sales';
+  static const String hrRoute = '/hr';
 
   final AuthService _authService;
 
@@ -177,6 +179,11 @@ class AppRouter {
             authService: _authService,
             salesService: SalesService(_authService.accessToken ?? ''),
           ),
+          settings: settings,
+        );
+      case hrRoute:
+        return MaterialPageRoute(
+          builder: (_) => HrDashboardScreen(authService: _authService),
           settings: settings,
         );
       default:

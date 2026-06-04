@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -73,4 +75,236 @@ func (s *SalesService) UpdateMaterialPrice(ctx context.Context, id, tenantID uui
 
 func (s *SalesService) DeleteMaterialPrice(ctx context.Context, id, tenantID uuid.UUID) error {
 	return s.repo.DeleteMaterialPrice(ctx, id, tenantID)
+}
+
+func (s *SalesService) LookupMaterialPrice(ctx context.Context, tenantID, customerID, productID uuid.UUID) (*salesmodels.MaterialPrice, error) {
+	return s.repo.LookupMaterialPrice(ctx, tenantID, customerID, productID)
+}
+
+// ── Quotations ──
+
+func (s *SalesService) ListQuotations(ctx context.Context, tenantID uuid.UUID, status string) ([]*salesmodels.Quotation, error) {
+	return s.repo.ListQuotations(ctx, tenantID, status)
+}
+
+func (s *SalesService) GetQuotation(ctx context.Context, id, tenantID uuid.UUID) (*salesmodels.Quotation, error) {
+	return s.repo.GetQuotation(ctx, id, tenantID)
+}
+
+func (s *SalesService) CreateQuotation(ctx context.Context, tenantID uuid.UUID, req *salesmodels.CreateQuotationRequest, userID *uuid.UUID) (*salesmodels.Quotation, error) {
+	customerID, _ := uuid.Parse(req.CustomerID)
+
+	// Generate quotation number
+	qNo, err := s.repo.GetNextQuotationNo(ctx, tenantID)
+	if err != nil { return nil, fmt.Errorf("generate number: %w", err) }
+
+	validFrom := time.Now()
+	if req.ValidFrom != "" {
+		if d, err := time.Parse("2006-01-02", req.ValidFrom); err == nil { validFrom = d }
+	}
+	var validTo *time.Time
+	if req.ValidTo != "" {
+		if d, err := time.Parse("2006-01-02", req.ValidTo); err == nil { validTo = &d }
+	}
+	var deliveryDate *time.Time
+	if req.DeliveryDate != "" {
+		if d, err := time.Parse("2006-01-02", req.DeliveryDate); err == nil { deliveryDate = &d }
+	}
+
+	qType := req.QuotationType
+	if qType == "" { qType = "STANDARD" }
+	currency := req.Currency
+	if currency == "" { currency = "USD" }
+	paymentTerms := req.PaymentTerms
+	if paymentTerms == "" { paymentTerms = "Net 30" }
+
+	// Calculate totals
+	var totalAmount float64
+	var items []*salesmodels.QuotationItem
+	for i, it := range req.Items {
+		prodID, _ := uuid.Parse(it.ProductID)
+		uom := it.UOM
+		if uom == "" { uom = "EA" }
+		lineTotal := it.Quantity * it.UnitPrice * (1 - it.DiscountPct/100)
+		totalAmount += lineTotal
+
+		var itemDelDate *time.Time
+		if it.DeliveryDate != "" {
+			if d, err := time.Parse("2006-01-02", it.DeliveryDate); err == nil { itemDelDate = &d }
+		}
+
+		items = append(items, &salesmodels.QuotationItem{
+			ID: uuid.New(), QuotationID: uuid.Nil, LineNo: i + 10,
+			ProductID: prodID, Description: it.Description,
+			Quantity: it.Quantity, UnitOfMeasure: uom, UnitPrice: it.UnitPrice,
+			DiscountPct: it.DiscountPct, LineTotal: lineTotal,
+			DeliveryDate: itemDelDate, CreatedAt: time.Now(),
+		})
+	}
+
+	discountAmt := totalAmount * req.DiscountPct / 100
+	netAmount := totalAmount - discountAmt
+	grandTotal := netAmount + req.TaxAmount
+
+	// Parse employee_id
+	var empID *uuid.UUID
+	if req.EmployeeID != "" { if e, err := uuid.Parse(req.EmployeeID); err == nil { empID = &e } }
+
+	q := &salesmodels.Quotation{
+		ID: uuid.New(), TenantID: tenantID, CustomerID: customerID,
+		QuotationNo: qNo, QuotationType: qType, Status: "DRAFT",
+		ValidFrom: validFrom, ValidTo: validTo,
+		Currency: currency, PaymentTerms: paymentTerms, Incoterm: req.Incoterm,
+		DeliveryDate: deliveryDate,
+		TotalAmount: totalAmount, DiscountPct: req.DiscountPct, DiscountAmount: discountAmt,
+		NetAmount: netAmount, TaxAmount: req.TaxAmount,
+		TaxCalcSource: req.TaxCalcSource, TaxCalcDetail: req.TaxCalcDetail, TaxCalcRate: req.TaxCalcRate,
+		GrandTotal: grandTotal,
+		Notes: req.Notes, InternalNotes: req.InternalNotes,
+		ReferenceInquiry: req.ReferenceInquiry,
+		EmployeeID: empID,
+		CreatedBy: userID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+
+	// Set quotation_id on items after q.ID is known
+	for _, item := range items {
+		item.QuotationID = q.ID
+	}
+
+	if err := s.repo.CreateQuotation(ctx, q, items); err != nil {
+		return nil, err
+	}
+	// Re-fetch to populate JOINed fields (employee_code, employee_name, customer_code, etc.)
+	if full, err := s.repo.GetQuotation(ctx, q.ID, tenantID); err == nil && full != nil {
+		q = full
+	} else {
+		// Fallback: set items from create
+		for _, it := range items { q.Items = append(q.Items, *it) }
+	}
+	return q, nil
+}
+
+func (s *SalesService) UpdateQuotationStatus(ctx context.Context, id, tenantID uuid.UUID, status string) error {
+	return s.repo.UpdateQuotationStatus(ctx, id, tenantID, status)
+}
+
+func (s *SalesService) DeleteQuotation(ctx context.Context, id, tenantID uuid.UUID) error {
+	return s.repo.DeleteQuotation(ctx, id, tenantID)
+}
+
+func (s *SalesService) PrintQuotation(ctx context.Context, id, tenantID uuid.UUID) (*salesmodels.Quotation, error) {
+	return s.repo.GetQuotationForPrint(ctx, id, tenantID)
+}
+
+// ── Sales Orders ──
+
+func (s *SalesService) ListSalesOrders(ctx context.Context, tenantID uuid.UUID, status string) ([]*salesmodels.SalesOrder, error) {
+	return s.repo.ListSalesOrders(ctx, tenantID, status)
+}
+
+func (s *SalesService) GetSalesOrder(ctx context.Context, id, tenantID uuid.UUID) (*salesmodels.SalesOrder, error) {
+	return s.repo.GetSalesOrder(ctx, id, tenantID)
+}
+
+func (s *SalesService) CreateSalesOrder(ctx context.Context, tenantID uuid.UUID, req *salesmodels.CreateSalesOrderRequest, userID *uuid.UUID) (*salesmodels.SalesOrder, error) {
+	customerID, _ := uuid.Parse(req.CustomerID)
+	soNo, err := s.repo.GetNextSONo(ctx, tenantID)
+	if err != nil { return nil, fmt.Errorf("generate so number: %w", err) }
+
+	// Parse the quotation if provided
+	var quotationID *uuid.UUID
+	if req.QuotationID != "" {
+		if qid, err := uuid.Parse(req.QuotationID); err == nil { quotationID = &qid }
+	}
+
+	validFrom := time.Now()
+	if req.ValidFrom != "" { if d, err := time.Parse("2006-01-02", req.ValidFrom); err == nil { validFrom = d } }
+	var deliveryDate, requestedDate, poDate *time.Time
+	if req.DeliveryDate != "" { if d, err := time.Parse("2006-01-02", req.DeliveryDate); err == nil { deliveryDate = &d } }
+	if req.RequestedDate != "" { if d, err := time.Parse("2006-01-02", req.RequestedDate); err == nil { requestedDate = &d } }
+	if req.PODate != "" { if d, err := time.Parse("2006-01-02", req.PODate); err == nil { poDate = &d } }
+
+	currency := req.Currency; if currency == "" { currency = "USD" }
+	paymentTerms := req.PaymentTerms; if paymentTerms == "" { paymentTerms = "Net 30" }
+
+	// Build items and calculate totals
+	var totalAmount float64
+	var items []*salesmodels.SalesOrderItem
+	for i, it := range req.Items {
+		prodID, _ := uuid.Parse(it.ProductID)
+		uom := it.UOM; if uom == "" { uom = "EA" }
+		lineTotal := it.Quantity * it.UnitPrice * (1 - it.DiscountPct/100)
+		totalAmount += lineTotal
+		var itemDelDate *time.Time
+		if it.DeliveryDate != "" { if d, err := time.Parse("2006-01-02", it.DeliveryDate); err == nil { itemDelDate = &d } }
+		items = append(items, &salesmodels.SalesOrderItem{
+			ID: uuid.New(), SOID: uuid.Nil, LineNo: i + 10,
+			ProductID: prodID, Description: it.Description,
+			Quantity: it.Quantity, UnitOfMeasure: uom, UnitPrice: it.UnitPrice,
+			DiscountPct: it.DiscountPct, LineTotal: lineTotal,
+			DeliveryDate: itemDelDate, CreatedAt: time.Now(),
+		})
+	}
+
+	discountAmt := totalAmount * req.DiscountPct / 100
+	netAmount := totalAmount - discountAmt
+	grandTotal := netAmount + req.TaxAmount
+
+	so := &salesmodels.SalesOrder{
+		ID: uuid.New(), TenantID: tenantID, CustomerID: customerID, QuotationID: quotationID,
+		SONumber: soNo, SOType: "STANDARD", Status: "DRAFT",
+		CustomerPONo: req.CustomerPONo, PODate: poDate,
+		Currency: currency, PaymentTerms: paymentTerms, Incoterm: req.Incoterm,
+		ValidFrom: validFrom, DeliveryDate: deliveryDate, RequestedDate: requestedDate,
+		TotalAmount: totalAmount, DiscountPct: req.DiscountPct, DiscountAmount: discountAmt,
+		NetAmount: netAmount, TaxAmount: req.TaxAmount, GrandTotal: grandTotal,
+		Notes: req.Notes, InternalNotes: req.InternalNotes,
+		Carrier: req.Carrier, ShippingMethod: req.ShippingMethod, ShipperAccount: req.ShipperAccount,
+		SignatureRequired: req.SignatureRequired, SaturdayDelivery: req.SaturdayDelivery, InsuranceAmt: req.InsuranceAmt,
+		TransportationTo: req.TransportationTo, TransportPayerAccount: req.TransportPayerAcct, BillToAddress: req.BillToAddress,
+		CreditCheckStatus: "PENDING", InventoryCheckStatus: "PENDING", TaxCalcStatus: "PENDING", AllocationStatus: "PENDING",
+		CreatedBy: userID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	}
+
+	for _, item := range items { item.SOID = so.ID }
+
+	if err := s.repo.CreateSalesOrder(ctx, so, items); err != nil { return nil, err }
+
+	// ── Automated Checks ──
+	// 1. Inventory Check
+	invStatus, _ := s.repo.CheckInventory(ctx, tenantID, items)
+	so.InventoryCheckStatus = invStatus
+
+	// 2. Credit Check
+	creditStatus, _ := s.repo.CheckCreditLimit(ctx, tenantID, customerID, grandTotal)
+	so.CreditCheckStatus = creditStatus
+
+	// 3. Tax Calculation
+	taxAmount, taxStatus, _ := s.repo.CalculateTax(ctx, tenantID, customerID, netAmount)
+	if taxStatus == "CALCULATED" && req.TaxAmount == 0 {
+		so.TaxAmount = taxAmount
+		so.GrandTotal = netAmount + taxAmount
+	}
+	so.TaxCalcStatus = taxStatus
+
+	// 4. Inventory Allocation
+	allocStatus, _ := s.repo.AllocateInventory(ctx, tenantID, items)
+	so.AllocationStatus = allocStatus
+
+	// Update SO status to CONFIRMED if all checks pass
+	if invStatus == "AVAILABLE" && creditStatus != "FAILED" {
+		so.Status = "CONFIRMED"
+		_ = s.repo.UpdateSOStatus(ctx, so.ID, tenantID, "CONFIRMED")
+	}
+
+	for _, it := range items { so.Items = append(so.Items, *it) }
+	return so, nil
+}
+
+func (s *SalesService) UpdateSOStatus(ctx context.Context, id, tenantID uuid.UUID, status string) error {
+	return s.repo.UpdateSOStatus(ctx, id, tenantID, status)
+}
+
+func (s *SalesService) DeleteSalesOrder(ctx context.Context, id, tenantID uuid.UUID) error {
+	return s.repo.DeleteSalesOrder(ctx, id, tenantID)
 }

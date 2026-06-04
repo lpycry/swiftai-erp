@@ -127,7 +127,7 @@ class _RolesScreenState extends State<RolesScreen> {
   Widget build(BuildContext context) {
     return AppLayout(
       authService: widget.authService,
-      currentIndex: 5,
+      currentIndex: 6,
       onIndexChanged: (_) {},
       title: 'Role Management',
       body: Column(

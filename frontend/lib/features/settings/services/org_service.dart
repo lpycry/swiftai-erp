@@ -14,9 +14,13 @@ class OrgService {
 
   // ==================== Organizations ====================
 
-  Future<List<dynamic>> getOrganizations() async {
+  Future<List<dynamic>> getOrganizations({String? search}) async {
+    var url = '$_baseUrl/orgs';
+    if (search != null && search.isNotEmpty) {
+      url += '?search=${Uri.encodeQueryComponent(search)}';
+    }
     final resp = await http.get(
-      Uri.parse('$_baseUrl/orgs'),
+      Uri.parse(url),
       headers: _headers,
     );
     if (resp.statusCode >= 400) throw Exception('Failed to load organizations');

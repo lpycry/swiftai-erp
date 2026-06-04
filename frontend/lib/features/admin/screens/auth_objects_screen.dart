@@ -48,7 +48,7 @@ class _AuthObjectsScreenState extends State<AuthObjectsScreen> {
   Widget build(BuildContext context) {
     return AppLayout(
       authService: widget.authService,
-      currentIndex: 5,
+      currentIndex: 6,
       onIndexChanged: (_) {},
       title: 'Authorization Objects',
       body: Column(

@@ -111,6 +111,50 @@ func (s *FinanceSettingsService) DeleteTaxNexus(ctx context.Context, id, tenantI
 	return s.repo.DeleteTaxNexus(ctx, id, tenantID)
 }
 
+// ── Tax Jurisdiction Rules ──
+
+func (s *FinanceSettingsService) ListTaxJurisdictionRules(ctx context.Context, tenantID uuid.UUID) ([]*fsmodels.TaxJurisdictionRule, error) {
+	return s.repo.ListTaxJurisdictionRules(ctx, tenantID)
+}
+
+func (s *FinanceSettingsService) GetTaxJurisdictionRule(ctx context.Context, ruleID int, tenantID uuid.UUID) (*fsmodels.TaxJurisdictionRule, error) {
+	return s.repo.GetTaxJurisdictionRule(ctx, ruleID, tenantID)
+}
+
+func (s *FinanceSettingsService) CreateTaxJurisdictionRule(ctx context.Context, tenantID uuid.UUID, req *fsmodels.CreateTaxJurisdictionRuleRequest) (*fsmodels.TaxJurisdictionRule, error) {
+	return s.repo.CreateTaxJurisdictionRule(ctx, tenantID, req)
+}
+
+func (s *FinanceSettingsService) UpdateTaxJurisdictionRule(ctx context.Context, ruleID int, tenantID uuid.UUID, req *fsmodels.UpdateTaxJurisdictionRuleRequest) error {
+	return s.repo.UpdateTaxJurisdictionRule(ctx, ruleID, tenantID, req)
+}
+
+func (s *FinanceSettingsService) DeleteTaxJurisdictionRule(ctx context.Context, ruleID int, tenantID uuid.UUID) error {
+	return s.repo.DeleteTaxJurisdictionRule(ctx, ruleID, tenantID)
+}
+
+// ── Tax Categories ──
+
+func (s *FinanceSettingsService) ListTaxCategories(ctx context.Context, tenantID uuid.UUID) ([]*fsmodels.TaxCategory, error) {
+	return s.repo.ListTaxCategories(ctx, tenantID)
+}
+
+func (s *FinanceSettingsService) GetTaxCategory(ctx context.Context, id, tenantID uuid.UUID) (*fsmodels.TaxCategory, error) {
+	return s.repo.GetTaxCategory(ctx, id, tenantID)
+}
+
+func (s *FinanceSettingsService) CreateTaxCategory(ctx context.Context, tenantID uuid.UUID, req *fsmodels.CreateTaxCategoryRequest) (*fsmodels.TaxCategory, error) {
+	return s.repo.CreateTaxCategory(ctx, tenantID, req)
+}
+
+func (s *FinanceSettingsService) UpdateTaxCategory(ctx context.Context, id, tenantID uuid.UUID, req *fsmodels.UpdateTaxCategoryRequest) error {
+	return s.repo.UpdateTaxCategory(ctx, id, tenantID, req)
+}
+
+func (s *FinanceSettingsService) DeleteTaxCategory(ctx context.Context, id, tenantID uuid.UUID) error {
+	return s.repo.DeleteTaxCategory(ctx, id, tenantID)
+}
+
 func (s *FinanceSettingsService) DeleteOrgReconAccount(ctx context.Context, id uuid.UUID) error {
 	return s.repo.DeleteOrgReconAccount(ctx, id)
 }

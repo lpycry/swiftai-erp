@@ -16,6 +16,9 @@ type Organization struct {
 	Currency  string                 `json:"currency"`
 	TaxID     string                 `json:"tax_id,omitempty"`
 	TaxConfig map[string]interface{} `json:"tax_config,omitempty"`
+	Email     string                 `json:"email,omitempty"`
+	Phone     string                 `json:"phone,omitempty"`
+	Website   string                 `json:"website,omitempty"`
 	Address   string                 `json:"address,omitempty"`
 	IsActive  bool                   `json:"is_active"`
 	CreatedAt time.Time              `json:"created_at"`
@@ -28,6 +31,9 @@ type CreateOrganizationRequest struct {
 	Currency  string                 `json:"currency"`
 	TaxID     string                 `json:"tax_id,omitempty"`
 	TaxConfig map[string]interface{} `json:"tax_config,omitempty"`
+	Email     string                 `json:"email,omitempty"`
+	Phone     string                 `json:"phone,omitempty"`
+	Website   string                 `json:"website,omitempty"`
 	Address   string                 `json:"address,omitempty"`
 }
 
@@ -36,6 +42,9 @@ type UpdateOrganizationRequest struct {
 	Currency  string                 `json:"currency"`
 	TaxID     string                 `json:"tax_id,omitempty"`
 	TaxConfig map[string]interface{} `json:"tax_config,omitempty"`
+	Email     string                 `json:"email,omitempty"`
+	Phone     string                 `json:"phone,omitempty"`
+	Website   string                 `json:"website,omitempty"`
 	Address   string                 `json:"address,omitempty"`
 	IsActive  *bool                  `json:"is_active,omitempty"`
 }

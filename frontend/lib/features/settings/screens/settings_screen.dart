@@ -4,6 +4,8 @@ import 'package:swiftai_erp/core/services/auth_service.dart';
 import 'package:swiftai_erp/core/theme/app_theme.dart';
 import 'package:swiftai_erp/core/router/app_router.dart';
 import 'package:swiftai_erp/features/finance/services/gl_service.dart';
+import 'package:swiftai_erp/features/settings/services/date_format_service.dart';
+import 'package:swiftai_erp/features/settings/screens/date_format_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   final AuthService authService;
@@ -112,6 +114,19 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: const Text('USD'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {},
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.calendar_month_outlined, color: AppTheme.accentBlue),
+                  title: const Text('Date Format'),
+                  subtitle: const Text('Define SAP-style date display formats'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => DateFormatScreen(
+                      authService: authService,
+                      dateFormatService: DateFormatService(authService.accessToken ?? ''),
+                    ),
+                  )),
                 ),
                 const Divider(height: 1),
                 ListTile(

@@ -162,3 +162,77 @@ type CreateOrgReconAccountRequest struct {
 	ReconciliationType string    `json:"reconciliation_type"`
 	AccountType        string    `json:"account_type" binding:"required"`
 }
+
+// ── Tax Jurisdiction Rule (Product Category × Tax Code) ──
+
+type TaxJurisdictionRule struct {
+	RuleID           int        `json:"rule_id"`
+	TenantID         uuid.UUID  `json:"tenant_id"`
+	JurisdictionCode string     `json:"jurisdiction_code"`
+	StateCode        string     `json:"state_code"`
+	ZipCode          string     `json:"zip_code"`
+	TaxCategoryCode  string     `json:"tax_category_code"`
+	IsTaxable        bool       `json:"is_taxable"`
+	BaseRate         float64    `json:"base_rate"`
+	ConditionType    string     `json:"condition_type"`
+	ConditionValue   *float64   `json:"condition_value,omitempty"`
+	EffectiveFrom    time.Time  `json:"effective_from"`
+	EffectiveTo      *time.Time `json:"effective_to,omitempty"`
+	UpdatedBy        string     `json:"updated_by"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+type CreateTaxJurisdictionRuleRequest struct {
+	JurisdictionCode string  `json:"jurisdiction_code" binding:"required"`
+	StateCode        string  `json:"state_code" binding:"required,len=2"`
+	ZipCode          string  `json:"zip_code"`
+	TaxCategoryCode  string  `json:"tax_category_code" binding:"required"`
+	IsTaxable        *bool   `json:"is_taxable,omitempty"`
+	BaseRate         float64 `json:"base_rate"`
+	ConditionType    string  `json:"condition_type"`
+	ConditionValue   *float64 `json:"condition_value,omitempty"`
+	EffectiveFrom    string  `json:"effective_from" binding:"required"`
+	EffectiveTo      string  `json:"effective_to,omitempty"`
+	UpdatedBy        string  `json:"updated_by"`
+}
+
+type UpdateTaxJurisdictionRuleRequest struct {
+	JurisdictionCode *string   `json:"jurisdiction_code,omitempty"`
+	StateCode        *string   `json:"state_code,omitempty"`
+	ZipCode          *string   `json:"zip_code,omitempty"`
+	TaxCategoryCode  *string   `json:"tax_category_code,omitempty"`
+	IsTaxable        *bool     `json:"is_taxable,omitempty"`
+	BaseRate         *float64  `json:"base_rate,omitempty"`
+	ConditionType    *string   `json:"condition_type,omitempty"`
+	ConditionValue   *float64  `json:"condition_value,omitempty"`
+	EffectiveFrom    *string   `json:"effective_from,omitempty"`
+	EffectiveTo      *string   `json:"effective_to,omitempty"`
+	UpdatedBy        *string   `json:"updated_by,omitempty"`
+}
+
+// ── Tax Category ──
+
+type TaxCategory struct {
+	ID          uuid.UUID `json:"id"`
+	TenantID    uuid.UUID `json:"tenant_id"`
+	Code        string    `json:"code"`
+	Description string    `json:"description"`
+	Example     string    `json:"example"`
+	IsActive    bool      `json:"is_active"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type CreateTaxCategoryRequest struct {
+	Code        string `json:"code" binding:"required,max=4"`
+	Description string `json:"description"`
+	Example     string `json:"example"`
+}
+
+type UpdateTaxCategoryRequest struct {
+	Code        *string `json:"code,omitempty"`
+	Description *string `json:"description,omitempty"`
+	Example     *string `json:"example,omitempty"`
+	IsActive    *bool   `json:"is_active,omitempty"`
+}

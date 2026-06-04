@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strconv"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -356,6 +358,160 @@ func (h *FinanceSettingsHandler) DeleteTaxNexus(c *gin.Context) {
 	if err != nil { response.BadRequest(c, "invalid id"); return }
 	if err := h.svc.DeleteTaxNexus(c.Request.Context(), id, tid); err != nil {
 		log.Err(err).Msg("delete tax nexus failed")
+		response.InternalError(c, "delete failed")
+		return
+	}
+	response.OK(c, map[string]string{"status": "deleted"})
+}
+
+// ══════════════════════════════════════════
+//  TAX JURISDICTION RULES (Product Category × Tax Code)
+// ══════════════════════════════════════════
+
+func (h *FinanceSettingsHandler) ListTaxJurisdictionRules(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	list, err := h.svc.ListTaxJurisdictionRules(c.Request.Context(), tid)
+	if err != nil {
+		log.Err(err).Msg("list tax jurisdiction rules failed")
+		response.InternalError(c, "list failed")
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *FinanceSettingsHandler) GetTaxJurisdictionRule(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	ruleID, err := strconv.Atoi(c.Param("rule_id"))
+	if err != nil { response.BadRequest(c, "invalid rule_id"); return }
+	rule, err := h.svc.GetTaxJurisdictionRule(c.Request.Context(), ruleID, tid)
+	if err != nil {
+		response.NotFound(c, "tax jurisdiction rule not found")
+		return
+	}
+	response.OK(c, rule)
+}
+
+func (h *FinanceSettingsHandler) CreateTaxJurisdictionRule(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	var req fsmodels.CreateTaxJurisdictionRuleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	rule, err := h.svc.CreateTaxJurisdictionRule(c.Request.Context(), tid, &req)
+	if err != nil {
+		log.Err(err).Msg("create tax jurisdiction rule failed")
+		response.InternalError(c, "create failed")
+		return
+	}
+	response.Created(c, rule)
+}
+
+func (h *FinanceSettingsHandler) UpdateTaxJurisdictionRule(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	ruleID, err := strconv.Atoi(c.Param("rule_id"))
+	if err != nil { response.BadRequest(c, "invalid rule_id"); return }
+	var req fsmodels.UpdateTaxJurisdictionRuleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request")
+		return
+	}
+	if err := h.svc.UpdateTaxJurisdictionRule(c.Request.Context(), ruleID, tid, &req); err != nil {
+		log.Err(err).Msg("update tax jurisdiction rule failed")
+		response.InternalError(c, "update failed")
+		return
+	}
+	response.OK(c, map[string]string{"status": "updated"})
+}
+
+func (h *FinanceSettingsHandler) DeleteTaxJurisdictionRule(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	ruleID, err := strconv.Atoi(c.Param("rule_id"))
+	if err != nil { response.BadRequest(c, "invalid rule_id"); return }
+	if err := h.svc.DeleteTaxJurisdictionRule(c.Request.Context(), ruleID, tid); err != nil {
+		log.Err(err).Msg("delete tax jurisdiction rule failed")
+		response.InternalError(c, "delete failed")
+		return
+	}
+	response.OK(c, map[string]string{"status": "deleted"})
+}
+
+// ══════════════════════════════════════════
+//  TAX CATEGORIES
+// ══════════════════════════════════════════
+
+func (h *FinanceSettingsHandler) ListTaxCategories(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	list, err := h.svc.ListTaxCategories(c.Request.Context(), tid)
+	if err != nil {
+		log.Err(err).Msg("list tax categories failed")
+		response.InternalError(c, "list failed")
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *FinanceSettingsHandler) GetTaxCategory(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	cat, err := h.svc.GetTaxCategory(c.Request.Context(), id, tid)
+	if err != nil {
+		response.NotFound(c, "tax category not found")
+		return
+	}
+	response.OK(c, cat)
+}
+
+func (h *FinanceSettingsHandler) CreateTaxCategory(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	var req fsmodels.CreateTaxCategoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	cat, err := h.svc.CreateTaxCategory(c.Request.Context(), tid, &req)
+	if err != nil {
+		log.Err(err).Msg("create tax category failed")
+		response.InternalError(c, "create failed")
+		return
+	}
+	response.Created(c, cat)
+}
+
+func (h *FinanceSettingsHandler) UpdateTaxCategory(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	var req fsmodels.UpdateTaxCategoryRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request")
+		return
+	}
+	if err := h.svc.UpdateTaxCategory(c.Request.Context(), id, tid, &req); err != nil {
+		log.Err(err).Msg("update tax category failed")
+		response.InternalError(c, "update failed")
+		return
+	}
+	response.OK(c, map[string]string{"status": "updated"})
+}
+
+func (h *FinanceSettingsHandler) DeleteTaxCategory(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	if err := h.svc.DeleteTaxCategory(c.Request.Context(), id, tid); err != nil {
+		log.Err(err).Msg("delete tax category failed")
 		response.InternalError(c, "delete failed")
 		return
 	}

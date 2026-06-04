@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	salesmodels "github.com/swiftai-erp/backend/internal/sales/models"
@@ -17,6 +18,10 @@ type SalesRepo struct {
 
 func NewSalesRepo(db *pgxpool.Pool) *SalesRepo {
 	return &SalesRepo{db: db}
+}
+
+func (r *SalesRepo) Pool() *pgxpool.Pool {
+	return r.db
 }
 
 // ══════════════════════════════════════════
@@ -413,6 +418,60 @@ func (r *SalesRepo) UpdateMaterialPrice(ctx context.Context, id, tenantID uuid.U
 func (r *SalesRepo) DeleteMaterialPrice(ctx context.Context, id, tenantID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, "DELETE FROM material_prices WHERE id = $1 AND tenant_id = $2", id, tenantID)
 	return err
+}
+
+func (r *SalesRepo) LookupMaterialPrice(ctx context.Context, tenantID, customerID, productID uuid.UUID) (*salesmodels.MaterialPrice, error) {
+	// First try: customer-specific price
+	mp := &salesmodels.MaterialPrice{}
+	err := r.db.QueryRow(ctx, `
+		SELECT mp.id, mp.tenant_id, mp.product_id, mp.customer_id,
+			mp.price_type, mp.price, mp.currency, mp.price_unit, mp.uom,
+			mp.valid_from, mp.valid_to, mp.is_active, mp.created_at, mp.updated_at,
+			COALESCE(p.sku,''), COALESCE(p.name,''),
+			COALESCE(c.customer_code,''), COALESCE(c.name,'')
+		FROM material_prices mp
+		LEFT JOIN products p ON p.id = mp.product_id
+		LEFT JOIN customers c ON c.id = mp.customer_id
+		WHERE mp.tenant_id = $1 AND mp.product_id = $2 AND mp.customer_id = $3
+			AND mp.is_active = true AND mp.valid_from <= NOW() AND (mp.valid_to IS NULL OR mp.valid_to >= NOW())
+		ORDER BY mp.valid_from DESC
+		LIMIT 1
+	`, tenantID, productID, customerID).Scan(
+		&mp.ID, &mp.TenantID, &mp.ProductID, &mp.CustomerID,
+		&mp.PriceType, &mp.Price, &mp.Currency, &mp.PriceUnit, &mp.UOM,
+		&mp.ValidFrom, &mp.ValidTo, &mp.IsActive, &mp.CreatedAt, &mp.UpdatedAt,
+		&mp.ProductSKU, &mp.ProductName,
+		&mp.CustomerCode, &mp.CustomerName)
+	if err == nil {
+		return mp, nil
+	}
+	if err != pgx.ErrNoRows {
+		return nil, err
+	}
+	// Fallback: product-only price (customer_id IS NULL)
+	err = r.db.QueryRow(ctx, `
+		SELECT mp.id, mp.tenant_id, mp.product_id, mp.customer_id,
+			mp.price_type, mp.price, mp.currency, mp.price_unit, mp.uom,
+			mp.valid_from, mp.valid_to, mp.is_active, mp.created_at, mp.updated_at,
+			COALESCE(p.sku,''), COALESCE(p.name,''),
+			COALESCE(c.customer_code,''), COALESCE(c.name,'')
+		FROM material_prices mp
+		LEFT JOIN products p ON p.id = mp.product_id
+		LEFT JOIN customers c ON c.id = mp.customer_id
+		WHERE mp.tenant_id = $1 AND mp.product_id = $2 AND mp.customer_id IS NULL
+			AND mp.is_active = true AND mp.valid_from <= NOW() AND (mp.valid_to IS NULL OR mp.valid_to >= NOW())
+		ORDER BY mp.valid_from DESC
+		LIMIT 1
+	`, tenantID, productID).Scan(
+		&mp.ID, &mp.TenantID, &mp.ProductID, &mp.CustomerID,
+		&mp.PriceType, &mp.Price, &mp.Currency, &mp.PriceUnit, &mp.UOM,
+		&mp.ValidFrom, &mp.ValidTo, &mp.IsActive, &mp.CreatedAt, &mp.UpdatedAt,
+		&mp.ProductSKU, &mp.ProductName,
+		&mp.CustomerCode, &mp.CustomerName)
+	if err == pgx.ErrNoRows {
+		return nil, nil // not found
+	}
+	return mp, err
 }
 
 // nullIfEmptyStr returns nil for empty string pointers (used in SQL COALESCE)

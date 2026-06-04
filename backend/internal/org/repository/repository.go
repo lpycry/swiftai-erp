@@ -25,17 +25,21 @@ func NewOrgRepo(db *pgxpool.Pool) *OrgRepo {
 
 const orgSelectCols = `id, tenant_id, org_code, org_name, currency,
 	COALESCE(tax_id,'') as tax_id, tax_config,
+	COALESCE(email,'') as email,
+	COALESCE(phone,'') as phone,
+	COALESCE(website,'') as website,
 	COALESCE(address,'') as address,
 	is_active, created_at, updated_at`
 
 func (r *OrgRepo) CreateOrg(ctx context.Context, org *orgmodels.Organization) error {
 	query := `
-		INSERT INTO organizations (id, tenant_id, org_code, org_name, currency, tax_id, tax_config, address, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		INSERT INTO organizations (id, tenant_id, org_code, org_name, currency, tax_id, tax_config, email, phone, website, address, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 	`
 	_, err := r.db.Exec(ctx, query,
 		org.ID, org.TenantID, org.OrgCode, org.OrgName, org.Currency,
-		org.TaxID, org.TaxConfig, org.Address, org.IsActive,
+		org.TaxID, org.TaxConfig, org.Email, org.Phone, org.Website,
+		org.Address, org.IsActive,
 		org.CreatedAt, org.UpdatedAt,
 	)
 	if err != nil {
@@ -49,7 +53,8 @@ func (r *OrgRepo) GetOrgByID(ctx context.Context, id, tenantID uuid.UUID) (*orgm
 	org := &orgmodels.Organization{}
 	err := r.db.QueryRow(ctx, query, id, tenantID).Scan(
 		&org.ID, &org.TenantID, &org.OrgCode, &org.OrgName, &org.Currency,
-		&org.TaxID, &org.TaxConfig, &org.Address,
+		&org.TaxID, &org.TaxConfig, &org.Email, &org.Phone, &org.Website,
+		&org.Address,
 		&org.IsActive, &org.CreatedAt, &org.UpdatedAt,
 	)
 	if err != nil {
@@ -62,8 +67,22 @@ func (r *OrgRepo) GetOrgByID(ctx context.Context, id, tenantID uuid.UUID) (*orgm
 }
 
 func (r *OrgRepo) ListOrgs(ctx context.Context, tenantID uuid.UUID) ([]*orgmodels.Organization, error) {
-	query := `SELECT ` + orgSelectCols + ` FROM organizations WHERE tenant_id = $1 ORDER BY org_code`
-	rows, err := r.db.Query(ctx, query, tenantID)
+	return r.ListOrgsFiltered(ctx, tenantID, "")
+}
+
+func (r *OrgRepo) ListOrgsFiltered(ctx context.Context, tenantID uuid.UUID, search string) ([]*orgmodels.Organization, error) {
+	var query string
+	var rows pgx.Rows
+	var err error
+
+	if search == "" {
+		query = `SELECT ` + orgSelectCols + ` FROM organizations WHERE tenant_id = $1 ORDER BY org_code`
+		rows, err = r.db.Query(ctx, query, tenantID)
+	} else {
+		query = `SELECT ` + orgSelectCols + ` FROM organizations WHERE tenant_id = $1 AND (org_code ILIKE $2 OR org_name ILIKE $2) ORDER BY org_code`
+		like := "%" + search + "%"
+		rows, err = r.db.Query(ctx, query, tenantID, like)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list organizations: %w", err)
 	}
@@ -96,6 +115,21 @@ func (r *OrgRepo) UpdateOrg(ctx context.Context, id, tenantID uuid.UUID, req *or
 		args = append(args, req.TaxConfig)
 		argIdx++
 	}
+	if req.Email != "" {
+		setClauses = append(setClauses, fmt.Sprintf("email = $%d", argIdx))
+		args = append(args, req.Email)
+		argIdx++
+	}
+	if req.Phone != "" {
+		setClauses = append(setClauses, fmt.Sprintf("phone = $%d", argIdx))
+		args = append(args, req.Phone)
+		argIdx++
+	}
+	if req.Website != "" {
+		setClauses = append(setClauses, fmt.Sprintf("website = $%d", argIdx))
+		args = append(args, req.Website)
+		argIdx++
+	}
 	if req.Address != "" {
 		setClauses = append(setClauses, fmt.Sprintf("address = $%d", argIdx))
 		args = append(args, req.Address)
@@ -126,7 +160,8 @@ func (r *OrgRepo) UpdateOrg(ctx context.Context, id, tenantID uuid.UUID, req *or
 	org := &orgmodels.Organization{}
 	err := r.db.QueryRow(ctx, query, args...).Scan(
 		&org.ID, &org.TenantID, &org.OrgCode, &org.OrgName, &org.Currency,
-		&org.TaxID, &org.TaxConfig, &org.Address,
+		&org.TaxID, &org.TaxConfig, &org.Email, &org.Phone, &org.Website,
+		&org.Address,
 		&org.IsActive, &org.CreatedAt, &org.UpdatedAt,
 	)
 	if err != nil {
@@ -325,7 +360,8 @@ func scanOrgs(rows pgx.Rows) ([]*orgmodels.Organization, error) {
 		o := &orgmodels.Organization{}
 		err := rows.Scan(
 			&o.ID, &o.TenantID, &o.OrgCode, &o.OrgName, &o.Currency,
-			&o.TaxID, &o.TaxConfig, &o.Address,
+			&o.TaxID, &o.TaxConfig, &o.Email, &o.Phone, &o.Website,
+			&o.Address,
 			&o.IsActive, &o.CreatedAt, &o.UpdatedAt,
 		)
 		if err != nil {

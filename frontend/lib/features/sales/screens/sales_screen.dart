@@ -5,6 +5,7 @@ import 'package:swiftai_erp/core/widgets/app_layout.dart';
 import 'package:swiftai_erp/features/sales/services/sales_service.dart';
 import 'package:swiftai_erp/features/sales/screens/customer_list_screen.dart';
 import 'package:swiftai_erp/features/sales/screens/material_price_screen.dart';
+import 'package:swiftai_erp/features/sales/screens/quotation_list_screen.dart';
 
 class SalesScreen extends StatelessWidget {
   final AuthService authService;
@@ -73,14 +74,24 @@ class SalesScreen extends StatelessWidget {
             const SizedBox(height: 24),
 
             // ── Documents ──
+            // ── Documents ──
             _sectionTitle('Documents'),
             const SizedBox(height: 12),
             Wrap(spacing: 16, runSpacing: 16, children: [
               _SalesCard(
                 icon: Icons.description_outlined,
+                title: 'Quotations',
+                subtitle: 'Customer inquiries & price quotes',
+                color: Colors.blue,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => QuotationListScreen(
+                        authService: authService, salesService: salesService))),
+              ),
+              _SalesCard(
+                icon: Icons.shopping_cart_outlined,
                 title: 'Sales Orders',
-                subtitle: 'Coming soon',
-                color: Colors.grey,
+                subtitle: 'Create from quotation or manually',
+                color: Colors.green,
                 onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Sales orders coming soon'), behavior: SnackBarBehavior.floating)),
               ),

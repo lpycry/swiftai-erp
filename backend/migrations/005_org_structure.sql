@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS organizations (
     currency        VARCHAR(3) NOT NULL DEFAULT 'USD',
     tax_id          VARCHAR(50),                     -- tax registration number
     tax_config      JSONB NOT NULL DEFAULT '{}',     -- tax regime configuration
+    email           VARCHAR(255),                     -- contact email
+    phone           VARCHAR(50),                      -- contact phone
+    website         VARCHAR(500),                     -- website URL
     address         TEXT,
     is_active       BOOLEAN NOT NULL DEFAULT true,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),

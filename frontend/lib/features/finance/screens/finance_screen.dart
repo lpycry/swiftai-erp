@@ -14,6 +14,8 @@ import 'package:swiftai_erp/features/finance/screens/profit_loss_screen.dart';
 import 'package:swiftai_erp/features/finance/screens/gl_dashboard_screen.dart';
 import 'package:swiftai_erp/features/settings/services/org_service.dart';
 import 'package:swiftai_erp/features/finance/services/ap_service.dart';
+import 'package:swiftai_erp/features/finance/services/cost_center_service.dart';
+import 'package:swiftai_erp/features/finance/screens/cost_center_screen.dart';
 import 'package:swiftai_erp/features/finance/screens/ap/dp_create_screen.dart';
 import 'package:swiftai_erp/features/finance/screens/ap/dp_list_screen.dart';
 import 'package:swiftai_erp/features/finance/screens/ap/vendor_payment_screen.dart';
@@ -24,6 +26,8 @@ import 'package:swiftai_erp/features/purchase/screens/invoice_list_screen.dart';
 import 'package:swiftai_erp/features/purchase/screens/invoice_document_screen.dart';
 import 'package:swiftai_erp/features/purchase/screens/invoice_overview_screen.dart';
 import 'package:swiftai_erp/features/settings/services/finance_settings_service.dart';
+import 'package:swiftai_erp/features/finance/screens/ar/credit_limit_screen.dart';
+import 'package:swiftai_erp/features/finance/screens/ar/down_payment_screen.dart';
 
 class FinanceScreen extends StatelessWidget {
   final AuthService authService;
@@ -288,7 +292,7 @@ class FinanceScreen extends StatelessWidget {
 
             const SizedBox(height: 28),
 
-            // ── Accounts Receivable Section (Reserved) ──
+            // ── Accounts Receivable Section ──
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -307,21 +311,66 @@ class FinanceScreen extends StatelessWidget {
                           color: Colors.white)),
                 ]),
                 const SizedBox(height: 4),
-                Text('Customer down payments (coming soon)',
+                Text('Credit limits, customer down payments & auto GL posting',
                     style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.8))),
               ]),
             ),
             const SizedBox(height: 16),
             Wrap(spacing: 16, runSpacing: 16, children: [
               _FinanceCard(
-                icon: Icons.construction_rounded,
-                title: 'Coming Soon',
-                subtitle: 'AR features under development',
-                color: Colors.grey,
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('AR features coming soon'),
-                      behavior: SnackBarBehavior.floating),
+                icon: Icons.credit_card_outlined,
+                title: 'Credit Limits',
+                subtitle: 'Manage customer credit & risk categories',
+                color: Colors.purple,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => CreditLimitScreen(authService: authService))),
+              ),
+              _FinanceCard(
+                icon: Icons.payments_outlined,
+                title: 'Down Payments',
+                subtitle: 'Customer prepayments with auto GL posting',
+                color: Colors.deepPurple,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => DownPaymentListScreen(authService: authService))),
+              ),
+            ]),
+
+            const SizedBox(height: 28),
+
+            // ── Cost Management Section ──
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF2E7D32), Color(0xFF66BB6A)],
                 ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Icon(Icons.monetization_on_rounded, size: 28,
+                      color: Colors.white.withValues(alpha: 0.9)),
+                  const SizedBox(width: 12),
+                  Text('Cost Management',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
+                          color: Colors.white)),
+                ]),
+                const SizedBox(height: 4),
+                Text('Cost centers, allocations & controlling',
+                    style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.8))),
+              ]),
+            ),
+            const SizedBox(height: 16),
+            Wrap(spacing: 16, runSpacing: 16, children: [
+              _FinanceCard(
+                icon: Icons.account_balance_outlined,
+                title: 'Cost Centers',
+                subtitle: 'Cost center master data with validity periods',
+                color: Colors.green,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => CostCenterScreen(
+                        authService: authService,
+                        costCenterService: CostCenterService(authService.accessToken ?? '')))),
               ),
             ]),
 

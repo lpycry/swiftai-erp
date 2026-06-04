@@ -12,6 +12,21 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	ccHandler "github.com/swiftai-erp/backend/internal/costcenter/handler"
+	ccRepo "github.com/swiftai-erp/backend/internal/costcenter/repository"
+
+	ouHandler "github.com/swiftai-erp/backend/internal/orgunit/handler"
+	ouRepo "github.com/swiftai-erp/backend/internal/orgunit/repository"
+
+	posHandler "github.com/swiftai-erp/backend/internal/position/handler"
+	posRepo "github.com/swiftai-erp/backend/internal/position/repository"
+
+	empHandler "github.com/swiftai-erp/backend/internal/employee/handler"
+	empRepo "github.com/swiftai-erp/backend/internal/employee/repository"
+
+	dfHandler "github.com/swiftai-erp/backend/internal/dateformat/handler"
+	dfRepo "github.com/swiftai-erp/backend/internal/dateformat/repository"
+
 	"github.com/swiftai-erp/backend/internal/auth"
 	"github.com/swiftai-erp/backend/internal/authz/engine"
 	authzHandler "github.com/swiftai-erp/backend/internal/authz/handler"
@@ -40,6 +55,10 @@ import (
 	salesrepo "github.com/swiftai-erp/backend/internal/sales/repository"
 	salessvc "github.com/swiftai-erp/backend/internal/sales/service"
 	saleshandler "github.com/swiftai-erp/backend/internal/sales/handler"
+
+	arrepo "github.com/swiftai-erp/backend/internal/ar/repository"
+	arsvc "github.com/swiftai-erp/backend/internal/ar/service"
+	arhandler "github.com/swiftai-erp/backend/internal/ar/handler"
 )
 
 func main() {
@@ -114,10 +133,35 @@ func main() {
 	financeSettingsSvc := fssvc.NewFinanceSettingsService(financeSettingsRepo)
 	financeSettingsHandler := fshandler.NewFinanceSettingsHandler(financeSettingsSvc)
 
+	// Cost Center
+	costCenterRepo := ccRepo.NewCostCenterRepo(pool)
+	costCenterHandler := ccHandler.NewCostCenterHandler(costCenterRepo)
+
+	// Org Unit
+	orgUnitRepo := ouRepo.NewOrgUnitRepo(pool)
+	orgUnitHandler := ouHandler.NewOrgUnitHandler(orgUnitRepo)
+
+	// Position
+	positionRepo := posRepo.NewPositionRepo(pool)
+	positionHandler := posHandler.NewPositionHandler(positionRepo)
+
+	// Employee
+	employeeRepo := empRepo.NewEmployeeRepo(pool)
+	employeeHandler := empHandler.NewEmployeeHandler(employeeRepo)
+
+	// Date Format
+	dateFormatRepo := dfRepo.NewDateFormatRepo(pool)
+	dateFormatHandler := dfHandler.NewDateFormatHandler(dateFormatRepo)
+
 	// Sales
 	salesRepo := salesrepo.NewSalesRepo(pool)
 	salesSvc := salessvc.NewSalesService(salesRepo)
 	salesHandler := saleshandler.NewSalesHandler(salesSvc)
+
+	// AR (Accounts Receivable)
+	arRepo := arrepo.NewARRepo(pool)
+	arSvc := arsvc.NewARService(arRepo, pool, glSvc)
+	arHandler := arhandler.NewARHandler(arSvc)
 
 	// Router
 	r := gin.New()
@@ -364,6 +408,20 @@ func main() {
 		protected.PUT("/finance-settings/tax-nexus/:id", financeSettingsHandler.UpdateTaxNexus)
 		protected.DELETE("/finance-settings/tax-nexus/:id", financeSettingsHandler.DeleteTaxNexus)
 
+		// ---- Tax Jurisdiction Rules (Product Category × Tax Code) ----
+		protected.GET("/finance-settings/tax-jurisdiction-rules", financeSettingsHandler.ListTaxJurisdictionRules)
+		protected.GET("/finance-settings/tax-jurisdiction-rules/:rule_id", financeSettingsHandler.GetTaxJurisdictionRule)
+		protected.POST("/finance-settings/tax-jurisdiction-rules", financeSettingsHandler.CreateTaxJurisdictionRule)
+		protected.PUT("/finance-settings/tax-jurisdiction-rules/:rule_id", financeSettingsHandler.UpdateTaxJurisdictionRule)
+		protected.DELETE("/finance-settings/tax-jurisdiction-rules/:rule_id", financeSettingsHandler.DeleteTaxJurisdictionRule)
+
+		// ---- Tax Categories ----
+		protected.GET("/finance-settings/tax-categories", financeSettingsHandler.ListTaxCategories)
+		protected.GET("/finance-settings/tax-categories/:id", financeSettingsHandler.GetTaxCategory)
+		protected.POST("/finance-settings/tax-categories", financeSettingsHandler.CreateTaxCategory)
+		protected.PUT("/finance-settings/tax-categories/:id", financeSettingsHandler.UpdateTaxCategory)
+		protected.DELETE("/finance-settings/tax-categories/:id", financeSettingsHandler.DeleteTaxCategory)
+
 		// ---- Sales: Customer Certificates ----
 		protected.POST("/sales/customers/:id/certificates", salesHandler.UploadCertificate)
 		protected.GET("/sales/customers/:id/certificates", salesHandler.ListCertificates)
@@ -379,9 +437,80 @@ func main() {
 		// ---- Sales: Material Prices ----
 		protected.POST("/sales/material-prices", salesHandler.CreateMaterialPrice)
 		protected.GET("/sales/material-prices", salesHandler.ListMaterialPrices)
+		protected.GET("/sales/material-prices/lookup", salesHandler.LookupMaterialPrice)
 		protected.GET("/sales/material-prices/:id", salesHandler.GetMaterialPrice)
 		protected.PUT("/sales/material-prices/:id", salesHandler.UpdateMaterialPrice)
 		protected.DELETE("/sales/material-prices/:id", salesHandler.DeleteMaterialPrice)
+
+		// ---- AR: Credit Limits ----
+		protected.POST("/ar/credit-limits", arHandler.CreateCreditLimit)
+		protected.GET("/ar/credit-limits", arHandler.ListCreditLimits)
+		protected.GET("/ar/credit-limits/:id", arHandler.GetCreditLimit)
+		protected.PUT("/ar/credit-limits/:id", arHandler.UpdateCreditLimit)
+		protected.DELETE("/ar/credit-limits/:id", arHandler.DeleteCreditLimit)
+
+		// ---- AR: Customer Down Payments ----
+		protected.POST("/ar/down-payments", arHandler.CreateDownPayment)
+		protected.GET("/ar/down-payments", arHandler.ListDownPayments)
+		protected.GET("/ar/down-payments/:id", arHandler.GetDownPayment)
+
+		// ---- Sales: Tax Calculation ----
+		protected.POST("/sales/quotations/calculate-tax", salesHandler.CalculateTax)
+
+		// ---- Sales: Quotations ----
+		protected.POST("/sales/quotations", salesHandler.CreateQuotation)
+		protected.GET("/sales/quotations", salesHandler.ListQuotations)
+		protected.GET("/sales/quotations/:id", salesHandler.GetQuotation)
+		protected.PUT("/sales/quotations/:id/status", salesHandler.UpdateQuotationStatus)
+		protected.DELETE("/sales/quotations/:id", salesHandler.DeleteQuotation)
+
+		// ---- Sales: Sales Orders ----
+		protected.POST("/sales/orders", salesHandler.CreateSalesOrder)
+		protected.GET("/sales/orders", salesHandler.ListSalesOrders)
+		protected.GET("/sales/orders/:id", salesHandler.GetSalesOrder)
+		protected.PUT("/sales/orders/:id/status", salesHandler.UpdateSOStatus)
+		protected.DELETE("/sales/orders/:id", salesHandler.DeleteSalesOrder)
+
+		// ---- Cost Centers ----
+		protected.POST("/cost-centers", costCenterHandler.CreateCostCenter)
+		protected.GET("/cost-centers", costCenterHandler.ListCostCenters)
+		protected.GET("/cost-centers/:id", costCenterHandler.GetCostCenter)
+		protected.PUT("/cost-centers/:id", costCenterHandler.UpdateCostCenter)
+		protected.DELETE("/cost-centers/:id", costCenterHandler.DeleteCostCenter)
+
+		// ---- Org Units (Departments) ----
+		protected.POST("/org-units", orgUnitHandler.CreateOrgUnit)
+		protected.GET("/org-units", orgUnitHandler.ListOrgUnits)
+		protected.GET("/org-units/:id", orgUnitHandler.GetOrgUnit)
+		protected.PUT("/org-units/:id", orgUnitHandler.UpdateOrgUnit)
+		protected.DELETE("/org-units/:id", orgUnitHandler.DeleteOrgUnit)
+
+		// ---- Positions ----
+		protected.POST("/positions", positionHandler.CreatePosition)
+		protected.GET("/positions", positionHandler.ListPositions)     // ?mode=tree
+		protected.GET("/positions/:id", positionHandler.GetPosition)
+		protected.PUT("/positions/:id", positionHandler.UpdatePosition)
+		protected.DELETE("/positions/:id", positionHandler.DeletePosition)
+
+		// ---- Employees ----
+		protected.POST("/employees", employeeHandler.CreateEmployee)
+		protected.GET("/employees", employeeHandler.ListEmployees)     // ?mode=current for current view
+		protected.GET("/employees/:id", employeeHandler.GetEmployee)    // ?include=all for full detail
+		protected.PUT("/employees/:id", employeeHandler.UpdateEmployee)
+		protected.DELETE("/employees/:id", employeeHandler.DeleteEmployee)
+
+		// ---- Employee Data History (Infotype) ----
+		protected.POST("/employees/:id/history", employeeHandler.CreateDataHistory)
+		protected.GET("/employees/:id/history", employeeHandler.ListDataHistory)
+		protected.PUT("/employee-records/:recordId", employeeHandler.UpdateDataHistory)
+		protected.DELETE("/employee-records/:recordId", employeeHandler.DeleteDataHistory)
+
+		// ---- Date Formats (SAP-style) ----
+		protected.POST("/date-formats", dateFormatHandler.Create)
+		protected.GET("/date-formats", dateFormatHandler.List)
+		protected.GET("/date-formats/:id", dateFormatHandler.Get)
+		protected.PUT("/date-formats/:id", dateFormatHandler.Update)
+		protected.DELETE("/date-formats/:id", dateFormatHandler.Delete)
 
 	}
 

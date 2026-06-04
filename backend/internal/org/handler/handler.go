@@ -54,6 +54,9 @@ func (h *OrgHandler) CreateOrg(c *gin.Context) {
 		Currency:  currency,
 		TaxID:     req.TaxID,
 		TaxConfig: req.TaxConfig,
+		Email:     req.Email,
+		Phone:     req.Phone,
+		Website:   req.Website,
 		Address:   req.Address,
 		IsActive:  true,
 		CreatedAt: now,
@@ -81,7 +84,9 @@ func (h *OrgHandler) ListOrgs(c *gin.Context) {
 		return
 	}
 
-	orgs, err := h.repo.ListOrgs(c.Request.Context(), tenantID)
+	search := c.Query("search")
+
+	orgs, err := h.repo.ListOrgsFiltered(c.Request.Context(), tenantID, search)
 	if err != nil {
 		log.Err(err).Msg("list organizations failed")
 		response.InternalError(c, "failed to list organizations")

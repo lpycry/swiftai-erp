@@ -121,12 +121,11 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen> with SingleT
   final _maxStockCtrl = TextEditingController(), _safetyStockCtrl = TextEditingController();
   final _reorderPointCtrl = TextEditingController(), _reorderQtyCtrl = TextEditingController();
   final _leadTimeCtrl = TextEditingController();
-  final _taxRateCtrl = TextEditingController();
   final _taxExemptReasonCtrl = TextEditingController();
 
   String _dimUnit = 'cm', _weightUnit = 'kg', _uom = 'EA', _abcClass = '';
   String _procurementType = '', _storageCondition = '', _valuationClass = '';
-  String _taxCategory = 'STANDARD', _taxType = 'SALES_TAX';
+  String? _taxCategory;
   String? _defaultTaxJurisdictionId;
   bool _batchTracked = false, _serialTracked = false, _isSerialized = false;
   int? _shelfLife;
@@ -140,6 +139,8 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen> with SingleT
   List<dynamic> _photos = [];
   List<dynamic> _taxJurisdictions = [];
   bool _loadingJurisdictions = true;
+  List<Map<String, dynamic>> _taxCategoryOptions = [];
+  bool _loadingCategories = true;
 
   @override
   void initState() {
@@ -148,9 +149,10 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen> with SingleT
     _populateFromEntry();
     if (_productId != null) { _loadBarcodes(); _loadPhotos(); }
     _loadTaxJurisdictions();
+    _loadTaxCategories();
   }
 
-  @override void dispose() { _tc.dispose(); _skuCtrl.dispose(); _nameCtrl.dispose(); _descCtrl.dispose(); _dimLCtrl.dispose(); _dimWCtrl.dispose(); _dimHCtrl.dispose(); _grossWCtrl.dispose(); _netWCtrl.dispose(); _stdCostCtrl.dispose(); _movAvgCtrl.dispose(); _lastCostCtrl.dispose(); _hsCodeCtrl.dispose(); _originCtrl.dispose(); _maxStockCtrl.dispose(); _safetyStockCtrl.dispose(); _reorderPointCtrl.dispose(); _reorderQtyCtrl.dispose(); _leadTimeCtrl.dispose(); _taxRateCtrl.dispose(); _taxExemptReasonCtrl.dispose(); super.dispose(); }
+  @override void dispose() { _tc.dispose(); _skuCtrl.dispose(); _nameCtrl.dispose(); _descCtrl.dispose(); _dimLCtrl.dispose(); _dimWCtrl.dispose(); _dimHCtrl.dispose(); _grossWCtrl.dispose(); _netWCtrl.dispose(); _stdCostCtrl.dispose(); _movAvgCtrl.dispose(); _lastCostCtrl.dispose(); _hsCodeCtrl.dispose(); _originCtrl.dispose(); _maxStockCtrl.dispose(); _safetyStockCtrl.dispose(); _reorderPointCtrl.dispose(); _reorderQtyCtrl.dispose(); _leadTimeCtrl.dispose(); _taxExemptReasonCtrl.dispose(); super.dispose(); }
 
   void _populateFromEntry() {
     final e = widget.entry; if (e == null) return;
@@ -162,9 +164,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen> with SingleT
     _serialTracked = e['serial_tracked'] ?? false;
     _isSerialized = e['is_serialized'] ?? false;
     _shelfLife = e['shelf_life_days'] as int?;
-    _taxCategory = e['tax_category'] ?? 'STANDARD';
-    _taxType = e['tax_type'] ?? 'SALES_TAX';
-    _taxRateCtrl.text = (e['tax_rate'] as num?)?.toString() ?? '';
+    _taxCategory = e['tax_category']?.toString();
     _taxExemptReasonCtrl.text = e['tax_exempt_reason']?.toString() ?? '';
     _defaultTaxJurisdictionId = e['default_tax_jurisdiction_id']?.toString();
     _dimLCtrl.text = e['dimension_length']?.toString() ?? '';
@@ -202,6 +202,20 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen> with SingleT
       }
     } catch (_) {}
     if (mounted) setState(() => _loadingJurisdictions = false);
+  }
+
+  Future<void> _loadTaxCategories() async {
+    try {
+      final token = widget.authService.accessToken ?? '';
+      final resp = await http.get(
+        Uri.parse('http://localhost:8080/api/v1/finance-settings/tax-categories'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (resp.statusCode < 400) {
+        _taxCategoryOptions = ((jsonDecode(resp.body)['data'] as List?) ?? []).cast<Map<String, dynamic>>();
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loadingCategories = false);
   }
 
   Future<void> _loadBarcodes() async {
@@ -245,12 +259,12 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen> with SingleT
       'reorder_point': double.tryParse(_reorderPointCtrl.text),
       'reorder_qty': double.tryParse(_reorderQtyCtrl.text),
       'lead_time_days': int.tryParse(_leadTimeCtrl.text),
-      'tax_category': _taxCategory,
-      'tax_rate': double.tryParse(_taxRateCtrl.text),
-      'tax_type': _taxType,
       'tax_exempt_reason': _taxExemptReasonCtrl.text.trim(),
       'default_tax_jurisdiction_id': (_defaultTaxJurisdictionId != null && _defaultTaxJurisdictionId!.isNotEmpty) ? _defaultTaxJurisdictionId : null,
     };
+    if (_taxCategory != null) {
+      data['tax_category'] = _taxCategory;
+    }
     try {
       Map<String, dynamic>? result;
       if (_isEdit) {
@@ -629,51 +643,31 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen> with SingleT
     }
   }
 
-  // ── Tab 6: Taxability ──
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  Tab 6: Taxability
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   Widget _buildTaxTab() {
-    return SingleChildScrollView(padding: const EdgeInsets.all(16), child: Column(children: [
+    return SingleChildScrollView(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _label('Tax Classification'),
       const SizedBox(height: 8),
-      Row(children: [
-        Expanded(child: DropdownButtonFormField<String>(
-          initialValue: _taxCategory, decoration: const InputDecoration(labelText: 'Tax Category', isDense: true),
-          items: [
-            const DropdownMenuItem(value: 'STANDARD', child: Text('Standard Rated', style: TextStyle(fontSize: 12))),
-            const DropdownMenuItem(value: 'REDUCED', child: Text('Reduced Rate', style: TextStyle(fontSize: 12))),
-            const DropdownMenuItem(value: 'ZERO', child: Text('Zero Rated', style: TextStyle(fontSize: 12))),
-            const DropdownMenuItem(value: 'EXEMPT', child: Text('Exempt', style: TextStyle(fontSize: 12))),
-            const DropdownMenuItem(value: 'SERVICE', child: Text('Service (no tax)', style: TextStyle(fontSize: 12))),
+      DropdownButtonFormField<String>(
+        value: _taxCategoryOptions.any((c) => c['code'] == _taxCategory) ? _taxCategory : null,
+        decoration: const InputDecoration(labelText: 'Tax Category', isDense: true),
+        items: _loadingCategories
+          ? [const DropdownMenuItem(value: null, child: Text('Loading...', style: TextStyle(fontSize: 12, color: Colors.grey)))]
+          : [
+              if (_taxCategory != null && !_taxCategoryOptions.any((c) => c['code'] == _taxCategory))
+                const DropdownMenuItem(value: null, child: Text('Select a tax category', style: TextStyle(fontSize: 12, color: Colors.grey))),
+              ..._taxCategoryOptions.map((c) => DropdownMenuItem(
+                  value: c['code']?.toString(),
+                  child: Text('${c['code']} — ${c['description']}', style: const TextStyle(fontSize: 12)),
+                )).toList(),
           ],
-          onChanged: (v) => setState(() => _taxCategory = v!),
-        )),
-        const SizedBox(width: 12),
-        Expanded(child: DropdownButtonFormField<String>(
-          initialValue: _taxType, decoration: const InputDecoration(labelText: 'Tax Type', isDense: true),
-          items: const [
-            DropdownMenuItem(value: 'SALES_TAX', child: Text('Sales Tax', style: TextStyle(fontSize: 12))),
-            DropdownMenuItem(value: 'VAT', child: Text('VAT', style: TextStyle(fontSize: 12))),
-            DropdownMenuItem(value: 'GST', child: Text('GST', style: TextStyle(fontSize: 12))),
-            DropdownMenuItem(value: 'CONSUMPTION_TAX', child: Text('Consumption Tax', style: TextStyle(fontSize: 12))),
-            DropdownMenuItem(value: 'NONE', child: Text('None', style: TextStyle(fontSize: 12))),
-          ],
-          onChanged: (v) => setState(() => _taxType = v!),
-        )),
-      ]),
+        onChanged: _loadingCategories ? null : (v) => setState(() => _taxCategory = v),
+      ),
       const SizedBox(height: 16),
 
-      _label('Tax Rate Override'),
-      const SizedBox(height: 8),
-      Row(children: [
-        SizedBox(width: 200, child: TextField(
-          controller: _taxRateCtrl,
-          decoration: const InputDecoration(labelText: 'Tax Rate (%)', isDense: true, hintText: 'Leave empty = use jurisdiction default', helperText: 'e.g. 8.25 for 8.25%', helperMaxLines: 2),
-          keyboardType: TextInputType.number, style: const TextStyle(fontSize: 13),
-        )),
-        const Spacer(),
-      ]),
-      const SizedBox(height: 16),
-
-      if (_taxCategory == 'EXEMPT') ...[const SizedBox(height: 8),
+      if (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP') ...[const SizedBox(height: 8),
         _label('Tax Exemption Details'),
         const SizedBox(height: 8),
         TextField(
@@ -694,7 +688,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen> with SingleT
           value: _defaultTaxJurisdictionId,
           decoration: const InputDecoration(
             labelText: 'Jurisdiction', isDense: true,
-            hintText: 'Optional — override for this product',
+            hintText: 'Optional â€” override for this product',
           ),
           isExpanded: true,
           items: [
@@ -717,18 +711,18 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen> with SingleT
       Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: _taxCategory == 'EXEMPT' ? Colors.green.withValues(alpha: 0.06) : Colors.blue.withValues(alpha: 0.06),
+          color: (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP') ? Colors.green.withValues(alpha: 0.06) : Colors.blue.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: _taxCategory == 'EXEMPT' ? Colors.green.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.15)),
+          border: Border.all(color: (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP') ? Colors.green.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.15)),
         ),
         child: Row(children: [
-          Icon(_taxCategory == 'EXEMPT' ? Icons.check_circle : Icons.info_outline, size: 18,
-              color: _taxCategory == 'EXEMPT' ? Colors.green : Colors.blue),
+          Icon((_taxCategory == 'EXEMPT' || _taxCategory == 'EXP') ? Icons.check_circle : Icons.info_outline, size: 18,
+              color: (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP') ? Colors.green : Colors.blue),
           const SizedBox(width: 8),
           Expanded(child: Text(
-            _taxCategory == 'EXEMPT'
+            (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP')
               ? 'This product is marked as tax-exempt. Sales to customers will not include tax when this item is sold.'
-              : 'Tax will be calculated based on the customer\'s tax jurisdiction and product category. Use override to set a fixed rate.',
+              : 'Tax will be calculated based on the customer\'s tax jurisdiction and product category.',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
           )),
         ]),

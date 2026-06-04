@@ -135,7 +135,7 @@ class _PeriodsScreenState extends State<PeriodsScreen> {
   @override
   Widget build(BuildContext context) {
     return AppLayout(
-      authService: widget.authService, currentIndex: 5, onIndexChanged: (_) {},
+      authService: widget.authService, currentIndex: 6, onIndexChanged: (_) {},
       title: 'Accounting Periods',
       body: Column(children: [
         _buildFilterBar(),

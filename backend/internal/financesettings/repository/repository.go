@@ -430,6 +430,210 @@ func (r *FinanceSettingsRepo) DeleteTaxNexus(ctx context.Context, id, tenantID u
 	return err
 }
 
+// ══════════════════════════════════════════
+//  TAX JURISDICTION RULES (Product Category × Tax Code)
+// ══════════════════════════════════════════
+
+func (r *FinanceSettingsRepo) ListTaxJurisdictionRules(ctx context.Context, tenantID uuid.UUID) ([]*fsmodels.TaxJurisdictionRule, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT rule_id, tenant_id, jurisdiction_code, state_code, zip_code, tax_category_code,
+			is_taxable, base_rate, condition_type, condition_value,
+			effective_from, effective_to, COALESCE(updated_by,''),
+			created_at, updated_at
+		FROM tax_jurisdiction_rules
+		WHERE tenant_id = $1
+		ORDER BY jurisdiction_code, tax_category_code, effective_from DESC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*fsmodels.TaxJurisdictionRule
+	for rows.Next() {
+		rule := &fsmodels.TaxJurisdictionRule{}
+		if err := rows.Scan(&rule.RuleID, &rule.TenantID, &rule.JurisdictionCode, &rule.StateCode, &rule.ZipCode, &rule.TaxCategoryCode,
+			&rule.IsTaxable, &rule.BaseRate, &rule.ConditionType, &rule.ConditionValue,
+			&rule.EffectiveFrom, &rule.EffectiveTo, &rule.UpdatedBy,
+			&rule.CreatedAt, &rule.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, rule)
+	}
+	return list, nil
+}
+
+func (r *FinanceSettingsRepo) GetTaxJurisdictionRule(ctx context.Context, ruleID int, tenantID uuid.UUID) (*fsmodels.TaxJurisdictionRule, error) {
+	rule := &fsmodels.TaxJurisdictionRule{}
+	err := r.db.QueryRow(ctx, `
+		SELECT rule_id, tenant_id, jurisdiction_code, state_code, zip_code, tax_category_code,
+			is_taxable, base_rate, condition_type, condition_value,
+			effective_from, effective_to, COALESCE(updated_by,''),
+			created_at, updated_at
+		FROM tax_jurisdiction_rules
+		WHERE rule_id = $1 AND tenant_id = $2
+	`, ruleID, tenantID).Scan(
+		&rule.RuleID, &rule.TenantID, &rule.JurisdictionCode, &rule.StateCode, &rule.ZipCode, &rule.TaxCategoryCode,
+		&rule.IsTaxable, &rule.BaseRate, &rule.ConditionType, &rule.ConditionValue,
+		&rule.EffectiveFrom, &rule.EffectiveTo, &rule.UpdatedBy,
+		&rule.CreatedAt, &rule.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return rule, nil
+}
+
+func (r *FinanceSettingsRepo) CreateTaxJurisdictionRule(ctx context.Context, tenantID uuid.UUID, req *fsmodels.CreateTaxJurisdictionRuleRequest) (*fsmodels.TaxJurisdictionRule, error) {
+	effFrom, _ := time.Parse("2006-01-02", req.EffectiveFrom)
+	isTaxable := true
+	if req.IsTaxable != nil {
+		isTaxable = *req.IsTaxable
+	}
+	condType := "NONE"
+	if req.ConditionType != "" {
+		condType = req.ConditionType
+	}
+
+	rule := &fsmodels.TaxJurisdictionRule{
+		TenantID:         tenantID,
+		JurisdictionCode: req.JurisdictionCode,
+		StateCode:        req.StateCode,
+		ZipCode:          req.ZipCode,
+		TaxCategoryCode:  req.TaxCategoryCode,
+		IsTaxable:        isTaxable,
+		BaseRate:         req.BaseRate,
+		ConditionType:    condType,
+		ConditionValue:   req.ConditionValue,
+		EffectiveFrom:    effFrom,
+		UpdatedBy:        req.UpdatedBy,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	if req.EffectiveTo != "" {
+		if d, err := time.Parse("2006-01-02", req.EffectiveTo); err == nil {
+			rule.EffectiveTo = &d
+		}
+	}
+
+	err := r.db.QueryRow(ctx, `
+		INSERT INTO tax_jurisdiction_rules(tenant_id, jurisdiction_code, state_code, zip_code, tax_category_code,
+			is_taxable, base_rate, condition_type, condition_value,
+			effective_from, effective_to, updated_by, created_at, updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+		RETURNING rule_id
+	`, rule.TenantID, rule.JurisdictionCode, rule.StateCode, rule.ZipCode, rule.TaxCategoryCode,
+		rule.IsTaxable, rule.BaseRate, rule.ConditionType, rule.ConditionValue,
+		rule.EffectiveFrom, rule.EffectiveTo, rule.UpdatedBy, rule.CreatedAt, rule.UpdatedAt).Scan(&rule.RuleID)
+	if err != nil {
+		return nil, fmt.Errorf("create tax jurisdiction rule: %w", err)
+	}
+	return rule, nil
+}
+
+func (r *FinanceSettingsRepo) UpdateTaxJurisdictionRule(ctx context.Context, ruleID int, tenantID uuid.UUID, req *fsmodels.UpdateTaxJurisdictionRuleRequest) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE tax_jurisdiction_rules SET
+			jurisdiction_code = COALESCE($3, jurisdiction_code),
+			state_code        = COALESCE($4, state_code),
+			zip_code          = COALESCE($5, zip_code),
+			tax_category_code = COALESCE($6, tax_category_code),
+			is_taxable        = COALESCE($7, is_taxable),
+			base_rate         = COALESCE($8, base_rate),
+			condition_type    = COALESCE($9, condition_type),
+			condition_value   = COALESCE($10, condition_value),
+			effective_from    = COALESCE($11, effective_from),
+			effective_to      = COALESCE($12, effective_to),
+			updated_by        = COALESCE($13, updated_by),
+			updated_at        = NOW()
+		WHERE rule_id = $1 AND tenant_id = $2
+	`, ruleID, tenantID, req.JurisdictionCode, req.StateCode, req.ZipCode, req.TaxCategoryCode,
+		req.IsTaxable, req.BaseRate, req.ConditionType, req.ConditionValue,
+		req.EffectiveFrom, req.EffectiveTo, req.UpdatedBy)
+	return err
+}
+
+func (r *FinanceSettingsRepo) DeleteTaxJurisdictionRule(ctx context.Context, ruleID int, tenantID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM tax_jurisdiction_rules WHERE rule_id = $1 AND tenant_id = $2", ruleID, tenantID)
+	return err
+}
+
+// ══════════════════════════════════════════
+//  TAX CATEGORIES
+// ══════════════════════════════════════════
+
+func (r *FinanceSettingsRepo) ListTaxCategories(ctx context.Context, tenantID uuid.UUID) ([]*fsmodels.TaxCategory, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT id, tenant_id, code, COALESCE(description,''), COALESCE(example,''), is_active, created_at, updated_at
+		FROM tax_categories WHERE tenant_id = $1 ORDER BY code
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*fsmodels.TaxCategory
+	for rows.Next() {
+		c := &fsmodels.TaxCategory{}
+		if err := rows.Scan(&c.ID, &c.TenantID, &c.Code, &c.Description, &c.Example, &c.IsActive, &c.CreatedAt, &c.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
+	return list, nil
+}
+
+func (r *FinanceSettingsRepo) GetTaxCategory(ctx context.Context, id, tenantID uuid.UUID) (*fsmodels.TaxCategory, error) {
+	c := &fsmodels.TaxCategory{}
+	err := r.db.QueryRow(ctx, `
+		SELECT id, tenant_id, code, COALESCE(description,''), COALESCE(example,''), is_active, created_at, updated_at
+		FROM tax_categories WHERE id = $1 AND tenant_id = $2
+	`, id, tenantID).Scan(
+		&c.ID, &c.TenantID, &c.Code, &c.Description, &c.Example, &c.IsActive, &c.CreatedAt, &c.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (r *FinanceSettingsRepo) CreateTaxCategory(ctx context.Context, tenantID uuid.UUID, req *fsmodels.CreateTaxCategoryRequest) (*fsmodels.TaxCategory, error) {
+	c := &fsmodels.TaxCategory{
+		ID:          uuid.New(),
+		TenantID:    tenantID,
+		Code:        req.Code,
+		Description: req.Description,
+		Example:     req.Example,
+		IsActive:    true,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO tax_categories(id, tenant_id, code, description, example, is_active, created_at, updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+	`, c.ID, c.TenantID, c.Code, c.Description, c.Example, c.IsActive, c.CreatedAt, c.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create tax category: %w", err)
+	}
+	return c, nil
+}
+
+func (r *FinanceSettingsRepo) UpdateTaxCategory(ctx context.Context, id, tenantID uuid.UUID, req *fsmodels.UpdateTaxCategoryRequest) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE tax_categories SET
+			code        = COALESCE($3, code),
+			description = COALESCE($4, description),
+			example     = COALESCE($5, example),
+			is_active   = COALESCE($6, is_active),
+			updated_at  = NOW()
+		WHERE id = $1 AND tenant_id = $2
+	`, id, tenantID, req.Code, req.Description, req.Example, req.IsActive)
+	return err
+}
+
+func (r *FinanceSettingsRepo) DeleteTaxCategory(ctx context.Context, id, tenantID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, "DELETE FROM tax_categories WHERE id = $1 AND tenant_id = $2", id, tenantID)
+	return err
+}
+
 func (r *FinanceSettingsRepo) DeleteOrgReconAccount(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM org_reconciliation_accounts WHERE id = $1`, id)
 	return err
