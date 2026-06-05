@@ -45,6 +45,8 @@ class AppRouter {
   static const String financeSettingsRoute = '/settings/finance';
   static const String salesRoute = '/sales';
   static const String hrRoute = '/hr';
+  static const String chartOfAccountsRoute = '/finance/chart-of-accounts';
+  static const String journalEntryRoute = '/finance/journal-entries';
 
   final AuthService _authService;
 

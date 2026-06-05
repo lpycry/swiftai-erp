@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:swiftai_erp/core/services/auth_service.dart';
-import 'package:swiftai_erp/core/theme/app_theme.dart';
 import 'package:swiftai_erp/core/widgets/app_layout.dart';
 import 'package:swiftai_erp/features/sales/services/sales_service.dart';
 import 'package:swiftai_erp/features/sales/screens/customer_list_screen.dart';
 import 'package:swiftai_erp/features/sales/screens/material_price_screen.dart';
 import 'package:swiftai_erp/features/sales/screens/quotation_list_screen.dart';
+import 'package:swiftai_erp/features/sales/screens/so_list_screen.dart';
 
 class SalesScreen extends StatelessWidget {
   final AuthService authService;
@@ -90,10 +90,11 @@ class SalesScreen extends StatelessWidget {
               _SalesCard(
                 icon: Icons.shopping_cart_outlined,
                 title: 'Sales Orders',
-                subtitle: 'Create from quotation or manually',
+                subtitle: 'Create, manage & process orders (OR/EC/CS/RM/CN/ST/SP)',
                 color: Colors.green,
-                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Sales orders coming soon'), behavior: SnackBarBehavior.floating)),
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => SalesOrderListScreen(
+                        authService: authService, salesService: salesService))),
               ),
               _SalesCard(
                 icon: Icons.receipt_outlined,

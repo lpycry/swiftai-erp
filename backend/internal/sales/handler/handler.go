@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -446,4 +447,35 @@ func (h *SalesHandler) DeleteSalesOrder(c *gin.Context) {
 		log.Err(err).Msg("delete so failed"); response.InternalError(c, "delete failed"); return
 	}
 	response.OK(c, map[string]string{"status": "deleted"})
+}
+
+// ══════════════════════════════════════════════
+//  ATP CHECK & PRICING ENGINE
+// ══════════════════════════════════════════════
+
+func (h *SalesHandler) CheckATP(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	prodID, err := uuid.Parse(c.Query("product_id"))
+	if err != nil { response.BadRequest(c, "invalid product_id"); return }
+	qty := 1.0
+	if q := c.Query("quantity"); q != "" {
+		qty, _ = strconv.ParseFloat(q, 64)
+	}
+	result, err := h.svc.CheckATP(c.Request.Context(), tid, prodID, qty)
+	if err != nil { response.InternalError(c, err.Error()); return }
+	response.OK(c, result)
+}
+
+func (h *SalesHandler) CalculatePrice(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	var req salessvc.PricingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	result, err := h.svc.CalculatePrice(c.Request.Context(), tid, &req)
+	if err != nil { response.InternalError(c, err.Error()); return }
+	response.OK(c, result)
 }

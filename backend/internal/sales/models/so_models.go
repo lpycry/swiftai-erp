@@ -79,6 +79,7 @@ type SalesOrderItem struct {
 
 type CreateSalesOrderRequest struct {
 	CustomerID          string                `json:"customer_id" binding:"required"`
+	OrderType           string                `json:"order_type,omitempty"`
 	QuotationID         string                `json:"quotation_id,omitempty"`
 	CustomerPONo        string                `json:"customer_po_no,omitempty"`
 	PODate              string                `json:"po_date,omitempty"`
@@ -115,7 +116,7 @@ type CreateSOItemRequest struct {
 }
 
 type UpdateSOStatusRequest struct {
-	Status string `json:"status" binding:"required,oneof=DRAFT CONFIRMED SHIPPED INVOICED CANCELLED"`
+	Status string `json:"status" binding:"required,oneof=DRAFT PENDING_APPROVAL APPROVED CONFIRMED SHIPPED INVOICED COMPLETED CANCELLED"`
 }
 
 type ImportQuotationRequest struct {

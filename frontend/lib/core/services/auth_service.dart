@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'date_formatter.dart';
 
 class AuthService extends ChangeNotifier {
   static const String _tokenKey = 'access_token';
@@ -39,6 +40,7 @@ class AuthService extends ChangeNotifier {
     if (userData != null) {
       _user = jsonDecode(userData);
     }
+    if (_accessToken != null) AppDateFormatter().init(_accessToken);
     notifyListeners();
   }
 
@@ -79,6 +81,7 @@ class AuthService extends ChangeNotifier {
         _accessToken = data['access_token'];
         _refreshToken = data['refresh_token'];
         _user = data['user'];
+        AppDateFormatter().init(_accessToken);
 
         await _saveTokens(
           accessToken: _accessToken!,
@@ -129,6 +132,7 @@ class AuthService extends ChangeNotifier {
         _accessToken = data['access_token'];
         _refreshToken = data['refresh_token'];
         _user = data['user'];
+        AppDateFormatter().init(_accessToken);
 
         await _saveTokens(
           accessToken: _accessToken!,

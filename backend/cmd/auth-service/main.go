@@ -469,6 +469,8 @@ func main() {
 		protected.GET("/sales/orders", salesHandler.ListSalesOrders)
 		protected.GET("/sales/orders/:id", salesHandler.GetSalesOrder)
 		protected.PUT("/sales/orders/:id/status", salesHandler.UpdateSOStatus)
+		protected.GET("/sales/atp-check", salesHandler.CheckATP)          // ?product_id=&quantity=
+		protected.POST("/sales/calculate-price", salesHandler.CalculatePrice)
 		protected.DELETE("/sales/orders/:id", salesHandler.DeleteSalesOrder)
 
 		// ---- Cost Centers ----

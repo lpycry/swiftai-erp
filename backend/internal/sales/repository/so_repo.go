@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -132,6 +133,11 @@ func (r *SalesRepo) UpdateSOStatus(ctx context.Context, id, tenantID uuid.UUID, 
 	return err
 }
 
+func (r *SalesRepo) UpdateTaxAmount(ctx context.Context, id, tenantID uuid.UUID, taxAmount, grandTotal float64) error {
+	_, err := r.db.Exec(ctx, "UPDATE sales_orders SET tax_amount = $3, grand_total = $4, updated_at = NOW() WHERE id = $1 AND tenant_id = $2", id, tenantID, taxAmount, grandTotal)
+	return err
+}
+
 func (r *SalesRepo) GetNextSONo(ctx context.Context, tenantID uuid.UUID) (string, error) {
 	var seq int
 	err := r.db.QueryRow(ctx, "SELECT COALESCE(MAX(SUBSTRING(so_number FROM 'SO-(\\d+)')::int), 0)+1 FROM sales_orders WHERE tenant_id = $1", tenantID).Scan(&seq)
@@ -187,9 +193,21 @@ func (r *SalesRepo) CheckCreditLimit(ctx context.Context, tenantID, customerID u
 }
 
 func (r *SalesRepo) CalculateTax(ctx context.Context, tenantID, customerID uuid.UUID, netAmount float64) (float64, string, error) {
+	// Check if customer is tax-exempt
+	var isExempt bool
+	var exemptEndDate time.Time
+	var exemptValid bool
+	err := r.db.QueryRow(ctx, `SELECT COALESCE(is_tax_exempt, false), tax_exempt_end_date FROM customers WHERE id = $1 AND tenant_id = $2`, customerID, tenantID).Scan(&isExempt, &exemptEndDate, &exemptValid)
+	// pgx v5: for nullable types, use special handling. Simpler: just parse text.
+	if err == nil && isExempt {
+		if !exemptValid || time.Now().Before(exemptEndDate) {
+			return 0, "EXEMPT", nil // Customer is tax-exempt, no tax
+		}
+	}
+
 	// Simple default tax rate lookup based on customer's default tax jurisdiction
 	var taxRate float64
-	err := r.db.QueryRow(ctx, `SELECT COALESCE(t.tax_rate, 0) FROM customers c
+	err = r.db.QueryRow(ctx, `SELECT COALESCE(t.tax_rate, 0) FROM customers c
 		LEFT JOIN tax_jurisdictions t ON t.id = c.default_tax_jurisdiction_id
 		WHERE c.id = $1 AND c.tenant_id = $2`, customerID, tenantID).Scan(&taxRate)
 	if err != nil { return 0, "SKIPPED", nil }

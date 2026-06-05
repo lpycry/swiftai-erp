@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:swiftai_erp/core/theme/app_theme.dart';
 import 'package:swiftai_erp/core/services/auth_service.dart';
+import 'package:swiftai_erp/core/services/date_formatter.dart';
 import 'package:swiftai_erp/features/settings/services/date_format_service.dart';
 
 class DateFormatScreen extends StatefulWidget {
@@ -14,6 +15,7 @@ class DateFormatScreen extends StatefulWidget {
 class _DateFormatScreenState extends State<DateFormatScreen> {
   List<dynamic> _items = [];
   bool _loading = true;
+  bool _settingActive = false;
 
   @override
   void initState() { super.initState(); _load(); }
@@ -32,15 +34,19 @@ class _DateFormatScreenState extends State<DateFormatScreen> {
   }
 
   Future<void> _setActive(dynamic item) async {
+    if (_settingActive || !mounted) return;
+    setState(() => _settingActive = true);
     try {
       await widget.dateFormatService.activateDateFormat(item['id'].toString());
+      await AppDateFormatter().refresh();
+      if (!mounted) return;
       _load();
       _msg('${item['display_name']} set as active');
-    } catch (e) { _msg('$e', isError: true); }
+    } catch (e) { if (mounted) _msg('$e', isError: true); }
+    finally { if (mounted) setState(() => _settingActive = false); }
   }
 
   void _showForm({Map<String, dynamic>? edit}) {
-    final formKey = GlobalKey<FormState>();
     final codeCtrl = TextEditingController(text: edit?['format_code'] ?? '');
     final nameCtrl = TextEditingController(text: edit?['display_name'] ?? '');
     final patternCtrl = TextEditingController(text: edit?['date_pattern'] ?? '');
@@ -51,63 +57,90 @@ class _DateFormatScreenState extends State<DateFormatScreen> {
     bool isEditing = edit != null;
     final editId = edit?['id']?.toString();
 
-    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) => AlertDialog(
-      title: Text(isEditing ? 'Edit Date Format' : 'New Date Format'),
-      content: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420, maxHeight: 500), child: Form(key: formKey, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        if (!isEditing)
-          TextFormField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Code *', hintText: 'DD_MM_YYYY'),
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 13), validator: (v) => v == null || v.isEmpty ? 'Required' : null),
-        if (!isEditing) const SizedBox(height: 10),
-        TextFormField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Display Name *', hintText: 'DD.MM.YYYY'),
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 13), validator: (v) => v == null || v.isEmpty ? 'Required' : null),
-        const SizedBox(height: 10),
-        TextFormField(controller: patternCtrl, decoration: const InputDecoration(labelText: 'Date Pattern *', hintText: 'dd.MM.yyyy'),
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 13), validator: (v) => v == null || v.isEmpty ? 'Required' : null),
-        const SizedBox(height: 10),
-        Row(children: [
-          Expanded(child: TextFormField(controller: sepCtrl, decoration: const InputDecoration(labelText: 'Separator', hintText: '.'), style: const TextStyle(fontFamily: 'monospace', fontSize: 13))),
-          const SizedBox(width: 10),
-          Expanded(flex: 2, child: TextFormField(controller: exampleCtrl, decoration: const InputDecoration(labelText: 'Example', hintText: '31.12.2026'), style: const TextStyle(fontFamily: 'monospace', fontSize: 13))),
-        ]),
-        const SizedBox(height: 10),
-        Row(children: [
-          SizedBox(width: 100, child: TextFormField(controller: orderCtrl, decoration: const InputDecoration(labelText: 'Sort', isDense: true), keyboardType: TextInputType.number, style: const TextStyle(fontSize: 13))),
-          const Spacer(),
-          CheckboxListTile(value: isActive, onChanged: (v) => setDlg(() => isActive = v ?? false), title: const Text('Active', style: TextStyle(fontSize: 13)), contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading),
-        ]),
-      ])))),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton(onPressed: () async {
-          if (!formKey.currentState!.validate()) return;
-          try {
-            final data = <String, dynamic>{
-              if (!isEditing) 'format_code': codeCtrl.text,
-              'display_name': nameCtrl.text,
-              'date_pattern': patternCtrl.text,
-              'separator': sepCtrl.text,
-              'example_output': exampleCtrl.text,
-              'sort_order': int.tryParse(orderCtrl.text) ?? 0,
-              'is_active': isActive,
-            };
-            if (isEditing) { await widget.dateFormatService.updateDateFormat(editId!, data); }
-            else { await widget.dateFormatService.createDateFormat(data); }
-            if (ctx.mounted) Navigator.pop(ctx); _load();
-            _msg(isEditing ? 'Updated' : 'Created');
-          } catch (e) { _msg('$e', isError: true); }
-        }, child: Text(isEditing ? 'Save' : 'Create')),
-      ],
-    )));
+    showDialog(context: context, builder: (ctx) => StatefulBuilder(builder: (ctx, setDlg) {
+      void dismiss() {
+        codeCtrl.dispose(); nameCtrl.dispose(); patternCtrl.dispose();
+        sepCtrl.dispose(); exampleCtrl.dispose(); orderCtrl.dispose();
+        Navigator.pop(ctx);
+      }
+      return AlertDialog(
+        title: Text(isEditing ? 'Edit Date Format' : 'New Date Format'),
+        content: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 420, maxHeight: 500), child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          if (!isEditing)
+            TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: 'Code *', hintText: 'DD_MM_YYYY'),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+          if (!isEditing) const SizedBox(height: 10),
+          TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Display Name *', hintText: 'DD.MM.YYYY'),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+          const SizedBox(height: 10),
+          TextField(controller: patternCtrl, decoration: const InputDecoration(labelText: 'Date Pattern *', hintText: 'dd.MM.yyyy'),
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 13)),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: TextField(controller: sepCtrl, decoration: const InputDecoration(labelText: 'Separator', hintText: '.'), style: const TextStyle(fontFamily: 'monospace', fontSize: 13))),
+            const SizedBox(width: 10),
+            Expanded(flex: 2, child: TextField(controller: exampleCtrl, decoration: const InputDecoration(labelText: 'Example', hintText: '31.12.2026'), style: const TextStyle(fontFamily: 'monospace', fontSize: 13))),
+          ]),
+          const SizedBox(height: 10),
+          Row(children: [
+            SizedBox(width: 100, child: TextField(controller: orderCtrl, decoration: const InputDecoration(labelText: 'Sort', isDense: true), keyboardType: TextInputType.number, style: const TextStyle(fontSize: 13))),
+            const SizedBox(width: 8),
+            Flexible(child: CheckboxListTile(value: isActive, onChanged: (v) => setDlg(() => isActive = v ?? false), title: const Text('Active', style: TextStyle(fontSize: 13)), contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading)),
+          ]),
+        ]))),
+        actions: [
+          TextButton(onPressed: dismiss, child: const Text('Cancel')),
+          FilledButton(onPressed: () async {
+            if (nameCtrl.text.isEmpty || patternCtrl.text.isEmpty) {
+              _msg('Please fill in all required fields.', isError: true);
+              return;
+            }
+            if (!isEditing && codeCtrl.text.isEmpty) {
+              _msg('Code is required.', isError: true);
+              return;
+            }
+            try {
+              final data = <String, dynamic>{
+                if (!isEditing) 'format_code': codeCtrl.text,
+                'display_name': nameCtrl.text,
+                'date_pattern': patternCtrl.text,
+                'separator': sepCtrl.text,
+                'example_output': exampleCtrl.text,
+                'sort_order': (int.tryParse(orderCtrl.text) ?? 0).clamp(0, 9999),
+                'is_active': isActive,
+              };
+              if (isEditing) { await widget.dateFormatService.updateDateFormat(editId!, data); }
+              else { await widget.dateFormatService.createDateFormat(data); }
+              if (ctx.mounted) { codeCtrl.dispose(); nameCtrl.dispose(); patternCtrl.dispose(); sepCtrl.dispose(); exampleCtrl.dispose(); orderCtrl.dispose(); Navigator.pop(ctx); }
+              _load();
+              _msg(isEditing ? 'Updated' : 'Created');
+            } catch (e) { _msg('$e', isError: true); }
+          }, child: Text(isEditing ? 'Save' : 'Create')),
+        ],
+      );
+    }));
   }
 
   Future<void> _confirmDelete(dynamic item) async {
+    final isActive = item['is_active'] as bool? ?? false;
+    final msg = isActive
+        ? 'Cannot delete "${item['display_name']}" — it is the currently active format.\n\nSet another format as active first, then delete this one.'
+        : 'Delete "${item['display_name']}"?';
+    final canDelete = !isActive;
+
     final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('Delete Date Format'),
-      content: Text('Delete "${item['display_name']}"?'),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-        FilledButton(style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor), onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete'))],
+      title: Text(isActive ? 'Cannot Delete' : 'Delete Date Format'),
+      content: Text(msg),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+        if (canDelete)
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor), onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+      ],
     ));
-    if (ok == true) { try { await widget.dateFormatService.deleteDateFormat(item['id'].toString()); _load(); _msg('Deleted'); } catch (e) { _msg('$e', isError: true); } }
+    if (ok == true) {
+      try { await widget.dateFormatService.deleteDateFormat(item['id'].toString()); _load(); _msg('Deleted'); }
+      catch (e) { _msg('$e', isError: true); }
+    }
   }
 
   @override
@@ -128,7 +161,6 @@ class _DateFormatScreenState extends State<DateFormatScreen> {
               itemBuilder: (_, i) => _DFCard(
                 key: ValueKey(_items[i]['id']),
                 item: _items[i],
-                isSingleActive: _items.where((e) => e['is_active'] == true).length <= 1,
                 onEdit: () => _showForm(edit: _items[i]),
                 onDelete: () => _confirmDelete(_items[i]),
                 onSetActive: () => _setActive(_items[i]),
@@ -139,9 +171,9 @@ class _DateFormatScreenState extends State<DateFormatScreen> {
 }
 
 class _DFCard extends StatelessWidget {
-  final dynamic item; final bool isSingleActive;
+  final dynamic item;
   final VoidCallback onEdit, onDelete, onSetActive;
-  const _DFCard({super.key, required this.item, required this.isSingleActive, required this.onEdit, required this.onDelete, required this.onSetActive});
+  const _DFCard({super.key, required this.item, required this.onEdit, required this.onDelete, required this.onSetActive});
 
   @override
   Widget build(BuildContext context) {
@@ -173,7 +205,12 @@ class _DFCard extends StatelessWidget {
           if (!isActive)
             IconButton(icon: Icon(Icons.check_circle_outline, size: 18, color: Colors.green.shade600), onPressed: onSetActive, tooltip: 'Set Active', padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
           IconButton(icon: Icon(Icons.edit_outlined, size: 18, color: Colors.blue.shade400), onPressed: onEdit, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
-          IconButton(icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade400), onPressed: onDelete, padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 28, minHeight: 28)),
+          IconButton(
+            icon: Icon(Icons.delete_outline, size: 18, color: isActive ? Colors.grey.shade300 : Colors.red.shade400),
+            onPressed: isActive ? null : onDelete,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+          ),
         ]),
       ),
     );

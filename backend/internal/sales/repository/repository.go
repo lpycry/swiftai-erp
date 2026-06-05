@@ -481,4 +481,8 @@ func nullIfEmptyStr(s *string) *string {
 	return s
 }
 
+func (r *SalesRepo) GetStockOnHand(ctx context.Context, tenantID, productID uuid.UUID, onHand *float64) error {
+	return r.db.QueryRow(ctx, "SELECT COALESCE(SUM(quantity),0) FROM stock_on_hand WHERE tenant_id = $1 AND product_id = $2", tenantID, productID).Scan(onHand)
+}
+
 

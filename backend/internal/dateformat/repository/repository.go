@@ -55,6 +55,20 @@ func (r *DateFormatRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*
 	return df, nil
 }
 
+func (r *DateFormatRepo) GetActive(ctx context.Context, tenantID uuid.UUID) (*dfmodels.DateFormat, error) {
+	df := &dfmodels.DateFormat{}
+	err := r.db.QueryRow(ctx, `SELECT `+dfSelectCols+` FROM date_formats WHERE tenant_id = $1 AND is_active = true ORDER BY sort_order LIMIT 1`, tenantID).Scan(
+		&df.ID, &df.TenantID, &df.FormatCode, &df.DisplayName, &df.DatePattern,
+		&df.Separator, &df.ExampleOutput, &df.SortOrder, &df.IsActive,
+		&df.CreatedAt, &df.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows { return nil, nil }
+		return nil, fmt.Errorf("get active date format: %w", err)
+	}
+	return df, nil
+}
+
 func (r *DateFormatRepo) List(ctx context.Context, tenantID uuid.UUID) ([]*dfmodels.DateFormat, error) {
 	rows, err := r.db.Query(ctx, `SELECT `+dfSelectCols+` FROM date_formats WHERE tenant_id = $1 ORDER BY sort_order, format_code`, tenantID)
 	if err != nil { return nil, fmt.Errorf("list date formats: %w", err) }

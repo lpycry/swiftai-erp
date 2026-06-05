@@ -89,4 +89,49 @@ class SalesService {
       throw Exception(body['message'] ?? 'Delete failed');
     }
   }
+
+  // ══════════════════════════════════════════
+  //  SALES ORDERS
+  // ══════════════════════════════════════════
+
+  Future<List<dynamic>> listSalesOrders({String? status, String? orderType}) async {
+    final params = <String, String>{};
+    if (status != null && status.isNotEmpty) params['status'] = status;
+    if (orderType != null && orderType.isNotEmpty) params['type'] = orderType;
+    final uri = Uri.parse('$_baseUrl/sales/orders').replace(queryParameters: params);
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    return (jsonDecode(resp.body)['data'] as List<dynamic>?) ?? [];
+  }
+
+  Future<Map<String, dynamic>> createSalesOrder(Map<String, dynamic> data) async {
+    final resp = await http.post(Uri.parse('$_baseUrl/sales/orders'), headers: _headers, body: jsonEncode(data));
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Create SO failed');
+    }
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<Map<String, dynamic>> getSalesOrder(String id) async {
+    final resp = await http.get(Uri.parse('$_baseUrl/sales/orders/$id'), headers: _headers);
+    if (resp.statusCode >= 400) throw Exception('Failed to load SO');
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<void> updateSOStatus(String id, String status) async {
+    final resp = await http.put(Uri.parse('$_baseUrl/sales/orders/$id/status'), headers: _headers, body: jsonEncode({'status': status}));
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Status update failed');
+    }
+  }
+
+  Future<void> deleteSalesOrder(String id) async {
+    final resp = await http.delete(Uri.parse('$_baseUrl/sales/orders/$id'), headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Delete failed');
+    }
+  }
 }

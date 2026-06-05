@@ -60,6 +60,16 @@ func (h *DateFormatHandler) Create(c *gin.Context) {
 func (h *DateFormatHandler) List(c *gin.Context) {
 	tenantID, err := getTenantID(c)
 	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+
+	// Support ?mode=active to get the single active format
+	if c.Query("mode") == "active" {
+		df, err := h.repo.GetActive(c.Request.Context(), tenantID)
+		if err != nil { response.InternalError(c, err.Error()); return }
+		if df == nil { response.NotFound(c, "no active date format"); return }
+		response.OK(c, df)
+		return
+	}
+
 	list, err := h.repo.List(c.Request.Context(), tenantID)
 	if err != nil {
 		log.Err(err).Msg("list date formats failed")

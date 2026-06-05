@@ -15,6 +15,11 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentIndex = 0;
 
+  // 响应式断点判断
+  bool isMobile(double w) => w < 600;
+  bool isTablet(double w) => w >= 600 && w < 1024;
+  bool isDesktop(double w) => w >= 1024;
+
   final _stats = [
     _StatDef(
       'Revenue MTD',
@@ -52,21 +57,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'Manage COA structure',
       Icons.account_tree_rounded,
       AppTheme.accentBlue,
-      '/finance/chart-of-accounts',
+      AppRouter.chartOfAccountsRoute,
     ),
     _ModuleDef(
       'Journal Entries',
       'Post and manage entries',
       Icons.receipt_long_rounded,
       AppTheme.accentTeal,
-      '/finance/journal-entries',
+      AppRouter.journalEntryRoute,
     ),
     _ModuleDef(
       'Reports',
       'Balance Sheet & P&L',
       Icons.bar_chart_rounded,
       AppTheme.accentOrange,
-      '/finance',
+      AppRouter.financeRoute,
     ),
     _ModuleDef(
       'Inventory',
@@ -80,7 +85,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'Customers & sales documents',
       Icons.store_rounded,
       AppTheme.accentBlue,
-      '/sales',
+      AppRouter.salesRoute,
     ),
     _ModuleDef(
       'Settings',
@@ -105,24 +110,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           final width = constraints.maxWidth;
 
           // 核心响应式断点计算
-          int statCrossAxisCount = 3; // Stats 大屏一排 3 个
-          int moduleCrossAxisCount = 3; // Modules 大屏一排 3-4 个
-          double moduleRatio = 1.4; // Modules 宽高比
+          int statCrossAxisCount = 3;
+          int moduleCrossAxisCount = 3;
 
-          if (width < 600) {
-            // 手机移动端
-            statCrossAxisCount = 1; // KPI 卡片单列纵向排列
-            moduleCrossAxisCount = 1; // 模块卡片单列横向长条，看清副标题
-            moduleRatio = 3.5; // 移动端单列时的扁平宽高比
-          } else if (width < 960) {
-            // 平板或窄屏
-            statCrossAxisCount = 2; // KPI 两列
-            moduleCrossAxisCount = 2; // 模块两列
-            moduleRatio = 1.6;
+          if (isMobile(width)) {
+            statCrossAxisCount = 1;
+            moduleCrossAxisCount = 1;
+          } else if (isTablet(width)) {
+            statCrossAxisCount = 2;
+            moduleCrossAxisCount = 2;
           } else if (width > 1400) {
             // 宽屏桌面端
-            moduleCrossAxisCount = 4; // 扩展为 4 列，一屏看完所有模块
-            moduleRatio = 1.5;
+            moduleCrossAxisCount = 4;
           }
 
           return SingleChildScrollView(
@@ -168,18 +167,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         gradient: AppTheme.primaryGradient,
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.calendar_today_rounded,
                             color: Colors.white,
                             size: 14,
                           ),
-                          SizedBox(width: 6),
+                          const SizedBox(width: 6),
                           Text(
-                            'May 2026',
-                            style: TextStyle(
+                            _monthLabel(),
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w500,
                               fontSize: 13,
@@ -200,7 +199,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     crossAxisCount: statCrossAxisCount,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
-                    childAspectRatio: width < 600 ? 2.8 : 1.6, // 动态调整 KPI 卡片比例
+                    childAspectRatio: isMobile(width) ? 2.8 : (isTablet(width) ? 1.8 : 2.0),
                   ),
                   itemCount: _stats.length,
                   itemBuilder: (_, i) => _buildStatCard(_stats[i]),
@@ -259,8 +258,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     const Spacer(),
                     TextButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, AppRouter.financeRoute),
+                      onPressed: () => Navigator.pushNamed(context, AppRouter.financeRoute),
                       child: const Text(
                         'View All',
                         style: TextStyle(fontSize: 13),
@@ -274,7 +272,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: moduleCrossAxisCount,
-                    childAspectRatio: moduleRatio,
+                    childAspectRatio: isMobile(width) ? 3.5 : (isTablet(width) ? 1.6 : (width > 1400 ? 1.5 : 1.4)),
                     crossAxisSpacing: 14,
                     mainAxisSpacing: 14,
                   ),
@@ -350,15 +348,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Text(
-                  s.value,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
-                    height: 1.1,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    s.value,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                      height: 1.1,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -391,6 +392,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
+        highlightColor: AppTheme.accentBlue.withValues(alpha: 0.08),
+        splashColor: AppTheme.accentBlue.withValues(alpha: 0.12),
         onTap: m.route != null
             ? () => Navigator.pushNamed(context, m.route!)
             : null,
@@ -482,6 +485,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  /// 动态月份显示（替代硬编码 'May 2026'）
+  String _monthLabel() {
+    final now = DateTime.now();
+    const months = [
+      'January','February','March','April','May','June',
+      'July','August','September','October','November','December'
+    ];
+    return '${months[now.month - 1]} ${now.year}';
   }
 
   Widget _actionChip(
