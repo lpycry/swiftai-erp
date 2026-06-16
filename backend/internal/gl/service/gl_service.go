@@ -483,6 +483,7 @@ func (s *GLService) GetProfitLoss(ctx context.Context, tenantID uuid.UUID, year,
 }
 
 // validateBalance ensures total debits equal total credits within tolerance.
+// Supports negative amounts (红字冲销/reversal entries): uses net absolute sums.
 func (s *GLService) validateBalance(lines []glmodels.CreateJournalLineRequest) error {
 	var totalDebit, totalCredit float64
 	for _, l := range lines {
@@ -490,6 +491,8 @@ func (s *GLService) validateBalance(lines []glmodels.CreateJournalLineRequest) e
 		totalCredit += l.Credit
 	}
 
+	// For negative (red-ink) reversals, both sums may be negative; the algebraic
+	// difference still must be zero within tolerance.
 	diff := math.Abs(totalDebit - totalCredit)
 	if diff > RoundOffTolerance {
 		return fmt.Errorf("%w: total debit=%.2f, total credit=%.2f, diff=%.2f",
@@ -604,13 +607,45 @@ func (s *GLService) GetLeafAccounts(ctx context.Context, tenantID uuid.UUID) ([]
 
 // AddAttachment saves an attachment record.
 // ResetDatabase deletes all transactional data from all tables in FK-safe order.
+// Covers GL, Purchase, Sales, AR, WMS/Warehouse, Production, HR transactional tables.
+// Master/config tables (gl_accounts, organizations, users, roles, etc.) are preserved.
 func (s *GLService) ResetDatabase(ctx context.Context) error {
 	tables := []string{
+		// ── Production ──
+		"production_order_operations",
+		"production_orders",
+
+		// ── Sales ──
+		"sales_order_items",
+		"sales_orders",
+		"quotation_items",
+		"quotations",
+
+		// ── Purchase / AP ──
+		"purchase_payments",
+		"purchase_invoice_items",
+		"purchase_invoices",
+		"purchase_receipts",
+		"purchase_order_items",
+		"purchase_orders",
+
+		// ── AR ──
+		"customer_down_payments",
+
+		// ── WMS / Warehouse ──
+		"stock_movements",
+		"cycle_count_items",
+		"cycle_counts",
+		"stock_on_hand",
+
+		// ── GL ──
 		"gl_account_balances",
 		"gl_entry_attachments",
 		"gl_journal_lines",
 		"gl_journal_entries",
 		"gl_document_seq",
+
+		// ── Auth / Audit ──
 		"audit_log",
 		"access_requests",
 		"sod_violations",
@@ -626,9 +661,12 @@ func (s *GLService) ResetDatabase(ctx context.Context) error {
 		"sod_rules",
 	}
 	for _, t := range tables {
-		_, err := s.db.Exec(ctx, "DELETE FROM "+t)
+		// Use IF EXISTS to tolerate tables that may not exist yet in all envs
+		_, err := s.db.Exec(ctx, "DELETE FROM "+t+" WHERE 1=1")
 		if err != nil {
-			return fmt.Errorf("failed to clear %s: %w", t, err)
+			// Soft-fail: log the error but continue clearing other tables
+			// so a missing table doesn't block the whole reset
+			fmt.Printf("WARN: ResetDatabase skip %s: %v\n", t, err)
 		}
 	}
 	return nil

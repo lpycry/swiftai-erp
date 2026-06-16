@@ -1,5 +1,6 @@
-import 'dart:html' as html;
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:swiftai_erp/core/services/auth_service.dart';
 import 'package:swiftai_erp/core/theme/app_theme.dart';
 import 'package:swiftai_erp/core/widgets/app_layout.dart';
@@ -43,32 +44,35 @@ class _BalanceSheetScreenState extends State<BalanceSheetScreen> {
 
   // ── Export helpers ──
 
-  void _printReport() {
-    final h = _generateHTML();
-    final blob = html.Blob([h], 'text/html');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    html.window.open(url, 'BalanceSheet');
-    html.Url.revokeObjectUrl(url);
+  Future<void> _printReport() async {
+    await _saveFile('balance_sheet_print.html', _generateHTML());
   }
 
-  void _exportCSV() {
-    final csv = _generateCSV();
-    final blob = html.Blob([csv], 'text/csv');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    html.AnchorElement(href: url)
-      ..setAttribute('download', 'balance_sheet.csv')
-      ..click();
-    html.Url.revokeObjectUrl(url);
+  Future<void> _exportCSV() async {
+    await _saveFile('balance_sheet.csv', _generateCSV());
   }
 
-  void _exportHTML() {
-    final h = _generateHTML();
-    final blob = html.Blob([h], 'text/html');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    html.AnchorElement(href: url)
-      ..setAttribute('download', 'balance_sheet.html')
-      ..click();
-    html.Url.revokeObjectUrl(url);
+  Future<void> _exportHTML() async {
+    await _saveFile('balance_sheet.html', _generateHTML());
+  }
+
+  Future<void> _saveFile(String filename, String content) async {
+    try {
+      final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
+      final file = File('${dir.path}\\$filename');
+      await file.writeAsString(content, flush: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Saved to ${file.path}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: AppTheme.errorColor),
+        );
+      }
+    }
   }
 
   // ── Build ──

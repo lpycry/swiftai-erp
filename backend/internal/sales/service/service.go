@@ -227,20 +227,39 @@ func (s *SalesService) CreateSalesOrder(ctx context.Context, tenantID uuid.UUID,
 	currency := req.Currency; if currency == "" { currency = "USD" }
 	paymentTerms := req.PaymentTerms; if paymentTerms == "" { paymentTerms = "Net 30" }
 
+	soType := req.OrderType
+	if soType == "" { soType = "OR" }
+
+	// ── Load order type config (for config-driven behavior) ──
+	var otc *salesmodels.OrderTypeConfig
+	if cfg, err := s.repo.GetOrderTypeConfigByType(ctx, tenantID, soType); err == nil {
+		otc = cfg
+	}
+
+	// Apply reference_required check
+	if otc != nil && otc.ReferenceRequired && quotationID == nil {
+		return nil, fmt.Errorf("order type %s requires a reference document (quotation)", soType)
+	}
+
 	// Build items and calculate totals
 	var totalAmount float64
 	var items []*salesmodels.SalesOrderItem
 	for i, it := range req.Items {
 		prodID, _ := uuid.Parse(it.ProductID)
 		uom := it.UOM; if uom == "" { uom = "EA" }
-		lineTotal := it.Quantity * it.UnitPrice * (1 - it.DiscountPct/100)
+		unitPrice := it.UnitPrice
+		// Apply zero_price pricing procedure
+		if otc != nil && otc.PricingProcedure == "zero_price" {
+			unitPrice = 0
+		}
+		lineTotal := it.Quantity * unitPrice * (1 - it.DiscountPct/100)
 		totalAmount += lineTotal
 		var itemDelDate *time.Time
 		if it.DeliveryDate != "" { if d, err := time.Parse("2006-01-02", it.DeliveryDate); err == nil { itemDelDate = &d } }
 		items = append(items, &salesmodels.SalesOrderItem{
 			ID: uuid.New(), SOID: uuid.Nil, LineNo: i + 10,
 			ProductID: prodID, Description: it.Description,
-			Quantity: it.Quantity, UnitOfMeasure: uom, UnitPrice: it.UnitPrice,
+			Quantity: it.Quantity, UnitOfMeasure: uom, UnitPrice: unitPrice,
 			DiscountPct: it.DiscountPct, LineTotal: lineTotal,
 			DeliveryDate: itemDelDate, CreatedAt: time.Now(),
 		})
@@ -249,9 +268,6 @@ func (s *SalesService) CreateSalesOrder(ctx context.Context, tenantID uuid.UUID,
 	discountAmt := totalAmount * req.DiscountPct / 100
 	netAmount := totalAmount - discountAmt
 	grandTotal := netAmount + req.TaxAmount
-
-	soType := req.OrderType
-	if soType == "" { soType = "OR" }
 
 	so := &salesmodels.SalesOrder{
 		ID: uuid.New(), TenantID: tenantID, CustomerID: customerID, QuotationID: quotationID,
@@ -266,6 +282,8 @@ func (s *SalesService) CreateSalesOrder(ctx context.Context, tenantID uuid.UUID,
 		SignatureRequired: req.SignatureRequired, SaturdayDelivery: req.SaturdayDelivery, InsuranceAmt: req.InsuranceAmt,
 		TransportationTo: req.TransportationTo, TransportPayerAccount: req.TransportPayerAcct, BillToAddress: req.BillToAddress,
 		CreditCheckStatus: "PENDING", InventoryCheckStatus: "PENDING", TaxCalcStatus: "PENDING", AllocationStatus: "PENDING",
+		DeliveryBlockID: parseUUIDPtr(req.DeliveryBlockID),
+		BillingBlocked: false,
 		CreatedBy: userID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 
@@ -273,50 +291,185 @@ func (s *SalesService) CreateSalesOrder(ctx context.Context, tenantID uuid.UUID,
 
 	if err := s.repo.CreateSalesOrder(ctx, so, items); err != nil { return nil, err }
 
-	// ── Automated Checks ──
-	// 1. Inventory Check
-	invStatus, _ := s.repo.CheckInventory(ctx, tenantID, items)
+	// ── Config-Driven Automated Checks ──
+
+	var invStatus string
+	var creditStatus string
+	var taxAmount float64
+	var taxStatus string
+	var allocStatus string
+
+	// 1. ATP / Inventory Check — controlled by atp_check_logic
+	if otc != nil && otc.AtpCheckLogic == "none" {
+		invStatus = "SKIPPED"
+	} else {
+		invStatus, _ = s.repo.CheckInventory(ctx, tenantID, items)
+	}
 	so.InventoryCheckStatus = invStatus
 
-	// 2. Credit Check
-	creditStatus, _ := s.repo.CheckCreditLimit(ctx, tenantID, customerID, grandTotal)
+	// 2. Credit Check — controlled by credit_check_required
+	if otc != nil && !otc.CreditCheckRequired {
+		creditStatus = "SKIPPED"
+	} else {
+		creditStatus, _ = s.repo.CheckCreditLimit(ctx, tenantID, customerID, grandTotal)
+	}
 	so.CreditCheckStatus = creditStatus
 
 	// 3. Tax Calculation
-	taxAmount, taxStatus, _ := s.repo.CalculateTax(ctx, tenantID, customerID, netAmount)
+	taxAmount, taxStatus, _ = s.repo.CalculateTax(ctx, tenantID, customerID, netAmount)
 	if (taxStatus == "CALCULATED" || taxStatus == "EXEMPT") && req.TaxAmount == 0 {
 		so.TaxAmount = taxAmount
 		so.GrandTotal = netAmount + taxAmount
-		// Persist the calculated/zero tax amount
 		_ = s.repo.UpdateTaxAmount(ctx, so.ID, tenantID, so.TaxAmount, so.GrandTotal)
 	}
 	so.TaxCalcStatus = taxStatus
 
-	// 4. Inventory Allocation
-	allocStatus, _ := s.repo.AllocateInventory(ctx, tenantID, items)
+	// 4. Inventory Allocation — skip if ATP is none
+	if otc != nil && otc.AtpCheckLogic == "none" {
+		allocStatus = "SKIPPED"
+	} else {
+		allocStatus, _ = s.repo.AllocateInventory(ctx, tenantID, items)
+	}
 	so.AllocationStatus = allocStatus
 
-	// ── Approval Flow ──
-	// If inventory is available and credit passes → CONFIRMED
-	// If inventory is partial/unavailable or needs review → PENDING_APPROVAL
-	// If credit fails → stays DRAFT with FAILED credit status
-	if creditStatus == "FAILED" {
-		so.Status = "DRAFT" // stays draft for review
-	} else if invStatus == "AVAILABLE" && (creditStatus == "PASSED" || creditStatus == "SKIPPED") {
+	// 5. Billing Block — controlled by billing_block_default
+	if otc != nil && otc.BillingBlockDefault {
+		so.BillingBlocked = true
+	}
+
+	// 6. Auto-create delivery (placeholder — future delivery module integration)
+	// if otc != nil && otc.AutoCreateDelivery { ... }
+
+	// ── Status: Driven by Order Type Config's auto_confirm_so ──
+	if otc != nil && otc.AutoConfirmSO {
 		so.Status = "CONFIRMED"
 		_ = s.repo.UpdateSOStatus(ctx, so.ID, tenantID, "CONFIRMED")
 	} else {
-		// Partial inventory or unavailable → needs approval
-		so.Status = "PENDING_APPROVAL"
-		_ = s.repo.UpdateSOStatus(ctx, so.ID, tenantID, "PENDING_APPROVAL")
+		so.Status = "DRAFT"
 	}
 
 	for _, it := range items { so.Items = append(so.Items, *it) }
+
+	// Populate delivery block JOINed fields from DB
+	if so.DeliveryBlockID != nil {
+		if full, err := s.repo.GetSalesOrder(ctx, so.ID, tenantID); err == nil && full != nil {
+			so.DeliveryBlockCode = full.DeliveryBlockCode
+			so.DeliveryBlockDesc = full.DeliveryBlockDesc
+		}
+	}
+
 	return so, nil
 }
 
 func (s *SalesService) UpdateSOStatus(ctx context.Context, id, tenantID uuid.UUID, status string) error {
 	return s.repo.UpdateSOStatus(ctx, id, tenantID, status)
+}
+
+func (s *SalesService) UpdateSalesOrder(ctx context.Context, id, tenantID uuid.UUID, req *salesmodels.UpdateSalesOrderRequest) (*salesmodels.SalesOrder, error) {
+	// Fetch existing order to merge updates
+	existing, err := s.repo.GetSalesOrder(ctx, id, tenantID)
+	if err != nil { return nil, fmt.Errorf("get existing so: %w", err) }
+
+	// Merge fields
+	if req.CustomerID != "" { existing.CustomerID, _ = uuid.Parse(req.CustomerID) }
+	if req.OrderType != "" { existing.SOType = req.OrderType }
+	if req.CustomerPONo != "" { existing.CustomerPONo = req.CustomerPONo }
+	if req.PODate != "" { if d, err := time.Parse("2006-01-02", req.PODate); err == nil { existing.PODate = &d } }
+	if req.Currency != "" { existing.Currency = req.Currency }
+	if req.PaymentTerms != "" { existing.PaymentTerms = req.PaymentTerms }
+	if req.Incoterm != "" { existing.Incoterm = req.Incoterm }
+	if req.ValidFrom != "" { if d, err := time.Parse("2006-01-02", req.ValidFrom); err == nil { existing.ValidFrom = d } }
+	if req.DeliveryDate != "" { if d, err := time.Parse("2006-01-02", req.DeliveryDate); err == nil { existing.DeliveryDate = &d } }
+	if req.RequestedDate != "" { if d, err := time.Parse("2006-01-02", req.RequestedDate); err == nil { existing.RequestedDate = &d } }
+	if req.Notes != "" { existing.Notes = req.Notes }
+	if req.InternalNotes != "" { existing.InternalNotes = req.InternalNotes }
+	if req.Carrier != "" { existing.Carrier = req.Carrier }
+	if req.ShippingMethod != "" { existing.ShippingMethod = req.ShippingMethod }
+	if req.ShipperAccount != "" { existing.ShipperAccount = req.ShipperAccount }
+	if req.TransportationTo != "" { existing.TransportationTo = req.TransportationTo }
+	if req.TransportPayerAcct != "" { existing.TransportPayerAccount = req.TransportPayerAcct }
+	if req.BillToAddress != "" { existing.BillToAddress = req.BillToAddress }
+	if req.DiscountPct != nil { existing.DiscountPct = *req.DiscountPct }
+	if req.TaxAmount != nil { existing.TaxAmount = *req.TaxAmount }
+	if req.SignatureRequired != nil { existing.SignatureRequired = *req.SignatureRequired }
+	if req.SaturdayDelivery != nil { existing.SaturdayDelivery = *req.SaturdayDelivery }
+	if req.InsuranceAmt != nil { existing.InsuranceAmt = *req.InsuranceAmt }
+	if req.DeliveryBlockID != nil { existing.DeliveryBlockID = parseUUIDPtr(*req.DeliveryBlockID) }
+
+	// ── Load order type config for config-driven behavior ──
+	soType := existing.SOType
+	var otc *salesmodels.OrderTypeConfig
+	if cfg, err := s.repo.GetOrderTypeConfigByType(ctx, tenantID, soType); err == nil {
+		otc = cfg
+	}
+
+	// Apply billing_blocked from config if not explicitly set
+	if otc != nil && otc.BillingBlockDefault {
+		existing.BillingBlocked = true
+	}
+
+	// Build items if provided
+	var items []*salesmodels.SalesOrderItem
+	if len(req.Items) > 0 {
+		var totalAmount float64
+		for i, it := range req.Items {
+			prodID, _ := uuid.Parse(it.ProductID)
+			uom := it.UOM
+			if uom == "" { uom = "EA" }
+			unitPrice := it.UnitPrice
+			if otc != nil && otc.PricingProcedure == "zero_price" {
+				unitPrice = 0
+			}
+			lineTotal := it.Quantity * unitPrice * (1 - it.DiscountPct/100)
+			totalAmount += lineTotal
+			var itemDelDate *time.Time
+			if it.DeliveryDate != "" { if d, err := time.Parse("2006-01-02", it.DeliveryDate); err == nil { itemDelDate = &d } }
+			items = append(items, &salesmodels.SalesOrderItem{
+				ID: uuid.New(), SOID: existing.ID, LineNo: i + 10,
+				ProductID: prodID, Description: it.Description,
+				Quantity: it.Quantity, UnitOfMeasure: uom, UnitPrice: unitPrice,
+				DiscountPct: it.DiscountPct, LineTotal: lineTotal,
+				DeliveryDate: itemDelDate, CreatedAt: time.Now(),
+			})
+		}
+
+		discountAmt := totalAmount * existing.DiscountPct / 100
+		netAmount := totalAmount - discountAmt
+		grandTotal := netAmount + existing.TaxAmount
+
+		existing.TotalAmount = totalAmount
+		existing.DiscountAmount = discountAmt
+		existing.NetAmount = netAmount
+		existing.GrandTotal = grandTotal
+	} else {
+		// Recalculate with existing items (keep them)
+		items = make([]*salesmodels.SalesOrderItem, len(existing.Items))
+		for i := range existing.Items {
+			items[i] = &existing.Items[i]
+		}
+		// Recalculate totals from existing items
+		var totalAmount float64
+		for _, it := range items {
+			totalAmount += it.LineTotal
+		}
+		discountAmt := totalAmount * existing.DiscountPct / 100
+		netAmount := totalAmount - discountAmt
+		grandTotal := netAmount + existing.TaxAmount
+		existing.TotalAmount = totalAmount
+		existing.DiscountAmount = discountAmt
+		existing.NetAmount = netAmount
+		existing.GrandTotal = grandTotal
+	}
+
+	if err := s.repo.UpdateSalesOrder(ctx, existing, items); err != nil {
+		return nil, fmt.Errorf("update so: %w", err)
+	}
+
+	// Re-fetch full SO with items
+	if full, err := s.repo.GetSalesOrder(ctx, existing.ID, tenantID); err == nil && full != nil {
+		existing = full
+	}
+	return existing, nil
 }
 
 func (s *SalesService) DeleteSalesOrder(ctx context.Context, id, tenantID uuid.UUID) error {
@@ -332,6 +485,194 @@ type ATPResult struct {
 	Available     float64   `json:"available"`
 	Status        string    `json:"status"` // AVAILABLE / PARTIAL / UNAVAILABLE
 	SuggestedDate string    `json:"suggested_date,omitempty"`
+}
+
+// ── Delivery Block Reasons ──
+
+func (s *SalesService) ListDeliveryBlockReasons(ctx context.Context, tenantID uuid.UUID, activeOnly bool) ([]*salesmodels.DeliveryBlockReason, error) {
+	return s.repo.ListDeliveryBlockReasons(ctx, tenantID, activeOnly)
+}
+
+func (s *SalesService) GetDeliveryBlockReason(ctx context.Context, id, tenantID uuid.UUID) (*salesmodels.DeliveryBlockReason, error) {
+	return s.repo.GetDeliveryBlockReason(ctx, id, tenantID)
+}
+
+func (s *SalesService) CreateDeliveryBlockReason(ctx context.Context, tenantID uuid.UUID, req *salesmodels.CreateDeliveryBlockReasonRequest) (*salesmodels.DeliveryBlockReason, error) {
+	now := time.Now()
+	d := &salesmodels.DeliveryBlockReason{
+		ID: uuid.New(), TenantID: tenantID,
+		BlockCode:   req.BlockCode,
+		Description: req.Description,
+		IsActive:    true,
+		SortOrder:   req.SortOrder,
+		CreatedAt:   now, UpdatedAt: now,
+	}
+	if err := s.repo.CreateDeliveryBlockReason(ctx, d); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (s *SalesService) UpdateDeliveryBlockReason(ctx context.Context, id, tenantID uuid.UUID, req *salesmodels.UpdateDeliveryBlockReasonRequest) (*salesmodels.DeliveryBlockReason, error) {
+	existing, err := s.repo.GetDeliveryBlockReason(ctx, id, tenantID)
+	if err != nil { return nil, fmt.Errorf("get dbr: %w", err) }
+	if req.Description != nil { existing.Description = *req.Description }
+	if req.IsActive != nil { existing.IsActive = *req.IsActive }
+	if req.SortOrder != nil { existing.SortOrder = *req.SortOrder }
+	if err := s.repo.UpdateDeliveryBlockReason(ctx, id, tenantID, existing); err != nil {
+		return nil, err
+	}
+	return existing, nil
+}
+
+func (s *SalesService) DeleteDeliveryBlockReason(ctx context.Context, id, tenantID uuid.UUID) error {
+	return s.repo.DeleteDeliveryBlockReason(ctx, id, tenantID)
+}
+
+func (s *SalesService) ListCarrierServiceTypes(ctx context.Context, tenantID uuid.UUID, carrier string) ([]*salesmodels.CarrierServiceType, error) {
+	return s.repo.ListCarrierServiceTypes(ctx, tenantID, carrier)
+}
+
+func (s *SalesService) GetCarrierServiceType(ctx context.Context, id, tenantID uuid.UUID) (*salesmodels.CarrierServiceType, error) {
+	return s.repo.GetCarrierServiceType(ctx, id, tenantID)
+}
+
+func (s *SalesService) CreateCarrierServiceType(ctx context.Context, tenantID uuid.UUID, req *salesmodels.CreateCarrierServiceTypeRequest) (*salesmodels.CarrierServiceType, error) {
+	now := time.Now()
+	d := &salesmodels.CarrierServiceType{
+		ID:          uuid.New(),
+		TenantID:    tenantID,
+		Carrier:     req.Carrier,
+		ServiceType: req.ServiceType,
+		IsActive:    true,
+		IsSystem:    false,
+		SortOrder:   req.SortOrder,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := s.repo.CreateCarrierServiceType(ctx, d); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+func (s *SalesService) UpdateCarrierServiceType(ctx context.Context, id, tenantID uuid.UUID, req *salesmodels.UpdateCarrierServiceTypeRequest) (*salesmodels.CarrierServiceType, error) {
+	existing, err := s.repo.GetCarrierServiceType(ctx, id, tenantID)
+	if err != nil { return nil, fmt.Errorf("get carrier service type: %w", err) }
+	if req.Carrier != nil { existing.Carrier = *req.Carrier }
+	if req.ServiceType != nil { existing.ServiceType = *req.ServiceType }
+	if req.IsActive != nil { existing.IsActive = *req.IsActive }
+	if req.SortOrder != nil { existing.SortOrder = *req.SortOrder }
+	if err := s.repo.UpdateCarrierServiceType(ctx, id, tenantID, existing); err != nil {
+		return nil, err
+	}
+	return existing, nil
+}
+
+func (s *SalesService) DeleteCarrierServiceType(ctx context.Context, id, tenantID uuid.UUID) error {
+	return s.repo.DeleteCarrierServiceType(ctx, id, tenantID)
+}
+
+func parseUUIDPtr(s string) *uuid.UUID {
+	if s == "" { return nil }
+	if id, err := uuid.Parse(s); err == nil { return &id }
+	return nil
+}
+
+// ── Order Type Configs ──
+
+func (s *SalesService) ListOrderTypeConfigs(ctx context.Context, tenantID uuid.UUID, activeOnly bool) ([]*salesmodels.OrderTypeConfig, error) {
+	return s.repo.ListOrderTypeConfigs(ctx, tenantID, activeOnly)
+}
+
+func (s *SalesService) GetOrderTypeConfig(ctx context.Context, id, tenantID uuid.UUID) (*salesmodels.OrderTypeConfig, error) {
+	return s.repo.GetOrderTypeConfig(ctx, id, tenantID)
+}
+
+func (s *SalesService) GetOrderTypeConfigByType(ctx context.Context, tenantID uuid.UUID, orderType string) (*salesmodels.OrderTypeConfig, error) {
+	return s.repo.GetOrderTypeConfigByType(ctx, tenantID, orderType)
+}
+
+func (s *SalesService) CreateOrderTypeConfig(ctx context.Context, tenantID uuid.UUID, req *salesmodels.CreateOrderTypeConfigRequest, userID *uuid.UUID) (*salesmodels.OrderTypeConfig, error) {
+	oType := req.OrderType
+	desc := req.Description
+	if desc == "" { desc = oType }
+	if req.ShippingDirection == "" { req.ShippingDirection = "outbound" }
+	if req.TargetStockType == "" { req.TargetStockType = "unrestricted" }
+	if req.AtpCheckLogic == "" { req.AtpCheckLogic = "hard" }
+	if req.PricingProcedure == "" { req.PricingProcedure = "standard" }
+	if req.BillingTrigger == "" { req.BillingTrigger = "post_delivery" }
+	if req.BillingType == "" { req.BillingType = "invoice" }
+	if req.GlAccountStrategy == "" { req.GlAccountStrategy = "standard_sales" }
+
+	// Find max sort_order
+	configs, err := s.repo.ListOrderTypeConfigs(ctx, tenantID, false)
+	if err != nil { return nil, err }
+	maxOrder := 0
+	for _, c := range configs {
+		if c.SortOrder > maxOrder { maxOrder = c.SortOrder }
+	}
+
+	now := time.Now()
+	otc := &salesmodels.OrderTypeConfig{
+		ID: uuid.New(), TenantID: tenantID,
+		OrderType: oType, Description: desc,
+		IsActive: true, IsSystem: false, SortOrder: maxOrder + 10,
+		RequiresShipping:   req.RequiresShipping,
+		ShippingDirection:  req.ShippingDirection,
+		AutoCreateDelivery: req.AutoCreateDelivery,
+		AutoPgiPgr:         req.AutoPgiPgr,
+		TargetStockType:    req.TargetStockType,
+		AutoConfirmSO:      req.AutoConfirmSO,
+		PackingSlip:        req.PackingSlip,
+		CreditCheckRequired: req.CreditCheckRequired,
+		AtpCheckLogic:      req.AtpCheckLogic,
+		ReferenceRequired:  req.ReferenceRequired,
+		PricingProcedure:   req.PricingProcedure,
+		BillingTrigger:     req.BillingTrigger,
+		BillingType:        req.BillingType,
+		GlAccountStrategy:  req.GlAccountStrategy,
+		BillingBlockDefault: req.BillingBlockDefault,
+		CreatedBy: userID, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.repo.CreateOrderTypeConfig(ctx, otc); err != nil {
+		return nil, err
+	}
+	return otc, nil
+}
+
+func (s *SalesService) UpdateOrderTypeConfig(ctx context.Context, id, tenantID uuid.UUID, req *salesmodels.UpdateOrderTypeConfigRequest) (*salesmodels.OrderTypeConfig, error) {
+	existing, err := s.repo.GetOrderTypeConfig(ctx, id, tenantID)
+	if err != nil { return nil, fmt.Errorf("get otc: %w", err) }
+
+	if req.Description != nil { existing.Description = *req.Description }
+	if req.IsActive != nil { existing.IsActive = *req.IsActive }
+	if req.SortOrder != nil { existing.SortOrder = *req.SortOrder }
+	if req.RequiresShipping != nil { existing.RequiresShipping = *req.RequiresShipping }
+	if req.ShippingDirection != nil { existing.ShippingDirection = *req.ShippingDirection }
+	if req.AutoCreateDelivery != nil { existing.AutoCreateDelivery = *req.AutoCreateDelivery }
+	if req.AutoPgiPgr != nil { existing.AutoPgiPgr = *req.AutoPgiPgr }
+	if req.TargetStockType != nil { existing.TargetStockType = *req.TargetStockType }
+	if req.CreditCheckRequired != nil { existing.CreditCheckRequired = *req.CreditCheckRequired }
+	if req.AtpCheckLogic != nil { existing.AtpCheckLogic = *req.AtpCheckLogic }
+	if req.ReferenceRequired != nil { existing.ReferenceRequired = *req.ReferenceRequired }
+	if req.PricingProcedure != nil { existing.PricingProcedure = *req.PricingProcedure }
+	if req.BillingTrigger != nil { existing.BillingTrigger = *req.BillingTrigger }
+	if req.BillingType != nil { existing.BillingType = *req.BillingType }
+	if req.GlAccountStrategy != nil { existing.GlAccountStrategy = *req.GlAccountStrategy }
+	if req.BillingBlockDefault != nil { existing.BillingBlockDefault = *req.BillingBlockDefault }
+	if req.AutoConfirmSO != nil { existing.AutoConfirmSO = *req.AutoConfirmSO }
+	if req.PackingSlip != nil { existing.PackingSlip = *req.PackingSlip }
+	existing.UpdatedAt = time.Now()
+
+	if err := s.repo.UpdateOrderTypeConfig(ctx, id, tenantID, existing); err != nil {
+		return nil, err
+	}
+	return existing, nil
+}
+
+func (s *SalesService) DeleteOrderTypeConfig(ctx context.Context, id, tenantID uuid.UUID) error {
+	return s.repo.DeleteOrderTypeConfig(ctx, id, tenantID)
 }
 
 func (s *SalesService) CheckATP(ctx context.Context, tenantID uuid.UUID, productID uuid.UUID, quantity float64) (*ATPResult, error) {

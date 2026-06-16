@@ -39,3 +39,8 @@ build/
 
 # Go
 vendor/
+
+# Build & IDE artifacts
+.vs/
+*.exe~
+backend/uploads/

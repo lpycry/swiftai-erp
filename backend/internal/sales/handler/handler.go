@@ -438,13 +438,251 @@ func (h *SalesHandler) UpdateSOStatus(c *gin.Context) {
 	response.OK(c, map[string]string{"status": req.Status})
 }
 
+func (h *SalesHandler) UpdateSalesOrder(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	var req salesmodels.UpdateSalesOrderRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()}); return
+	}
+	so, err := h.svc.UpdateSalesOrder(c.Request.Context(), id, tid, &req)
+	if err != nil {
+		log.Err(err).Msg("update so failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, so)
+}
+
 func (h *SalesHandler) DeleteSalesOrder(c *gin.Context) {
 	tid, err := getTenantID(c)
 	if err != nil { response.BadRequest(c, "missing tenant"); return }
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil { response.BadRequest(c, "invalid id"); return }
+
+	// Only allow deletion if order is still Draft
+	so, err := h.svc.GetSalesOrder(c.Request.Context(), id, tid)
+	if err != nil { response.NotFound(c, "order not found"); return }
+	if so.Status != "DRAFT" {
+		response.BadRequest(c, "cannot delete an order with status '"+so.Status+"' — cancel it instead")
+		return
+	}
 	if err := h.svc.DeleteSalesOrder(c.Request.Context(), id, tid); err != nil {
 		log.Err(err).Msg("delete so failed"); response.InternalError(c, "delete failed"); return
+	}
+	response.OK(c, map[string]string{"status": "deleted"})
+}
+
+// ══════════════════════════════════════════════
+//  DELIVERY BLOCK REASONS
+// ══════════════════════════════════════════════
+
+func (h *SalesHandler) ListDeliveryBlockReasons(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	activeOnly := c.Query("active_only") == "true"
+	list, err := h.svc.ListDeliveryBlockReasons(c.Request.Context(), tid, activeOnly)
+	if err != nil { log.Err(err).Msg("list dbr failed"); response.InternalError(c, "list failed"); return }
+	response.OK(c, list)
+}
+
+func (h *SalesHandler) GetDeliveryBlockReason(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	d, err := h.svc.GetDeliveryBlockReason(c.Request.Context(), id, tid)
+	if err != nil { response.NotFound(c, "not found"); return }
+	response.OK(c, d)
+}
+
+func (h *SalesHandler) CreateDeliveryBlockReason(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	var req salesmodels.CreateDeliveryBlockReasonRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()}); return
+	}
+	d, err := h.svc.CreateDeliveryBlockReason(c.Request.Context(), tid, &req)
+	if err != nil {
+		log.Err(err).Msg("create dbr failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, d)
+}
+
+func (h *SalesHandler) UpdateDeliveryBlockReason(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	var req salesmodels.UpdateDeliveryBlockReasonRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()}); return
+	}
+	d, err := h.svc.UpdateDeliveryBlockReason(c.Request.Context(), id, tid, &req)
+	if err != nil {
+		log.Err(err).Msg("update dbr failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, d)
+}
+
+func (h *SalesHandler) DeleteDeliveryBlockReason(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	if err := h.svc.DeleteDeliveryBlockReason(c.Request.Context(), id, tid); err != nil {
+		log.Err(err).Msg("delete dbr failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "deleted"})
+}
+
+// ══════════════════════════════════════════════
+//  CARRIER SERVICE TYPES
+// ══════════════════════════════════════════════
+
+func (h *SalesHandler) ListCarrierServiceTypes(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	carrier := c.Query("carrier")
+	list, err := h.svc.ListCarrierServiceTypes(c.Request.Context(), tid, carrier)
+	if err != nil { log.Err(err).Msg("list carrier service types failed"); response.InternalError(c, "list failed"); return }
+	response.OK(c, list)
+}
+
+func (h *SalesHandler) GetCarrierServiceType(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	d, err := h.svc.GetCarrierServiceType(c.Request.Context(), id, tid)
+	if err != nil { response.NotFound(c, "not found"); return }
+	response.OK(c, d)
+}
+
+func (h *SalesHandler) CreateCarrierServiceType(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	var req salesmodels.CreateCarrierServiceTypeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()}); return
+	}
+	d, err := h.svc.CreateCarrierServiceType(c.Request.Context(), tid, &req)
+	if err != nil {
+		log.Err(err).Msg("create carrier service type failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, d)
+}
+
+func (h *SalesHandler) UpdateCarrierServiceType(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	var req salesmodels.UpdateCarrierServiceTypeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()}); return
+	}
+	d, err := h.svc.UpdateCarrierServiceType(c.Request.Context(), id, tid, &req)
+	if err != nil {
+		log.Err(err).Msg("update carrier service type failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, d)
+}
+
+func (h *SalesHandler) DeleteCarrierServiceType(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	if err := h.svc.DeleteCarrierServiceType(c.Request.Context(), id, tid); err != nil {
+		log.Err(err).Msg("delete carrier service type failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "deleted"})
+}
+
+// ══════════════════════════════════════════════
+//  ORDER TYPE CONFIGS
+// ══════════════════════════════════════════════
+
+func (h *SalesHandler) ListOrderTypeConfigs(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	activeOnly := c.Query("active_only") == "true"
+	list, err := h.svc.ListOrderTypeConfigs(c.Request.Context(), tid, activeOnly)
+	if err != nil { log.Err(err).Msg("list otc failed"); response.InternalError(c, "list failed"); return }
+	response.OK(c, list)
+}
+
+func (h *SalesHandler) GetOrderTypeConfig(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	otc, err := h.svc.GetOrderTypeConfig(c.Request.Context(), id, tid)
+	if err != nil { response.NotFound(c, "not found"); return }
+	response.OK(c, otc)
+}
+
+func (h *SalesHandler) CreateOrderTypeConfig(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	var req salesmodels.CreateOrderTypeConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()}); return
+	}
+	userID := uuid.Nil
+	if uid := c.GetString("user_id"); uid != "" { userID, _ = uuid.Parse(uid) }
+	otc, err := h.svc.CreateOrderTypeConfig(c.Request.Context(), tid, &req, &userID)
+	if err != nil {
+		log.Err(err).Msg("create otc failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, otc)
+}
+
+func (h *SalesHandler) UpdateOrderTypeConfig(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	var req salesmodels.UpdateOrderTypeConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()}); return
+	}
+	otc, err := h.svc.UpdateOrderTypeConfig(c.Request.Context(), id, tid, &req)
+	if err != nil {
+		log.Err(err).Msg("update otc failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, otc)
+}
+
+func (h *SalesHandler) DeleteOrderTypeConfig(c *gin.Context) {
+	tid, err := getTenantID(c)
+	if err != nil { response.BadRequest(c, "missing tenant"); return }
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil { response.BadRequest(c, "invalid id"); return }
+	if err := h.svc.DeleteOrderTypeConfig(c.Request.Context(), id, tid); err != nil {
+		log.Err(err).Msg("delete otc failed")
+		response.InternalError(c, err.Error())
+		return
 	}
 	response.OK(c, map[string]string{"status": "deleted"})
 }

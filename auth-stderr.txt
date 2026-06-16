@@ -1,0 +1,5 @@
+{"level":"info","host":"localhost","port":5432,"db":"swiftai_erp","time":1781559409,"message":"connecting to postgres"}
+{"level":"info","time":1781559409,"message":"postgres connection pool established"}
+{"level":"info","addr":"localhost:6379","time":1781559409,"message":"redis connection established"}
+{"level":"info","port":8080,"time":1781559409,"message":"auth-service starting"}
+{"level":"fatal","error":"listen tcp :8080: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.","time":1781559409,"message":"auth-service failed"}

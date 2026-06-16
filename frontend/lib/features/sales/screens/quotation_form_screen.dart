@@ -1,6 +1,7 @@
 import 'dart:convert';
-import 'dart:html' as html;
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -264,13 +265,10 @@ class _QuotationFormScreenState extends State<QuotationFormScreen> {
       sb.writeln('<p style="margin-top:40px">_________________________&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;_________________________</p>');
       sb.writeln('<p>Customer Signature&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Authorized Signature</p>');
       sb.writeln('</body></html>');
-      final blob = html.Blob([sb.toString()], 'text/html');
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      final anchor = html.document.createElement('a') as html.AnchorElement;
-      anchor.href = url;
-      anchor.download = '${q['quotation_no']}.doc';
-      anchor.click();
-      html.Url.revokeObjectUrl(url);
+      final dir = await getDownloadsDirectory() ?? await getTemporaryDirectory();
+      final file = File('${dir.path}\\${q['quotation_no']}.html');
+      await file.writeAsString(sb.toString(), flush: true);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Saved to ${file.path}')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export Word error: $e'), backgroundColor: Colors.red));
     }

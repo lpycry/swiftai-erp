@@ -23,6 +23,7 @@ class AppLayout extends StatelessWidget {
     _NavDef(Icons.dashboard_rounded, 'Dashboard', AppRouter.dashboard),
     _NavDef(Icons.account_balance_rounded, 'Finance', AppRouter.financeRoute),
     _NavDef(Icons.inventory_2_rounded, 'Logistics', AppRouter.logisticsRoute),
+    _NavDef(Icons.factory_rounded, 'Production', AppRouter.productionRoute),
     _NavDef(Icons.shopping_cart_rounded, 'Sales', AppRouter.salesRoute),
 
     _NavDef(Icons.people_alt_rounded, 'HR', AppRouter.hrRoute),
@@ -72,14 +73,21 @@ class AppLayout extends StatelessWidget {
       height: 60,
       decoration: const BoxDecoration(
         color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppTheme.borderColor, width: 0.5)),
+        border: Border(
+          bottom: BorderSide(color: AppTheme.borderColor, width: 0.5),
+        ),
       ),
       child: Row(
         children: [
           const SizedBox(width: 20),
-          Text(title, style: const TextStyle(
-            fontSize: 16, fontWeight: FontWeight.w700, color: AppTheme.textPrimary,
-          )),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.textPrimary,
+            ),
+          ),
           const Spacer(),
           _searchBar(),
           const SizedBox(width: 12),
@@ -106,7 +114,10 @@ class AppLayout extends StatelessWidget {
           const SizedBox(width: 10),
           Icon(Icons.search_rounded, size: 16, color: AppTheme.textMuted),
           const SizedBox(width: 6),
-          Text('Search...', style: TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+          Text(
+            'Search...',
+            style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+          ),
         ],
       ),
     );
@@ -114,7 +125,8 @@ class AppLayout extends StatelessWidget {
 
   Widget _iconBtn(IconData icon, String tooltip) {
     return Container(
-      width: 36, height: 36,
+      width: 36,
+      height: 36,
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(10),
@@ -149,10 +161,14 @@ class AppLayout extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(authService.user?['display_name'] ?? 'User',
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              Text(authService.user?['email'] ?? '',
-                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted)),
+              Text(
+                authService.user?['display_name'] ?? 'User',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(
+                authService.user?['email'] ?? '',
+                style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+              ),
             ],
           ),
         ),
@@ -161,7 +177,8 @@ class AppLayout extends StatelessWidget {
         const PopupMenuItem(value: 'logout', child: Text('Logout')),
       ],
       child: Container(
-        width: 36, height: 36,
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
           gradient: AppTheme.primaryGradient,
           borderRadius: BorderRadius.circular(10),
@@ -169,7 +186,11 @@ class AppLayout extends StatelessWidget {
         child: Center(
           child: Text(
             name.toString()[0].toUpperCase(),
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
           ),
         ),
       ),
@@ -196,27 +217,45 @@ class AppLayout extends StatelessWidget {
             child: Row(
               children: [
                 Container(
-                  width: 32, height: 32,
+                  width: 32,
+                  height: 32,
                   decoration: BoxDecoration(
                     gradient: AppTheme.primaryGradient,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.rocket_launch, color: Colors.white, size: 18),
+                  child: const Icon(
+                    Icons.rocket_launch,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                 ),
                 const SizedBox(width: 12),
-                const Text('SwiftAI', style: TextStyle(
-                  color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700,
-                  letterSpacing: -0.5,
-                )),
+                const Text(
+                  'SwiftAI',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                  ),
+                ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppTheme.accentGradientStart.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Text('ERP', style: TextStyle(
-                    color: AppTheme.accentGradientStart, fontSize: 10, fontWeight: FontWeight.w700,
-                  )),
+                  child: const Text(
+                    'ERP',
+                    style: TextStyle(
+                      color: AppTheme.accentGradientStart,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -250,10 +289,17 @@ class AppLayout extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: selected ? AppTheme.accentGradientStart.withValues(alpha: 0.15) : Colors.transparent,
+              color: selected
+                  ? AppTheme.accentGradientStart.withValues(alpha: 0.15)
+                  : Colors.transparent,
               borderRadius: BorderRadius.circular(10),
               border: selected
-                  ? Border.all(color: AppTheme.accentGradientStart.withValues(alpha: 0.3), width: 0.5)
+                  ? Border.all(
+                      color: AppTheme.accentGradientStart.withValues(
+                        alpha: 0.3,
+                      ),
+                      width: 0.5,
+                    )
                   : null,
             ),
             child: Row(
@@ -261,18 +307,24 @@ class AppLayout extends StatelessWidget {
                 Icon(
                   item.icon,
                   size: 20,
-                  color: selected ? AppTheme.accentGradientStart : AppTheme.textMuted,
+                  color: selected
+                      ? AppTheme.accentGradientStart
+                      : AppTheme.textMuted,
                 ),
                 const SizedBox(width: 12),
-                Text(item.label, style: TextStyle(
-                  color: selected ? Colors.white : AppTheme.textMuted,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  fontSize: 14,
-                )),
+                Text(
+                  item.label,
+                  style: TextStyle(
+                    color: selected ? Colors.white : AppTheme.textMuted,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                    fontSize: 14,
+                  ),
+                ),
                 const Spacer(),
                 if (selected)
                   Container(
-                    width: 6, height: 6,
+                    width: 6,
+                    height: 6,
                     decoration: BoxDecoration(
                       gradient: AppTheme.primaryGradient,
                       borderRadius: BorderRadius.circular(3),
@@ -306,15 +358,22 @@ class AppLayout extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 32, height: 32,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               gradient: AppTheme.primaryGradient,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Center(
               child: Text(
-                (authService.user?['display_name'] ?? 'U').toString()[0].toUpperCase(),
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                (authService.user?['display_name'] ?? 'U')
+                    .toString()[0]
+                    .toUpperCase(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
             ),
           ),
@@ -325,7 +384,11 @@ class AppLayout extends StatelessWidget {
               children: [
                 Text(
                   authService.user?['display_name'] ?? 'User',
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Text(
                   authService.user?['email'] ?? '',
@@ -359,25 +422,42 @@ class AppLayout extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Container(
-                    width: 40, height: 40,
+                    width: 40,
+                    height: 40,
                     decoration: BoxDecoration(
                       gradient: AppTheme.primaryGradient,
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.rocket_launch, color: Colors.white, size: 22),
+                    child: const Icon(
+                      Icons.rocket_launch,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  const Text('SwiftAI ERP', style: TextStyle(
-                    color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700,
-                  )),
+                  const Text(
+                    'SwiftAI ERP',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ],
               ),
             ),
             ...List.generate(_navItems.length, (i) => _drawerItem(context, i)),
             const Divider(color: Color(0xFF1E293B)),
             ListTile(
-              leading: const Icon(Icons.logout_rounded, color: AppTheme.errorColor, size: 20),
-              title: const Text('Logout', style: TextStyle(color: AppTheme.errorColor, fontSize: 14)),
+              leading: const Icon(
+                Icons.logout_rounded,
+                color: AppTheme.errorColor,
+                size: 20,
+              ),
+              title: const Text(
+                'Logout',
+                style: TextStyle(color: AppTheme.errorColor, fontSize: 14),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 authService.logout();
@@ -394,12 +474,19 @@ class AppLayout extends StatelessWidget {
     final item = _navItems[index];
     final selected = currentIndex == index;
     return ListTile(
-      leading: Icon(item.icon, color: selected ? AppTheme.accentGradientStart : AppTheme.textMuted, size: 20),
-      title: Text(item.label, style: TextStyle(
-        color: selected ? Colors.white : AppTheme.textMuted,
-        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-        fontSize: 14,
-      )),
+      leading: Icon(
+        item.icon,
+        color: selected ? AppTheme.accentGradientStart : AppTheme.textMuted,
+        size: 20,
+      ),
+      title: Text(
+        item.label,
+        style: TextStyle(
+          color: selected ? Colors.white : AppTheme.textMuted,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+          fontSize: 14,
+        ),
+      ),
       selected: selected,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       dense: true,

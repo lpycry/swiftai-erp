@@ -23,6 +23,8 @@ import '../../features/settings/screens/settings_screen.dart';
 import '../../features/sales/services/sales_service.dart';
 import '../../features/sales/screens/sales_screen.dart';
 import '../../features/hr/screens/hr_dashboard_screen.dart';
+import '../../features/production/services/production_service.dart';
+import '../../features/production/screens/production_dashboard_screen.dart';
 import '../services/auth_service.dart';
 
 class AppRouter {
@@ -45,12 +47,16 @@ class AppRouter {
   static const String financeSettingsRoute = '/settings/finance';
   static const String salesRoute = '/sales';
   static const String hrRoute = '/hr';
+  static const String productionRoute = '/production';
   static const String chartOfAccountsRoute = '/finance/chart-of-accounts';
   static const String journalEntryRoute = '/finance/journal-entries';
 
   final AuthService _authService;
 
   AppRouter(this._authService);
+
+  /// Safe accessor — returns empty string when token is not yet loaded.
+  String get _token => _authService.accessToken ?? '';
 
   Route<dynamic>? generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -71,16 +77,19 @@ class AppRouter {
         );
       case settingsRoute:
         return MaterialPageRoute(
-          builder: (_) => SettingsScreen(authService: _authService, glService: GlService(_authService.accessToken)),
+          builder: (_) => SettingsScreen(
+            authService: _authService,
+            glService: GlService(_token),
+          ),
           settings: settings,
         );
       case financeSettingsRoute:
         return MaterialPageRoute(
           builder: (_) => FinanceSettingsScreen(
             authService: _authService,
-            glService: GlService(_authService.accessToken),
-            orgService: OrgService(_authService.accessToken),
-            financeSettingsService: FinanceSettingsService(_authService.accessToken),
+            glService: GlService(_token),
+            orgService: OrgService(_token),
+            financeSettingsService: FinanceSettingsService(_token),
           ),
           settings: settings,
         );
@@ -88,7 +97,7 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => AuthObjectsScreen(
             authService: _authService,
-            adminService: AdminService(_authService.accessToken),
+            adminService: AdminService(_token),
           ),
           settings: settings,
         );
@@ -96,7 +105,7 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => RolesScreen(
             authService: _authService,
-            adminService: AdminService(_authService.accessToken),
+            adminService: AdminService(_token),
           ),
           settings: settings,
         );
@@ -104,7 +113,7 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => OrganizationsScreen(
             authService: _authService,
-            orgService: OrgService(_authService.accessToken),
+            orgService: OrgService(_token),
           ),
           settings: settings,
         );
@@ -112,7 +121,7 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => PeriodsScreen(
             authService: _authService,
-            orgService: OrgService(_authService.accessToken),
+            orgService: OrgService(_token),
           ),
           settings: settings,
         );
@@ -121,8 +130,8 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => FinanceScreen(
             authService: _authService,
-            glService: GlService(_authService.accessToken),
-            orgService: OrgService(_authService.accessToken),
+            glService: GlService(_token),
+            orgService: OrgService(_token),
           ),
           settings: settings,
         );
@@ -130,7 +139,7 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => ChartOfAccountsScreen(
             authService: _authService,
-            glService: GlService(_authService.accessToken),
+            glService: GlService(_token),
           ),
           settings: settings,
         );
@@ -138,8 +147,8 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => JournalEntryScreen(
             authService: _authService,
-            glService: GlService(_authService.accessToken),
-            orgService: OrgService(_authService.accessToken),
+            glService: GlService(_token),
+            orgService: OrgService(_token),
           ),
           settings: settings,
         );
@@ -147,7 +156,7 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => JournalEntryListScreen(
             authService: _authService,
-            glService: GlService(_authService.accessToken),
+            glService: GlService(_token),
           ),
           settings: settings,
         );
@@ -155,7 +164,7 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => AccountLedgerScreen(
             authService: _authService,
-            glService: GlService(_authService.accessToken),
+            glService: GlService(_token),
           ),
           settings: settings,
         );
@@ -163,7 +172,7 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => AccountBalanceScreen(
             authService: _authService,
-            glService: GlService(_authService.accessToken),
+            glService: GlService(_token),
           ),
           settings: settings,
         );
@@ -186,6 +195,16 @@ class AppRouter {
       case hrRoute:
         return MaterialPageRoute(
           builder: (_) => HrDashboardScreen(authService: _authService),
+          settings: settings,
+        );
+      case productionRoute:
+        return MaterialPageRoute(
+          builder: (_) => ProductionDashboardScreen(
+            authService: _authService,
+            productionService: ProductionService(
+              _authService.accessToken ?? '',
+            ),
+          ),
           settings: settings,
         );
       default:

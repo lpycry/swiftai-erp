@@ -23,6 +23,7 @@ type Product struct {
 	ShelfLifeDays *int       `json:"shelf_life_days,omitempty"`
 	IsSerialized  bool       `json:"is_serialized"`
 	IsBlocked     bool       `json:"is_blocked"`
+	MaterialType  string     `json:"material_type,omitempty"`
 	BlockReason   string     `json:"block_reason,omitempty"`
 	// Product Taxability
 	TaxCategory            string     `json:"tax_category"`
@@ -48,17 +49,22 @@ type Product struct {
 	MaxStockQty     *float64 `json:"max_stock_qty,omitempty"`
 	ReorderPoint    *float64 `json:"reorder_point,omitempty"`
 	ReorderQty      *float64 `json:"reorder_qty,omitempty"`
-	LeadTimeDays    *int     `json:"lead_time_days,omitempty"`
-	ProcurementType string   `json:"procurement_type,omitempty"`
-	StorageCondition string  `json:"storage_condition,omitempty"`
-	CountryOfOrigin string   `json:"country_of_origin,omitempty"`
-	HSCode          string   `json:"hs_code,omitempty"`
-	WeightKg        *float64 `json:"weight_kg,omitempty"`
-	IsActive        bool     `json:"is_active"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	Photos          []ProductPhoto   `json:"photos,omitempty"`
-	Barcodes        []ProductBarcode `json:"barcodes,omitempty"`
+	LeadTimeDays          *int     `json:"lead_time_days,omitempty"`
+	ProcurementType       string   `json:"procurement_type,omitempty"`
+	StorageCondition      string   `json:"storage_condition,omitempty"`
+	CountryOfOrigin       string   `json:"country_of_origin,omitempty"`
+	HSCode                string   `json:"hs_code,omitempty"`
+	WeightKg              *float64 `json:"weight_kg,omitempty"`
+	IsActive              bool     `json:"is_active"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
+	Photos                []ProductPhoto   `json:"photos,omitempty"`
+	Barcodes              []ProductBarcode `json:"barcodes,omitempty"`
+	// Production Tab fields
+	MRPEnabled            bool     `json:"mrp_enabled"`
+	PhantomAssembly       bool     `json:"phantom_assembly"`
+	ProductionLeadTime    *int     `json:"production_lead_time,omitempty"`
+	InHouseProductionDays *int     `json:"in_house_production_days,omitempty"`
 }
 
 type CreateProductRequest struct {
@@ -99,9 +105,15 @@ type CreateProductRequest struct {
 	MaxStockQty     *float64 `json:"max_stock_qty,omitempty"`
 	ReorderPoint    *float64 `json:"reorder_point,omitempty"`
 	ReorderQty      *float64 `json:"reorder_qty,omitempty"`
-	LeadTimeDays    *int     `json:"lead_time_days,omitempty"`
-	UOMGroup        string   `json:"uom_group,omitempty"`
-	IsSerialized    bool     `json:"is_serialized"`
+	LeadTimeDays          *int     `json:"lead_time_days,omitempty"`
+	UOMGroup              string   `json:"uom_group,omitempty"`
+	IsSerialized          bool     `json:"is_serialized"`
+	MaterialType          string   `json:"material_type,omitempty"`
+	// Production Tab fields
+	MRPEnabled            bool     `json:"mrp_enabled"`
+	PhantomAssembly       bool     `json:"phantom_assembly"`
+	ProductionLeadTime    *int     `json:"production_lead_time,omitempty"`
+	InHouseProductionDays *int     `json:"in_house_production_days,omitempty"`
 }
 
 type UpdateProductRequest struct {
@@ -141,11 +153,17 @@ type UpdateProductRequest struct {
 	MaxStockQty     *float64 `json:"max_stock_qty,omitempty"`
 	ReorderPoint    *float64 `json:"reorder_point,omitempty"`
 	ReorderQty      *float64 `json:"reorder_qty,omitempty"`
-	LeadTimeDays    *int     `json:"lead_time_days,omitempty"`
-	UOMGroup        *string  `json:"uom_group,omitempty"`
-	IsSerialized    *bool    `json:"is_serialized,omitempty"`
-	IsActive        *bool    `json:"is_active,omitempty"`
-	IsBlocked       *bool    `json:"is_blocked,omitempty"`
+	LeadTimeDays          *int     `json:"lead_time_days,omitempty"`
+	UOMGroup              *string  `json:"uom_group,omitempty"`
+	IsSerialized          *bool    `json:"is_serialized,omitempty"`
+	IsActive              *bool    `json:"is_active,omitempty"`
+	IsBlocked             *bool    `json:"is_blocked,omitempty"`
+	// Production Tab fields
+	MRPEnabled            *bool    `json:"mrp_enabled,omitempty"`
+	PhantomAssembly       *bool    `json:"phantom_assembly,omitempty"`
+	ProductionLeadTime    *int     `json:"production_lead_time,omitempty"`
+	InHouseProductionDays *int     `json:"in_house_production_days,omitempty"`
+	MaterialType          *string  `json:"material_type,omitempty"`
 }
 
 // ProductPhoto (REQ-MM-001~010)

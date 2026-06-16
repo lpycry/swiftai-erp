@@ -14,6 +14,7 @@ class SwiftAIERPApp extends StatefulWidget {
 class _SwiftAIERPAppState extends State<SwiftAIERPApp> {
   late final AuthService _authService;
   late final AppRouter _appRouter;
+  bool _l10nReady = false;
 
   @override
   void initState() {
@@ -26,10 +27,13 @@ class _SwiftAIERPAppState extends State<SwiftAIERPApp> {
   Future<void> _initL10n() async {
     final l10n = await LocalizationService.create();
     l10n.addListener(() => setState(() {}));
+    if (mounted) setState(() => _l10nReady = true);
   }
 
   @override
   Widget build(BuildContext context) {
+    // Single MaterialApp always rendered — avoids web router null-route crash.
+    // Show a splash loader overlay until L10n is ready.
     return MaterialApp(
       title: 'SwiftAI ERP',
       debugShowCheckedModeBanner: false,
@@ -38,6 +42,14 @@ class _SwiftAIERPAppState extends State<SwiftAIERPApp> {
       themeMode: ThemeMode.light,
       initialRoute: '/login',
       onGenerateRoute: _appRouter.generateRoute,
+      builder: (context, child) {
+        if (!_l10nReady) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return child ?? const SizedBox.shrink();
+      },
     );
   }
 }

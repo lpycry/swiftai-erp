@@ -59,6 +59,10 @@ import (
 	arrepo "github.com/swiftai-erp/backend/internal/ar/repository"
 	arsvc "github.com/swiftai-erp/backend/internal/ar/service"
 	arhandler "github.com/swiftai-erp/backend/internal/ar/handler"
+
+	prodh "github.com/swiftai-erp/backend/internal/production/handler"
+	prodr "github.com/swiftai-erp/backend/internal/production/repository"
+	prods "github.com/swiftai-erp/backend/internal/production/service"
 )
 
 func main() {
@@ -162,6 +166,15 @@ func main() {
 	arRepo := arrepo.NewARRepo(pool)
 	arSvc := arsvc.NewARService(arRepo, pool, glSvc)
 	arHandler := arhandler.NewARHandler(arSvc)
+
+	// Production
+	prodBOMRepo := prodr.NewBOMRepo(pool)
+	prodWCRepo := prodr.NewWorkCenterRepo(pool)
+	prodRTRepo := prodr.NewRoutingTemplateRepo(pool)
+	prodOPRepo := prodr.NewTemplateOperationRepo(pool)
+	prodPORepo := prodr.NewProductionOrderRepo(pool)
+	prodSvc := prods.NewProductionService(pool, prodBOMRepo, prodWCRepo, prodRTRepo, prodOPRepo, prodPORepo)
+	prodHandler := prodh.NewProductionHandler(prodSvc)
 
 	// Router
 	r := gin.New()
@@ -468,10 +481,32 @@ func main() {
 		protected.POST("/sales/orders", salesHandler.CreateSalesOrder)
 		protected.GET("/sales/orders", salesHandler.ListSalesOrders)
 		protected.GET("/sales/orders/:id", salesHandler.GetSalesOrder)
+		protected.PUT("/sales/orders/:id", salesHandler.UpdateSalesOrder)
 		protected.PUT("/sales/orders/:id/status", salesHandler.UpdateSOStatus)
 		protected.GET("/sales/atp-check", salesHandler.CheckATP)          // ?product_id=&quantity=
 		protected.POST("/sales/calculate-price", salesHandler.CalculatePrice)
 		protected.DELETE("/sales/orders/:id", salesHandler.DeleteSalesOrder)
+
+		// ---- Order Type Configs ----
+		protected.GET("/sales/order-types", salesHandler.ListOrderTypeConfigs)
+		protected.GET("/sales/order-types/:id", salesHandler.GetOrderTypeConfig)
+		protected.POST("/sales/order-types", salesHandler.CreateOrderTypeConfig)
+		protected.PUT("/sales/order-types/:id", salesHandler.UpdateOrderTypeConfig)
+		protected.DELETE("/sales/order-types/:id", salesHandler.DeleteOrderTypeConfig)
+
+		// ---- Delivery Block Reasons ----
+		protected.GET("/sales/delivery-blocks", salesHandler.ListDeliveryBlockReasons)
+		protected.GET("/sales/delivery-blocks/:id", salesHandler.GetDeliveryBlockReason)
+		protected.POST("/sales/delivery-blocks", salesHandler.CreateDeliveryBlockReason)
+		protected.PUT("/sales/delivery-blocks/:id", salesHandler.UpdateDeliveryBlockReason)
+		protected.DELETE("/sales/delivery-blocks/:id", salesHandler.DeleteDeliveryBlockReason)
+
+		// ---- Sales: Carrier Service Types ----
+		protected.GET("/sales/carrier-service-types", salesHandler.ListCarrierServiceTypes)
+		protected.GET("/sales/carrier-service-types/:id", salesHandler.GetCarrierServiceType)
+		protected.POST("/sales/carrier-service-types", salesHandler.CreateCarrierServiceType)
+		protected.PUT("/sales/carrier-service-types/:id", salesHandler.UpdateCarrierServiceType)
+		protected.DELETE("/sales/carrier-service-types/:id", salesHandler.DeleteCarrierServiceType)
 
 		// ---- Cost Centers ----
 		protected.POST("/cost-centers", costCenterHandler.CreateCostCenter)
@@ -514,6 +549,43 @@ func main() {
 		protected.PUT("/date-formats/:id", dateFormatHandler.Update)
 		protected.POST("/date-formats/:id/activate", dateFormatHandler.SetActive)
 		protected.DELETE("/date-formats/:id", dateFormatHandler.Delete)
+
+		// ---- Production: BOM ----
+		protected.POST("/bom", prodHandler.CreateBOM)
+		protected.GET("/bom", prodHandler.ListBOMs)
+		protected.GET("/bom/:id", prodHandler.GetBOM)
+		protected.PUT("/bom/:id", prodHandler.UpdateBOM)
+		protected.DELETE("/bom/:id", prodHandler.DeleteBOM)
+		protected.POST("/bom/:id/items", prodHandler.AddBOMItem)
+		protected.PUT("/bom/items/:id", prodHandler.UpdateBOMItem)
+		protected.DELETE("/bom/items/:id", prodHandler.DeleteBOMItem)
+		protected.POST("/bom/explode", prodHandler.ExplodeBOM)
+
+		// ---- Production: Work Centers ----
+		protected.POST("/production/work-centers", prodHandler.CreateWorkCenter)
+		protected.GET("/production/work-centers", prodHandler.ListWorkCenters)
+		protected.GET("/production/work-centers/:id", prodHandler.GetWorkCenter)
+		protected.PUT("/production/work-centers/:id", prodHandler.UpdateWorkCenter)
+		protected.DELETE("/production/work-centers/:id", prodHandler.DeleteWorkCenter)
+
+		// ---- Production: Routing Templates ----
+		protected.POST("/production/routing-templates", prodHandler.CreateRoutingTemplate)
+		protected.GET("/production/routing-templates", prodHandler.ListRoutingTemplates)
+		protected.GET("/production/routing-templates/:id", prodHandler.GetRoutingTemplate)
+		protected.PUT("/production/routing-templates/:id", prodHandler.UpdateRoutingTemplate)
+		protected.DELETE("/production/routing-templates/:id", prodHandler.DeleteRoutingTemplate)
+
+		// ---- Production: Template Operations ----
+		protected.POST("/production/routing-templates/:id/operations", prodHandler.CreateTemplateOperation)
+		protected.PUT("/production/template-operations/:id", prodHandler.UpdateTemplateOperation)
+		protected.DELETE("/production/template-operations/:id", prodHandler.DeleteTemplateOperation)
+
+		// ---- Production: Orders ----
+		protected.POST("/production/orders", prodHandler.CreateProductionOrder)
+		protected.GET("/production/orders", prodHandler.ListProductionOrders)
+		protected.GET("/production/orders/:id", prodHandler.GetProductionOrder)
+		protected.PUT("/production/orders/:id", prodHandler.UpdateProductionOrder)
+		protected.DELETE("/production/orders/:id", prodHandler.DeleteProductionOrder)
 
 	}
 

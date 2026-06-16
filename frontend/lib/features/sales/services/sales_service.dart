@@ -127,6 +127,15 @@ class SalesService {
     }
   }
 
+  Future<Map<String, dynamic>> updateSalesOrder(String id, Map<String, dynamic> data) async {
+    final resp = await http.put(Uri.parse('$_baseUrl/sales/orders/$id'), headers: _headers, body: jsonEncode(data));
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Update SO failed');
+    }
+    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+  }
+
   Future<void> deleteSalesOrder(String id) async {
     final resp = await http.delete(Uri.parse('$_baseUrl/sales/orders/$id'), headers: _headers);
     if (resp.statusCode >= 400) {

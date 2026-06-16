@@ -38,12 +38,20 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
     if (!mounted) return; ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m), backgroundColor: isError ? AppTheme.errorColor : Colors.green));
   }
 
+  /// Display label shown in the UI (maps backend status to user-facing names)
+  String _displayStatus(String s) {
+    switch (s) {
+      case 'DRAFT': case 'PENDING_APPROVAL': return 'DRAFT';
+      default: return s;
+    }
+  }
+
   Color _statusColor(String s) {
     switch (s) {
-      case 'DRAFT': return Colors.grey;
-      case 'OPEN': case 'CONFIRMED': return Colors.blue;
+      case 'DRAFT': case 'PENDING_APPROVAL': return Colors.grey;
+      case 'CONFIRMED': return Colors.blue;
       case 'SHIPPED': return Colors.orange; case 'INVOICED': return Colors.teal;
-      case 'COMPLETED': return Colors.green; case 'REJECTED': case 'CANCELLED': return Colors.red;
+      case 'COMPLETED': return Colors.green; case 'CANCELLED': return Colors.red;
       default: return Colors.grey;
     }
   }
@@ -76,7 +84,7 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
       body: Column(children: [
         Container(height: 44, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: ListView(scrollDirection: Axis.horizontal, children: [
-            ['', 'All'], ['DRAFT', 'Draft'], ['OPEN', 'Open'], ['CONFIRMED', 'Confirmed'], ['SHIPPED', 'Shipped'],
+            ['', 'All'], ['DRAFT', 'Draft'], ['CONFIRMED', 'Confirmed'], ['SHIPPED', 'Shipped'],
             ['INVOICED', 'Invoiced'], ['COMPLETED', 'Completed'], ['CANCELLED', 'Cancelled'],
           ].map((e) => Padding(padding: const EdgeInsets.only(right: 6), child: FilterChip(
             label: Text(e[1], style: TextStyle(fontSize: 11, color: _statusFilter == e[0] ? Colors.white : null)),
@@ -104,7 +112,8 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
               ]))
             : ListView.builder(padding: const EdgeInsets.all(6), itemCount: _items.length, itemBuilder: (_, i) {
                 final item = _items[i];
-                final status = item['status'] ?? 'DRAFT';
+                final rawStatus = item['status'] ?? 'DRAFT';
+                final status = _displayStatus(rawStatus);
                 final soType = item['so_type'] ?? 'OR';
                 return Card(margin: const EdgeInsets.symmetric(vertical: 3), child: ExpansionTile(
                   dense: true, tilePadding: const EdgeInsets.symmetric(horizontal: 12),
@@ -126,6 +135,13 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
                       child: Text(status, style: TextStyle(fontSize: 9, color: _statusColor(status), fontWeight: FontWeight.w500))),
                     if (item['order_date'] != null) ...[const SizedBox(width: 8), Text(Fmt.shortS(item['order_date']), style: TextStyle(fontSize: 9, color: Colors.grey.shade400))],
                   ]),
+                  trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(icon: const Icon(Icons.edit, size: 16), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SalesOrderFormScreen(authService: widget.authService, salesService: widget.salesService, order: item))).then((r) { if (r == true) _load(); }),
+                      padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+                    IconButton(icon: Icon(Icons.delete_outline, size: 16, color: status == 'DRAFT' ? Colors.red : Colors.grey.shade300),
+                      onPressed: () => _confirmDelete(item),
+                      padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 32, minHeight: 32)),
+                  ]),
                   children: [
                     // Check statuses
                     Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -137,34 +153,25 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
                       ])),
                     // Actions
                     ButtonBar(buttonHeight: 28, children: [
-                      TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SalesOrderFormScreen(authService: widget.authService, salesService: widget.salesService, order: item))).then((r) { if (r == true) _load(); }),
-                        child: const Text('View', style: TextStyle(fontSize: 10))),
                       if (status == 'DRAFT')
-                        PopupMenuButton<String>(
-                          onSelected: (v) {
-                            if (v == 'delete') _confirmDelete(item);
-                            else _updateStatus(item['id'].toString(), v);
-                          },
-                          child: const Text('Actions ▾', style: TextStyle(fontSize: 10)),
-                          itemBuilder: (_) => [
-                            const PopupMenuItem(value: 'CONFIRMED', child: Text('→ CONFIRMED', style: TextStyle(fontSize: 11))),
-                            const PopupMenuItem(value: 'CANCELLED', child: Text('→ CANCELLED', style: TextStyle(fontSize: 11, color: Colors.red))),
-                            const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(fontSize: 11, color: Colors.red))),
-                          ],
+                        TextButton.icon(
+                          icon: const Icon(Icons.check_circle_outline, size: 14, color: Colors.blue),
+                          onPressed: () => _confirmAndUpdate(rawStatus, item['id'].toString(), 'CONFIRMED', 'Confirm order #${item['so_number']}?'),
+                          label: const Text('Confirm', style: TextStyle(fontSize: 10, color: Colors.blue)),
+                        ),
+                      if (status == 'DRAFT' || status == 'CONFIRMED' || status == 'SHIPPED' || status == 'INVOICED')
+                        TextButton.icon(
+                          icon: Icon(Icons.cancel_outlined, size: 14, color: Colors.red.shade400),
+                          onPressed: () => _confirmAndUpdate(rawStatus, item['id'].toString(), 'CANCELLED', 
+                            'Cancel ${item['so_number']}? This cannot be undone.', isCancel: true),
+                          label: Text('Cancel', style: TextStyle(fontSize: 10, color: Colors.red.shade400)),
                         ),
                       if (status == 'CONFIRMED')
-                        PopupMenuButton<String>(
-                          onSelected: (v) => _updateStatus(item['id'].toString(), v),
-                          child: const Text('Actions ▾', style: TextStyle(fontSize: 10)),
-                          itemBuilder: (_) => [
-                            const PopupMenuItem(value: 'SHIPPED', child: Text('→ SHIPPED', style: TextStyle(fontSize: 11))),
-                            const PopupMenuItem(value: 'CANCELLED', child: Text('→ CANCELLED', style: TextStyle(fontSize: 11, color: Colors.red))),
-                          ],
-                        ),
+                        TextButton(onPressed: () => _updateStatus(item['id'].toString(), 'SHIPPED'), child: const Text('→ Shipped', style: TextStyle(fontSize: 10))),
                       if (status == 'SHIPPED')
-                        TextButton(onPressed: () => _updateStatus(item['id'].toString(), 'INVOICED'), child: const Text('→ INVOICED', style: TextStyle(fontSize: 10))),
+                        TextButton(onPressed: () => _updateStatus(item['id'].toString(), 'INVOICED'), child: const Text('→ Invoiced', style: TextStyle(fontSize: 10))),
                       if (status == 'INVOICED')
-                        TextButton(onPressed: () => _updateStatus(item['id'].toString(), 'COMPLETED'), child: const Text('→ COMPLETED', style: TextStyle(fontSize: 10))),
+                        TextButton(onPressed: () => _updateStatus(item['id'].toString(), 'COMPLETED'), child: const Text('→ Completed', style: TextStyle(fontSize: 10))),
                     ]),
                   ],
                 ));
@@ -181,6 +188,11 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
   }
 
   Future<void> _confirmDelete(dynamic item) async {
+    final ordStatus = item['status'] ?? 'DRAFT';
+    if (ordStatus != 'DRAFT') {
+      _msg('Cannot delete — order is $ordStatus. Cancel instead.', isError: true);
+      return;
+    }
     final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       title: const Text('Delete Order'), content: Text('Delete ${item['so_number']}?'),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -189,6 +201,24 @@ class _SalesOrderListScreenState extends State<SalesOrderListScreen> {
     if (ok == true) {
       try { await http.delete(Uri.parse('http://localhost:8080/api/v1/sales/orders/${item['id']}'), headers: {'Authorization': 'Bearer $_token'}); _load(); _msg('Deleted'); }
       catch (e) { _msg('$e', isError: true); }
+    }
+  }
+
+  Future<void> _confirmAndUpdate(String rawStatus, String id, String newStatus, String message, {bool isCancel = false}) async {
+    final ok = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+      title: Text(isCancel ? 'Cancel Order' : 'Confirm Order'),
+      content: Text(message),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: isCancel ? Colors.red : Colors.blue),
+          onPressed: () => Navigator.pop(ctx, true),
+          child: Text(isCancel ? 'Yes, Cancel' : 'Yes, Confirm', style: const TextStyle(fontSize: 12)),
+        ),
+      ],
+    ));
+    if (ok == true) {
+      await _updateStatus(id, newStatus);
     }
   }
 }

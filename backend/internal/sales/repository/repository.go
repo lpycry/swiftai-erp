@@ -485,4 +485,62 @@ func (r *SalesRepo) GetStockOnHand(ctx context.Context, tenantID, productID uuid
 	return r.db.QueryRow(ctx, "SELECT COALESCE(SUM(quantity),0) FROM stock_on_hand WHERE tenant_id = $1 AND product_id = $2", tenantID, productID).Scan(onHand)
 }
 
+// ══════════════════════════════════════════
+//  CARRIER SERVICE TYPES
+// ══════════════════════════════════════════
+
+func (r *SalesRepo) ListCarrierServiceTypes(ctx context.Context, tenantID uuid.UUID, carrier string) ([]*salesmodels.CarrierServiceType, error) {
+	query := `SELECT id, tenant_id, carrier, service_type, is_active, is_system, sort_order, created_at, updated_at
+		FROM carrier_service_types WHERE tenant_id = $1`
+	args := []interface{}{tenantID}
+	if carrier != "" {
+		query += " AND carrier = $2 ORDER BY sort_order"
+		args = append(args, carrier)
+	} else {
+		query += " ORDER BY carrier, sort_order"
+	}
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	var list []*salesmodels.CarrierServiceType
+	for rows.Next() {
+		d := &salesmodels.CarrierServiceType{}
+		if err := rows.Scan(&d.ID, &d.TenantID, &d.Carrier, &d.ServiceType, &d.IsActive, &d.IsSystem, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, d)
+	}
+	return list, nil
+}
+
+func (r *SalesRepo) GetCarrierServiceType(ctx context.Context, id, tenantID uuid.UUID) (*salesmodels.CarrierServiceType, error) {
+	d := &salesmodels.CarrierServiceType{}
+	err := r.db.QueryRow(ctx, `SELECT id, tenant_id, carrier, service_type, is_active, is_system, sort_order, created_at, updated_at
+		FROM carrier_service_types WHERE id = $1 AND tenant_id = $2`, id, tenantID).Scan(
+		&d.ID, &d.TenantID, &d.Carrier, &d.ServiceType, &d.IsActive, &d.IsSystem, &d.SortOrder, &d.CreatedAt, &d.UpdatedAt)
+	if err != nil { return nil, err }
+	return d, nil
+}
+
+func (r *SalesRepo) CreateCarrierServiceType(ctx context.Context, d *salesmodels.CarrierServiceType) error {
+	_, err := r.db.Exec(ctx, `INSERT INTO carrier_service_types(id, tenant_id, carrier, service_type, is_active, is_system, sort_order, created_at, updated_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, d.ID, d.TenantID, d.Carrier, d.ServiceType, d.IsActive, d.IsSystem, d.SortOrder, d.CreatedAt, d.UpdatedAt)
+	return err
+}
+
+func (r *SalesRepo) UpdateCarrierServiceType(ctx context.Context, id, tenantID uuid.UUID, d *salesmodels.CarrierServiceType) error {
+	_, err := r.db.Exec(ctx, `UPDATE carrier_service_types SET carrier = $3, service_type = $4, is_active = $5, sort_order = $6, updated_at = NOW()
+		WHERE id = $1 AND tenant_id = $2`, id, tenantID, d.Carrier, d.ServiceType, d.IsActive, d.SortOrder)
+	return err
+}
+
+func (r *SalesRepo) DeleteCarrierServiceType(ctx context.Context, id, tenantID uuid.UUID) error {
+	var isSystem bool
+	err := r.db.QueryRow(ctx, "SELECT is_system FROM carrier_service_types WHERE id = $1 AND tenant_id = $2", id, tenantID).Scan(&isSystem)
+	if err != nil { return err }
+	if isSystem { return fmt.Errorf("cannot delete system carrier service type") }
+	_, err = r.db.Exec(ctx, "DELETE FROM carrier_service_types WHERE id = $1 AND tenant_id = $2", id, tenantID)
+	return err
+}
+
 

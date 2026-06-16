@@ -6,6 +6,7 @@ import 'package:swiftai_erp/core/router/app_router.dart';
 import 'package:swiftai_erp/features/finance/services/gl_service.dart';
 import 'package:swiftai_erp/features/settings/services/date_format_service.dart';
 import 'package:swiftai_erp/features/settings/screens/date_format_screen.dart';
+import 'package:swiftai_erp/features/settings/screens/sales_settings/sales_settings_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   final AuthService authService;
@@ -189,6 +190,16 @@ class SettingsScreen extends StatelessWidget {
                   subtitle: const Text('Periods, COA, Payment Terms, Incoterms'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => Navigator.pushNamed(context, '/settings/finance'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.sell_outlined, color: Colors.orange),
+                  title: const Text('Sales Settings'),
+                  subtitle: const Text('Order type configuration matrix'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => SalesSettingsScreen(authService: authService),
+                  )),
                 ),
                 const Divider(height: 1),
                 ListTile(

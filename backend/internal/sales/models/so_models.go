@@ -46,6 +46,12 @@ type SalesOrder struct {
 	InventoryCheckStatus string `json:"inventory_check_status"`
 	TaxCalcStatus        string `json:"tax_calc_status"`
 	AllocationStatus     string `json:"allocation_status"`
+	// Config-driven fields
+	BillingBlocked      bool   `json:"billing_blocked"`
+	// Delivery Block
+	DeliveryBlockID        *uuid.UUID `json:"delivery_block_id,omitempty"`
+	DeliveryBlockCode      string     `json:"delivery_block_code,omitempty"`
+	DeliveryBlockDesc      string     `json:"delivery_block_description,omitempty"`
 	// Meta
 	CreatedBy *uuid.UUID `json:"created_by,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`
@@ -102,7 +108,9 @@ type CreateSalesOrderRequest struct {
 	TransportationTo    string                `json:"transportation_to,omitempty"`
 	TransportPayerAcct  string                `json:"transport_payer_account,omitempty"`
 	BillToAddress       string                `json:"bill_to_address,omitempty"`
-	Items               []CreateSOItemRequest `json:"items" binding:"required,min=1"`
+	DeliveryBlockID      string                 `json:"delivery_block_id,omitempty"`
+	BillingBlocked       bool                   `json:"billing_blocked"`
+	Items                []CreateSOItemRequest `json:"items" binding:"required,min=1"`
 }
 
 type CreateSOItemRequest struct {
@@ -119,6 +127,64 @@ type UpdateSOStatusRequest struct {
 	Status string `json:"status" binding:"required,oneof=DRAFT PENDING_APPROVAL APPROVED CONFIRMED SHIPPED INVOICED COMPLETED CANCELLED"`
 }
 
+type UpdateSalesOrderRequest struct {
+	CustomerID          string                `json:"customer_id,omitempty"`
+	OrderType           string                `json:"order_type,omitempty"`
+	CustomerPONo        string                `json:"customer_po_no,omitempty"`
+	PODate              string                `json:"po_date,omitempty"`
+	Currency            string                `json:"currency,omitempty"`
+	PaymentTerms        string                `json:"payment_terms,omitempty"`
+	Incoterm            string                `json:"incoterm,omitempty"`
+	ValidFrom           string                `json:"valid_from,omitempty"`
+	DeliveryDate        string                `json:"delivery_date,omitempty"`
+	RequestedDate       string                `json:"requested_date,omitempty"`
+	EmployeeID          string                `json:"employee_id,omitempty"`
+	DiscountPct         *float64              `json:"discount_pct,omitempty"`
+	TaxAmount           *float64              `json:"tax_amount,omitempty"`
+	Notes               string                `json:"notes,omitempty"`
+	InternalNotes       string                `json:"internal_notes,omitempty"`
+	Carrier             string                `json:"carrier,omitempty"`
+	ShippingMethod      string                `json:"shipping_method,omitempty"`
+	ShipperAccount      string                `json:"shipper_account,omitempty"`
+	SignatureRequired   *bool                 `json:"signature_required,omitempty"`
+	SaturdayDelivery    *bool                 `json:"saturday_delivery,omitempty"`
+	InsuranceAmt        *float64              `json:"insurance_amt,omitempty"`
+	TransportationTo    string                `json:"transportation_to,omitempty"`
+	TransportPayerAcct  string                `json:"transport_payer_account,omitempty"`
+	BillToAddress       string                `json:"bill_to_address,omitempty"`
+	DeliveryBlockID     *string               `json:"delivery_block_id,omitempty"`
+	Items               []CreateSOItemRequest `json:"items,omitempty"`
+}
+
 type ImportQuotationRequest struct {
 	QuotationID string `json:"quotation_id" binding:"required"`
+}
+
+// ══════════════════════════════════════════
+//  CARRIER SERVICE TYPES
+// ══════════════════════════════════════════
+
+type CarrierServiceType struct {
+	ID          uuid.UUID `json:"id"`
+	TenantID    uuid.UUID `json:"tenant_id"`
+	Carrier     string    `json:"carrier"`
+	ServiceType string    `json:"service_type"`
+	IsActive    bool      `json:"is_active"`
+	IsSystem    bool      `json:"is_system"`
+	SortOrder   int       `json:"sort_order"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type CreateCarrierServiceTypeRequest struct {
+	Carrier     string `json:"carrier" binding:"required"`
+	ServiceType string `json:"service_type" binding:"required"`
+	SortOrder   int    `json:"sort_order"`
+}
+
+type UpdateCarrierServiceTypeRequest struct {
+	Carrier     *string `json:"carrier,omitempty"`
+	ServiceType *string `json:"service_type,omitempty"`
+	IsActive    *bool   `json:"is_active,omitempty"`
+	SortOrder   *int    `json:"sort_order,omitempty"`
 }
