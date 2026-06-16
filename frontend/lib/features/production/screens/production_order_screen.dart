@@ -948,6 +948,10 @@ class _ProductionOrderDetailScreenState
             ),
             const SizedBox(height: 16),
 
+            // ── Routing Info (from BOM) ──
+            if (_isEdit && _routingInfo != null) _buildRoutingInfo(),
+            if (_isEdit && _routingInfo != null) const SizedBox(height: 16),
+
             // ── Save Button ──
             SizedBox(
               width: double.infinity,
@@ -1084,6 +1088,87 @@ class _ProductionOrderDetailScreenState
                 _bomVersionCtrl.text = (bom['bom_version'] ?? '').toString();
               });
             },
+    );
+  }
+
+  /// Build Routing Info section from loaded _routingInfo
+  Widget _buildRoutingInfo() {
+    if (_routingInfo == null) return const SizedBox.shrink();
+
+    final rtName = (_routingInfo!['name'] ?? 'N/A').toString();
+    final rtDesc = (_routingInfo!['description'] ?? '').toString();
+    final rtStatus = (_routingInfo!['status'] ?? 'ACTIVE').toString();
+    final operations = (_routingInfo!['operations'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
+    return Card(
+      color: Colors.grey.shade50,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.route, size: 20, color: AppTheme.primaryColor),
+                const SizedBox(width: 8),
+                Text(
+                  'Routing: $rtName',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: rtStatus == 'ACTIVE' ? Colors.green.shade100 : Colors.orange.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    rtStatus,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: rtStatus == 'ACTIVE' ? Colors.green.shade900 : Colors.orange.shade900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (rtDesc.isNotEmpty) ...[const SizedBox(height: 8), Text(rtDesc, style: const TextStyle(fontSize: 12, color: Colors.grey))],
+            const SizedBox(height: 12),
+            // Operations table
+            if (operations.isNotEmpty) ...
+              [
+                Text('Operations', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowHeight: 32,
+                    dataRowHeight: 40,
+                    headingRowColor: MaterialStateColor.resolveWith((_) => Colors.grey.shade200),
+                    columns: const [
+                      DataColumn(label: Text('Sequence', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                      DataColumn(label: Text('Work Center', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                      DataColumn(label: Text('Duration (min)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600))),
+                    ],
+                    rows: operations
+                        .map<DataRow>((op) => DataRow(
+                              cells: [
+                                DataCell(Text((op['sequence'] ?? '').toString(), style: const TextStyle(fontSize: 11))),
+                                DataCell(Text((op['work_center_name'] ?? op['work_center_id'] ?? 'N/A').toString(), style: const TextStyle(fontSize: 11))),
+                                DataCell(Text('${(op['duration_minutes'] as num?)?.toStringAsFixed(1) ?? 'N/A'}', style: const TextStyle(fontSize: 11))),
+                              ],
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ]
+            else
+              Text('No operations defined', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          ],
+        ),
+      ),
     );
   }
 }
