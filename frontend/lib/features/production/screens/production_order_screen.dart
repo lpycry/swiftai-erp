@@ -479,6 +479,7 @@ class _ProductionOrderDetailScreenState
   String _priority = 'MEDIUM';
   DateTime? _plannedStartDate, _plannedEndDate;
   bool _saving = false;
+  Map<String, dynamic>? _routingInfo;
 
   bool get _isEdit => widget.entry != null;
   String? get _orderId =>
@@ -501,6 +502,15 @@ class _ProductionOrderDetailScreenState
       final d = await widget.productionService.getProductionOrder(_orderId!);
       if (!mounted) return;
       _populateFromDetail(d);
+      _loadRoutingInfo();
+    } catch (_) {}
+  }
+
+  Future<void> _loadRoutingInfo() async {
+    if (_orderId == null) return;
+    try {
+      final rt = await widget.productionService.getProductionOrderRouting(_orderId!);
+      if (mounted && rt != null) setState(() => _routingInfo = rt);
     } catch (_) {}
   }
 

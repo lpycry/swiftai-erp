@@ -122,4 +122,27 @@ func (s *ProductionService) DeleteProductionOrder(ctx context.Context, id, tenan
 	return s.poRepo.Delete(ctx, id, tenantID, userID)
 }
 
+// GetPORoutingInfo returns routing template info for a production order via its BOM
+func (s *ProductionService) GetPORoutingInfo(ctx context.Context, poID, tenantID uuid.UUID) (*prodmodels.RoutingTemplate, error) {
+	po, err := s.poRepo.GetByID(ctx, poID, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	// BOM is optional; if no BOM, return nil
+	if po.BOMID == nil {
+		return nil, nil
+	}
+	// Get BOM header
+	bom, err := s.bomRepo.GetByID(ctx, *po.BOMID, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	// If BOM has no routing template, return nil
+	if bom.RoutingTemplateID == nil {
+		return nil, nil
+	}
+	// Get routing template
+	return s.rtRepo.GetByID(ctx, *bom.RoutingTemplateID, tenantID)
+}
+
 var _ = time.Now

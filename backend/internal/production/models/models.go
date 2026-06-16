@@ -37,10 +37,12 @@ type BOMHeader struct {
 	Status       string     `json:"status"`
 	BaseQty      float64    `json:"base_qty"`
 	ValidFrom    time.Time  `json:"valid_from"`
-	ValidTo      time.Time  `json:"valid_to"`
-	Description  string     `json:"description,omitempty"`
-	IsActive     bool       `json:"is_active"`
-	CreatedBy    *uuid.UUID `json:"created_by,omitempty"`
+	ValidTo             time.Time  `json:"valid_to"`
+	Description         string     `json:"description,omitempty"`
+	IsActive            bool       `json:"is_active"`
+	RoutingTemplateID   *uuid.UUID `json:"routing_template_id,omitempty"`
+	RoutingTemplateName string     `json:"routing_template_name,omitempty"`
+	CreatedBy           *uuid.UUID `json:"created_by,omitempty"`
 	UpdatedBy    *uuid.UUID `json:"updated_by,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`

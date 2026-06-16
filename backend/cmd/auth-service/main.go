@@ -586,6 +586,7 @@ func main() {
 		protected.GET("/production/orders/:id", prodHandler.GetProductionOrder)
 		protected.PUT("/production/orders/:id", prodHandler.UpdateProductionOrder)
 		protected.DELETE("/production/orders/:id", prodHandler.DeleteProductionOrder)
+		protected.GET("/production/orders/:id/routing", prodHandler.GetPORoutingInfo)
 
 	}
 

@@ -706,3 +706,29 @@ func (h *ProductionHandler) DeleteProductionOrder(c *gin.Context) {
 	}
 	response.OK(c, map[string]string{"status": "cancelled"})
 }
+
+// GetPORoutingInfo returns routing template info for a production order
+func (h *ProductionHandler) GetPORoutingInfo(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid production order id")
+		return
+	}
+
+	rt, err := h.svc.GetPORoutingInfo(c.Request.Context(), id, tenantID)
+	if err != nil {
+		log.Err(err).Msg("get PO routing info failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	if rt == nil {
+		response.OK(c, map[string]interface{}{})
+		return
+	}
+	response.OK(c, rt)
+}

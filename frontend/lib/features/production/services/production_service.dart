@@ -324,4 +324,14 @@ class ProductionService {
     );
     if (resp.statusCode >= 400) throw Exception('Delete failed');
   }
+
+  Future<Map<String, dynamic>?> getProductionOrderRouting(String poId) async {
+    final resp = await http.get(
+      Uri.parse('$_ordersBase/$poId/routing'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) return null;
+    final body = jsonDecode(resp.body);
+    return (body['data'] as Map<String, dynamic>?);
+  }
 }
