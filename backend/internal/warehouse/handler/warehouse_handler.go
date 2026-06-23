@@ -11,9 +11,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
-	"github.com/swiftai-erp/backend/pkg/response"
 	whmodels "github.com/swiftai-erp/backend/internal/warehouse/models"
 	whesvc "github.com/swiftai-erp/backend/internal/warehouse/service"
+	"github.com/swiftai-erp/backend/pkg/response"
 )
 
 type WarehouseHandler struct {
@@ -398,11 +398,13 @@ func (h *WarehouseHandler) ListBins(c *gin.Context) {
 
 func (h *WarehouseHandler) GetBin(c *gin.Context) {
 	if _, err := getTenantID(c); err != nil {
-		response.BadRequest(c, "missing tenant context"); return
+		response.BadRequest(c, "missing tenant context")
+		return
 	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		response.BadRequest(c, "invalid bin id"); return
+		response.BadRequest(c, "invalid bin id")
+		return
 	}
 	bin, err := h.svc.GetBin(c.Request.Context(), id)
 	if err != nil {
@@ -415,15 +417,18 @@ func (h *WarehouseHandler) GetBin(c *gin.Context) {
 
 func (h *WarehouseHandler) UpdateBin(c *gin.Context) {
 	if _, err := getTenantID(c); err != nil {
-		response.BadRequest(c, "missing tenant context"); return
+		response.BadRequest(c, "missing tenant context")
+		return
 	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		response.BadRequest(c, "invalid bin id"); return
+		response.BadRequest(c, "invalid bin id")
+		return
 	}
 	var req whmodels.UpdateBinRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "invalid request"); return
+		response.BadRequest(c, "invalid request")
+		return
 	}
 	if err := h.svc.UpdateBin(c.Request.Context(), id, &req); err != nil {
 		log.Err(err).Msg("update bin failed")
@@ -440,11 +445,13 @@ func (h *WarehouseHandler) UpdateBin(c *gin.Context) {
 
 func (h *WarehouseHandler) DeleteBin(c *gin.Context) {
 	if _, err := getTenantID(c); err != nil {
-		response.BadRequest(c, "missing tenant context"); return
+		response.BadRequest(c, "missing tenant context")
+		return
 	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		response.BadRequest(c, "invalid bin id"); return
+		response.BadRequest(c, "invalid bin id")
+		return
 	}
 	if err := h.svc.DeleteBin(c.Request.Context(), id); err != nil {
 		log.Err(err).Msg("delete bin failed")
@@ -455,55 +462,113 @@ func (h *WarehouseHandler) DeleteBin(c *gin.Context) {
 }
 
 func (h *WarehouseHandler) ListBarcodes(c *gin.Context) {
-	if _, err := getTenantID(c); err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if _, err := getTenantID(c); err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	pid, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid product id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid product id")
+		return
+	}
 	barcodes, err := h.svc.ListBarcodes(c.Request.Context(), pid)
-	if err != nil { log.Err(err).Msg("list barcodes failed"); response.InternalError(c, "list barcodes failed"); return }
+	if err != nil {
+		log.Err(err).Msg("list barcodes failed")
+		response.InternalError(c, "list barcodes failed")
+		return
+	}
 	response.OK(c, barcodes)
 }
 
 func (h *WarehouseHandler) CreateBarcode(c *gin.Context) {
-	if _, err := getTenantID(c); err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if _, err := getTenantID(c); err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	pid, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid product id"); return }
-	var req struct { Barcode string `json:"barcode"`; BarcodeType string `json:"barcode_type"` }
-	if err := c.ShouldBindJSON(&req); err != nil { response.BadRequest(c, "invalid request"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid product id")
+		return
+	}
+	var req struct {
+		Barcode     string `json:"barcode"`
+		BarcodeType string `json:"barcode_type"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request")
+		return
+	}
 	barcode, err := h.svc.CreateBarcode(c.Request.Context(), pid, req.Barcode, req.BarcodeType)
-	if err != nil { log.Err(err).Msg("create barcode failed"); response.InternalError(c, "create barcode failed"); return }
+	if err != nil {
+		log.Err(err).Msg("create barcode failed")
+		response.InternalError(c, "create barcode failed")
+		return
+	}
 	response.Created(c, barcode)
 }
 
 func (h *WarehouseHandler) DeleteBarcode(c *gin.Context) {
-	if _, err := getTenantID(c); err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if _, err := getTenantID(c); err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	bid, err := uuid.Parse(c.Param("barcodeId"))
-	if err != nil { response.BadRequest(c, "invalid barcode id"); return }
-	if err := h.svc.DeleteBarcode(c.Request.Context(), bid); err != nil { log.Err(err).Msg("delete barcode failed"); response.InternalError(c, "delete barcode failed"); return }
-	response.OK(c, map[string]string{"status":"deleted"})
+	if err != nil {
+		response.BadRequest(c, "invalid barcode id")
+		return
+	}
+	if err := h.svc.DeleteBarcode(c.Request.Context(), bid); err != nil {
+		log.Err(err).Msg("delete barcode failed")
+		response.InternalError(c, "delete barcode failed")
+		return
+	}
+	response.OK(c, map[string]string{"status": "deleted"})
 }
 
 // ── Photos (REQ-MM-001~010) ──
 
 func (h *WarehouseHandler) ListPhotos(c *gin.Context) {
-	if _, err := getTenantID(c); err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if _, err := getTenantID(c); err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	pid, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid product id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid product id")
+		return
+	}
 	photos, err := h.svc.ListPhotos(c.Request.Context(), pid)
-	if err != nil { log.Err(err).Msg("list photos failed"); response.InternalError(c, "list photos failed"); return }
+	if err != nil {
+		log.Err(err).Msg("list photos failed")
+		response.InternalError(c, "list photos failed")
+		return
+	}
 	response.OK(c, photos)
 }
 
 func (h *WarehouseHandler) UploadPhoto(c *gin.Context) {
-	if _, err := getTenantID(c); err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if _, err := getTenantID(c); err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	pid, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid product id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid product id")
+		return
+	}
 	file, header, err := c.Request.FormFile("photo")
-	if err != nil { response.BadRequest(c, "no photo file provided"); return }
+	if err != nil {
+		response.BadRequest(c, "no photo file provided")
+		return
+	}
 	defer file.Close()
 
 	// Read entire file content
 	fileBytes, err := io.ReadAll(file)
-	if err != nil { response.InternalError(c, "failed to read file"); return }
+	if err != nil {
+		response.InternalError(c, "failed to read file")
+		return
+	}
 
 	// Detect MIME type from content (first 512 bytes is enough)
 	mimeType := http.DetectContentType(fileBytes)
@@ -523,7 +588,9 @@ func (h *WarehouseHandler) UploadPhoto(c *gin.Context) {
 	}
 
 	ext := filepath.Ext(header.Filename)
-	if ext == "" { ext = ".jpg" }
+	if ext == "" {
+		ext = ".jpg"
+	}
 	savedName := uuid.New().String() + ext
 	savedPath := filepath.Join(uploadDir, savedName)
 	if err := os.WriteFile(savedPath, fileBytes, 0644); err != nil {
@@ -542,13 +609,22 @@ func (h *WarehouseHandler) UploadPhoto(c *gin.Context) {
 }
 
 func (h *WarehouseHandler) DeletePhoto(c *gin.Context) {
-	if _, err := getTenantID(c); err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if _, err := getTenantID(c); err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	phid, err := uuid.Parse(c.Param("photoId"))
-	if err != nil { response.BadRequest(c, "invalid photo id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid photo id")
+		return
+	}
 
 	// Get photo info first to find file path
 	pid, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid product id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid product id")
+		return
+	}
 	photos, err := h.svc.ListPhotos(c.Request.Context(), pid)
 	if err == nil {
 		for _, p := range photos {
@@ -559,8 +635,12 @@ func (h *WarehouseHandler) DeletePhoto(c *gin.Context) {
 		}
 	}
 
-	if err := h.svc.DeletePhoto(c.Request.Context(), phid); err != nil { log.Err(err).Msg("delete photo failed"); response.InternalError(c, "delete photo failed"); return }
-	response.OK(c, map[string]string{"status":"deleted"})
+	if err := h.svc.DeletePhoto(c.Request.Context(), phid); err != nil {
+		log.Err(err).Msg("delete photo failed")
+		response.InternalError(c, "delete photo failed")
+		return
+	}
+	response.OK(c, map[string]string{"status": "deleted"})
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -569,9 +649,15 @@ func (h *WarehouseHandler) DeletePhoto(c *gin.Context) {
 
 func (h *WarehouseHandler) CreateGR(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	userID, err := getUserID(c)
-	if err != nil { response.BadRequest(c, "missing user context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
 
 	var req whmodels.CreateGRRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -590,7 +676,10 @@ func (h *WarehouseHandler) CreateGR(c *gin.Context) {
 
 func (h *WarehouseHandler) ListGRs(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	grs, err := h.svc.ListGRs(c.Request.Context(), tenantID)
 	if err != nil {
 		log.Err(err).Msg("list grs failed")
@@ -602,11 +691,20 @@ func (h *WarehouseHandler) ListGRs(c *gin.Context) {
 
 func (h *WarehouseHandler) PostGR(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	userID, err := getUserID(c)
-	if err != nil { response.BadRequest(c, "missing user context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid gr id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid gr id")
+		return
+	}
 
 	if err := h.svc.PostGR(c.Request.Context(), id, tenantID, userID); err != nil {
 		log.Err(err).Msg("post gr failed")
@@ -622,9 +720,15 @@ func (h *WarehouseHandler) PostGR(c *gin.Context) {
 
 func (h *WarehouseHandler) CreateOutbound(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	userID, err := getUserID(c)
-	if err != nil { response.BadRequest(c, "missing user context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
 
 	var req whmodels.CreateOutboundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -643,7 +747,10 @@ func (h *WarehouseHandler) CreateOutbound(c *gin.Context) {
 
 func (h *WarehouseHandler) ListOutbound(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	orders, err := h.svc.ListOutbound(c.Request.Context(), tenantID)
 	if err != nil {
 		log.Err(err).Msg("list outbound failed")
@@ -653,29 +760,117 @@ func (h *WarehouseHandler) ListOutbound(c *gin.Context) {
 	response.OK(c, orders)
 }
 
+func (h *WarehouseHandler) UpdateOutbound(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid order id")
+		return
+	}
+
+	var req whmodels.CreateOutboundRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	if err := h.svc.UpdateOutbound(c.Request.Context(), id, tenantID, &req); err != nil {
+		log.Err(err).Msg("update outbound failed")
+		response.InternalError(c, "update outbound failed: "+err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "updated"})
+}
+
 func (h *WarehouseHandler) ShipOutbound(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	userID, err := getUserID(c)
-	if err != nil { response.BadRequest(c, "missing user context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid order id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid order id")
+		return
+	}
 
 	if err := h.svc.ShipOutbound(c.Request.Context(), id, tenantID, userID); err != nil {
 		log.Err(err).Msg("ship outbound failed")
 		response.InternalError(c, "ship outbound failed: "+err.Error())
 		return
 	}
-	response.OK(c, map[string]string{"status": "shipped"})
+	response.OK(c, map[string]string{"status": "issued"})
 }
 
 // ═══════════════════════════════════════════════════════════════
 // Cycle Count (REQ-CC-001~008)
 // ═══════════════════════════════════════════════════════════════
 
+func (h *WarehouseHandler) ReverseOutbound(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid order id")
+		return
+	}
+
+	if err := h.svc.ReverseOutbound(c.Request.Context(), id, tenantID, userID); err != nil {
+		log.Err(err).Msg("reverse outbound failed")
+		response.InternalError(c, "reverse outbound failed: "+err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "reversed"})
+}
+
+func (h *WarehouseHandler) GetOutboundJournalEntry(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid order id")
+		return
+	}
+
+	je, err := h.svc.GetOutboundJournalEntry(c.Request.Context(), id, tenantID, userID)
+	if err != nil {
+		log.Err(err).Msg("get outbound journal failed")
+		response.NotFound(c, err.Error())
+		return
+	}
+	response.OK(c, je)
+}
+
 func (h *WarehouseHandler) CreateCycleCount(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 
 	var req whmodels.CreateCycleCountRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -694,7 +889,10 @@ func (h *WarehouseHandler) CreateCycleCount(c *gin.Context) {
 
 func (h *WarehouseHandler) ListCycleCounts(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	counts, err := h.svc.ListCycleCounts(c.Request.Context(), tenantID)
 	if err != nil {
 		log.Err(err).Msg("list cycle counts failed")
@@ -706,7 +904,10 @@ func (h *WarehouseHandler) ListCycleCounts(c *gin.Context) {
 
 func (h *WarehouseHandler) AISuggestCycleCounts(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	counts, err := h.svc.AISuggestCycleCounts(c.Request.Context(), tenantID, 5)
 	if err != nil {
 		log.Err(err).Msg("ai suggest cycle counts failed")
@@ -722,7 +923,10 @@ func (h *WarehouseHandler) AISuggestCycleCounts(c *gin.Context) {
 
 func (h *WarehouseHandler) ListTasks(c *gin.Context) {
 	tenantID, err := getTenantID(c)
-	if err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	status := c.Query("status")
 	tasks, err := h.svc.ListTasks(c.Request.Context(), tenantID, status)
 	if err != nil {
@@ -734,11 +938,20 @@ func (h *WarehouseHandler) ListTasks(c *gin.Context) {
 }
 
 func (h *WarehouseHandler) CompleteTask(c *gin.Context) {
-	if _, err := getTenantID(c); err != nil { response.BadRequest(c, "missing tenant context"); return }
+	if _, err := getTenantID(c); err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
 	userID, err := getUserID(c)
-	if err != nil { response.BadRequest(c, "missing user context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid task id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid task id")
+		return
+	}
 
 	if err := h.svc.CompleteTask(c.Request.Context(), id, userID); err != nil {
 		log.Err(err).Msg("complete task failed")

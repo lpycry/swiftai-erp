@@ -67,18 +67,19 @@ func (r *BOMRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, req *p
 	}
 
 	h := &prodmodels.BOMHeader{
-		BOMID:       uuid.New(),
-		TenantID:    tenantID,
-		MaterialID:  req.MaterialID,
-		BOMVersion:  req.BOMVersion,
-		BOMUsage:    usage,
-		Status:      "NEW",
-		BaseQty:     baseQty,
-		ValidFrom:   validFrom,
-		ValidTo:     validTo,
-		Description: req.Description,
-		IsActive:    req.IsActive,
-		CreatedBy:   &userID,
+		BOMID:             uuid.New(),
+		TenantID:          tenantID,
+		MaterialID:        req.MaterialID,
+		BOMVersion:        req.BOMVersion,
+		BOMUsage:          usage,
+		Status:            "NEW",
+		BaseQty:           baseQty,
+		ValidFrom:         validFrom,
+		ValidTo:           validTo,
+		Description:       req.Description,
+		IsActive:          req.IsActive,
+		RoutingTemplateID: req.RoutingTemplateID,
+		CreatedBy:         &userID,
 	}
 
 	tx, err := r.db.Begin(ctx)
@@ -88,12 +89,12 @@ func (r *BOMRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, req *p
 	defer tx.Rollback(ctx)
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO bom_headers (bom_id, tenant_id, material_id, bom_version,
+		INSERT INTO bom_headers (bom_id, tenant_id, material_id, routing_template_id, bom_version,
 			bom_usage, status, base_qty, valid_from, valid_to,
 			description, is_active,
 			created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$12,NOW(),NOW())
-	`, h.BOMID, h.TenantID, h.MaterialID, h.BOMVersion,
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,NOW(),NOW())
+	`, h.BOMID, h.TenantID, h.MaterialID, h.RoutingTemplateID, h.BOMVersion,
 		h.BOMUsage, h.Status, h.BaseQty, h.ValidFrom, h.ValidTo,
 		h.Description, h.IsActive,
 		h.CreatedBy)
@@ -125,17 +126,22 @@ func (r *BOMRepo) GetByID(ctx context.Context, bomID, tenantID uuid.UUID) (*prod
 	h := &prodmodels.BOMHeader{}
 	err := r.db.QueryRow(ctx, `
 		SELECT bh.bom_id, bh.tenant_id, bh.material_id,
+			bh.routing_template_id,
 			COALESCE(p.name,''), COALESCE(p.sku,''),
+			COALESCE(rt.template_name,''),
 			bh.bom_version, bh.bom_usage, bh.status, bh.base_qty,
 			bh.valid_from, bh.valid_to,
 			COALESCE(bh.description,''), bh.is_active,
 			bh.created_by, bh.updated_by, bh.created_at, bh.updated_at
 		FROM bom_headers bh
 		LEFT JOIN products p ON p.id = bh.material_id
+		LEFT JOIN routing_templates rt ON rt.id = bh.routing_template_id
 		WHERE bh.bom_id = $1 AND bh.tenant_id = $2
 	`, bomID, tenantID).Scan(
 		&h.BOMID, &h.TenantID, &h.MaterialID,
+		&h.RoutingTemplateID,
 		&h.MaterialName, &h.MaterialSKU,
+		&h.RoutingTemplateName,
 		&h.BOMVersion, &h.BOMUsage, &h.Status, &h.BaseQty,
 		&h.ValidFrom, &h.ValidTo,
 		&h.Description, &h.IsActive,
@@ -157,13 +163,16 @@ func (r *BOMRepo) GetByID(ctx context.Context, bomID, tenantID uuid.UUID) (*prod
 func (r *BOMRepo) List(ctx context.Context, tenantID uuid.UUID, materialID *uuid.UUID, status string) ([]*prodmodels.BOMHeader, error) {
 	query := `
 		SELECT bh.bom_id, bh.tenant_id, bh.material_id,
+			bh.routing_template_id,
 			COALESCE(p.name,''), COALESCE(p.sku,''),
+			COALESCE(rt.template_name,''),
 			bh.bom_version, bh.bom_usage, bh.status, bh.base_qty,
 			bh.valid_from, bh.valid_to,
 			COALESCE(bh.description,''), bh.is_active,
 			bh.created_by, bh.updated_by, bh.created_at, bh.updated_at
 		FROM bom_headers bh
 		LEFT JOIN products p ON p.id = bh.material_id
+		LEFT JOIN routing_templates rt ON rt.id = bh.routing_template_id
 		WHERE bh.tenant_id = $1
 	`
 	args := []interface{}{tenantID}
@@ -192,7 +201,9 @@ func (r *BOMRepo) List(ctx context.Context, tenantID uuid.UUID, materialID *uuid
 		h := &prodmodels.BOMHeader{}
 		if err := rows.Scan(
 			&h.BOMID, &h.TenantID, &h.MaterialID,
+			&h.RoutingTemplateID,
 			&h.MaterialName, &h.MaterialSKU,
+			&h.RoutingTemplateName,
 			&h.BOMVersion, &h.BOMUsage, &h.Status, &h.BaseQty,
 			&h.ValidFrom, &h.ValidTo,
 			&h.Description, &h.IsActive,
@@ -246,15 +257,16 @@ func (r *BOMRepo) Update(ctx context.Context, bomID, tenantID uuid.UUID, req *pr
 
 	_, err = tx.Exec(ctx, `
 		UPDATE bom_headers SET
-			bom_version = COALESCE($3, bom_version),
-			bom_usage   = COALESCE($4, bom_usage),
-			base_qty    = COALESCE($5, base_qty),
-			valid_from  = COALESCE($6, valid_from),
-			valid_to    = COALESCE($7, valid_to),
-			description = COALESCE($8, description),
-			is_active   = COALESCE($9, is_active),
-			updated_by  = $10,
-			updated_at  = NOW()
+			bom_version        = COALESCE($3, bom_version),
+			bom_usage          = COALESCE($4, bom_usage),
+			base_qty           = COALESCE($5, base_qty),
+			valid_from         = COALESCE($6, valid_from),
+			valid_to           = COALESCE($7, valid_to),
+			description        = COALESCE($8, description),
+			is_active          = COALESCE($9, is_active),
+			routing_template_id = COALESCE($10, routing_template_id),
+			updated_by         = $11,
+			updated_at         = NOW()
 		WHERE bom_id = $1 AND tenant_id = $2
 	`, bomID, tenantID,
 		req.BOMVersion,
@@ -264,6 +276,7 @@ func (r *BOMRepo) Update(ctx context.Context, bomID, tenantID uuid.UUID, req *pr
 		validTo,
 		req.Description,
 		req.IsActive,
+		req.RoutingTemplateID,
 		&userID,
 	)
 	if err != nil {
@@ -1031,7 +1044,13 @@ func (r *RoutingTemplateRepo) List(ctx context.Context, tenantID uuid.UUID) ([]*
 }
 
 func (r *RoutingTemplateRepo) Update(ctx context.Context, id, tenantID uuid.UUID, req *prodmodels.UpdateRoutingTemplateRequest) error {
-	_, err := r.db.Exec(ctx, `
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `
 		UPDATE routing_templates SET
 			template_code = COALESCE($3, template_code),
 			template_name = COALESCE($4, template_name),
@@ -1041,8 +1060,154 @@ func (r *RoutingTemplateRepo) Update(ctx context.Context, id, tenantID uuid.UUID
 			is_active     = COALESCE($8, is_active),
 			updated_at    = NOW()
 		WHERE id = $1 AND tenant_id = $2
-	`, id, tenantID, req.TemplateCode, req.TemplateName, req.Description, req.Version, req.Status, req.IsActive)
-	return err
+	`, id, tenantID,
+		req.TemplateCode,
+		req.TemplateName,
+		req.Description,
+		req.Version,
+		req.Status,
+		req.IsActive,
+	)
+	if err != nil {
+		return fmt.Errorf("update routing_template: %w", err)
+	}
+
+	if req.Operations != nil {
+		keepIDs := map[uuid.UUID]bool{}
+
+		for i, opReq := range req.Operations {
+			if opReq.OperationNo <= 0 {
+				opReq.OperationNo = (i + 1) * 10
+			}
+
+			if opReq.OperationName == "" {
+				return fmt.Errorf("operation_name is required at index %d", i)
+			}
+
+			if opReq.WorkCenterID == uuid.Nil {
+				return fmt.Errorf("work_center_id is required at index %d", i)
+			}
+
+			if opReq.ID != uuid.Nil {
+				tag, err := tx.Exec(ctx, `
+					UPDATE template_operations SET
+						operation_no   = $3,
+						operation_name = $4,
+						description    = $5,
+						work_center_id = $6,
+						setup_time_min = $7,
+						run_time_min   = $8,
+						is_active      = true,
+						updated_at     = NOW()
+					WHERE id = $1 AND tenant_id = $2 AND template_id = $9
+				`,
+					opReq.ID,
+					tenantID,
+					opReq.OperationNo,
+					opReq.OperationName,
+					nullIfEmpty(opReq.Description),
+					opReq.WorkCenterID,
+					opReq.SetupTimeMin,
+					opReq.RunTimeMin,
+					id,
+				)
+				if err != nil {
+					return fmt.Errorf("update template_operation: %w", err)
+				}
+
+				if tag.RowsAffected() == 0 {
+					return fmt.Errorf("template_operation not found or not belong to template: %s", opReq.ID)
+				}
+
+				keepIDs[opReq.ID] = true
+			} else {
+				newID := uuid.New()
+
+				_, err := tx.Exec(ctx, `
+					INSERT INTO template_operations (
+						id, tenant_id, template_id, operation_no, operation_name,
+						description, work_center_id, setup_time_min, run_time_min,
+						is_active, created_at, updated_at
+					)
+					VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,NOW(),NOW())
+				`,
+					newID,
+					tenantID,
+					id,
+					opReq.OperationNo,
+					opReq.OperationName,
+					nullIfEmpty(opReq.Description),
+					opReq.WorkCenterID,
+					opReq.SetupTimeMin,
+					opReq.RunTimeMin,
+				)
+				if err != nil {
+					return fmt.Errorf("insert template_operation: %w", err)
+				}
+
+				keepIDs[newID] = true
+			}
+		}
+
+		rows, err := tx.Query(ctx, `
+			SELECT id
+			FROM template_operations
+			WHERE template_id = $1 AND tenant_id = $2
+		`, id, tenantID)
+		if err != nil {
+			return fmt.Errorf("load existing template_operations: %w", err)
+		}
+
+		var deleteIDs []uuid.UUID
+
+		for rows.Next() {
+			var existingID uuid.UUID
+			if err := rows.Scan(&existingID); err != nil {
+				rows.Close()
+				return err
+			}
+
+			if !keepIDs[existingID] {
+				deleteIDs = append(deleteIDs, existingID)
+			}
+		}
+		rows.Close()
+
+		for _, deleteID := range deleteIDs {
+			_, err = tx.Exec(ctx, `
+				DELETE FROM template_operations
+				WHERE id = $1 AND tenant_id = $2 AND template_id = $3
+			`, deleteID, tenantID, id)
+			if err != nil {
+				return fmt.Errorf("delete template_operation: %w", err)
+			}
+		}
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE routing_templates SET
+			total_setup_min = (
+				SELECT COALESCE(SUM(setup_time_min),0)
+				FROM template_operations
+				WHERE template_id = $1 AND tenant_id = $2 AND is_active = true
+			),
+			total_run_min = (
+				SELECT COALESCE(SUM(run_time_min),0)
+				FROM template_operations
+				WHERE template_id = $1 AND tenant_id = $2 AND is_active = true
+			),
+			updated_at = NOW()
+		WHERE id = $1 AND tenant_id = $2
+	`, id, tenantID)
+	if err != nil {
+		return fmt.Errorf("recalculate template totals: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+
+	return nil
 }
 
 func (r *RoutingTemplateRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
@@ -1219,7 +1384,7 @@ func NewProductionOrderRepo(db *pgxpool.Pool) *ProductionOrderRepo {
 	return &ProductionOrderRepo{db: db}
 }
 
-// generateOrderNumber creates "PO-YYYYMMDD-XXXXX" with a 5-digit sequence.
+// generateOrderNumber creates "WO-YYYYMMDD-XXXXX" with a 5-digit sequence.
 func (r *ProductionOrderRepo) generateOrderNumber(ctx context.Context, tenantID uuid.UUID) (string, error) {
 	datePrefix := time.Now().UTC().Format("20060102")
 	var seq int
@@ -1227,12 +1392,12 @@ func (r *ProductionOrderRepo) generateOrderNumber(ctx context.Context, tenantID 
 		`SELECT COALESCE(MAX(CAST(SPLIT_PART(order_number, '-', 3) AS INTEGER)), 0) + 1
 		FROM production_orders
 		WHERE tenant_id = $1 AND order_number LIKE $2`,
-		tenantID, "PO-"+datePrefix+"-%").Scan(&seq)
+		tenantID, "WO-"+datePrefix+"-%").Scan(&seq)
 	if err != nil {
 		// fallback: generate from sequence
 		seq = int(time.Now().UnixNano() % 100000)
 	}
-	return fmt.Sprintf("PO-%s-%05d", datePrefix, seq), nil
+	return fmt.Sprintf("WO-%s-%05d", datePrefix, seq), nil
 }
 
 func (r *ProductionOrderRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, req *prodmodels.CreateProductionOrderRequest) (*prodmodels.ProductionOrder, error) {
@@ -1271,6 +1436,8 @@ func (r *ProductionOrderRepo) Create(ctx context.Context, tenantID, userID uuid.
 		BOMID:            req.BOMID,
 		Status:           "DRAFT",
 		Priority:         priority,
+		SalesOrderID:     req.SalesOrderID,
+		SOItemID:         req.SOItemID,
 		PlannedStartDate: plannedStart,
 		PlannedEndDate:   plannedEnd,
 		Notes:            req.Notes,
@@ -1282,11 +1449,13 @@ func (r *ProductionOrderRepo) Create(ctx context.Context, tenantID, userID uuid.
 
 	_, err = r.db.Exec(ctx,
 		`INSERT INTO production_orders (id, tenant_id, order_number, material_id, order_qty,
-			bom_id, status, priority, planned_start_date, planned_end_date,
+			bom_id, status, priority, sales_order_id, so_item_id,
+			planned_start_date, planned_end_date,
 			notes, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())`,
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),NOW())`,
 		po.ID, po.TenantID, po.OrderNumber, po.MaterialID, po.OrderQty,
 		nullIfEmptyUUID(po.BOMID), po.Status, po.Priority,
+		nullIfEmptyUUID(po.SalesOrderID), nullIfEmptyUUID(po.SOItemID),
 		po.PlannedStartDate, po.PlannedEndDate,
 		nullIfEmpty(po.Notes), po.CreatedBy, po.UpdatedBy)
 	if err != nil {
@@ -1303,8 +1472,10 @@ func (r *ProductionOrderRepo) GetByID(ctx context.Context, id, tenantID uuid.UUI
 	err := r.db.QueryRow(ctx,
 		`SELECT po.id, po.tenant_id, po.order_number, po.material_id,
 			COALESCE(p.name,''), COALESCE(p.sku,''),
-			po.order_qty, po.bom_id, COALESCE(bh.bom_version,''),
+			po.order_qty, po.completed_qty, po.bom_id, COALESCE(bh.bom_version,''),
 			po.status, po.priority,
+			po.sales_order_id, COALESCE(so.so_number,''),
+			po.so_item_id,
 			po.planned_start_date, po.planned_end_date,
 			po.actual_start_date, po.actual_end_date,
 			COALESCE(po.notes,''),
@@ -1312,12 +1483,15 @@ func (r *ProductionOrderRepo) GetByID(ctx context.Context, id, tenantID uuid.UUI
 		FROM production_orders po
 		LEFT JOIN products p ON p.id = po.material_id
 		LEFT JOIN bom_headers bh ON bh.bom_id = po.bom_id
+		LEFT JOIN sales_orders so ON so.id = po.sales_order_id
 		WHERE po.id = $1 AND po.tenant_id = $2`,
 		id, tenantID).Scan(
 		&po.ID, &po.TenantID, &po.OrderNumber, &po.MaterialID,
 		&po.MaterialName, &po.MaterialSKU,
-		&po.OrderQty, &po.BOMID, &po.BOMVersion,
+		&po.OrderQty, &po.CompletedQty, &po.BOMID, &po.BOMVersion,
 		&po.Status, &po.Priority,
+		&po.SalesOrderID, &po.SalesOrderNumber,
+		&po.SOItemID,
 		&po.PlannedStartDate, &po.PlannedEndDate,
 		&po.ActualStartDate, &po.ActualEndDate,
 		&po.Notes,
@@ -1326,14 +1500,21 @@ func (r *ProductionOrderRepo) GetByID(ctx context.Context, id, tenantID uuid.UUI
 	if err != nil {
 		return nil, fmt.Errorf("get production order: %w", err)
 	}
+	// Load materials
+	materials, err := r.loadPOMaterials(ctx, id, tenantID)
+	if err == nil {
+		po.Materials = materials
+	}
 	return po, nil
 }
 
 func (r *ProductionOrderRepo) List(ctx context.Context, tenantID uuid.UUID, materialID *uuid.UUID, status string) ([]*prodmodels.ProductionOrder, error) {
 	query := `SELECT po.id, po.tenant_id, po.order_number, po.material_id,
 			COALESCE(p.name,''), COALESCE(p.sku,''),
-			po.order_qty, po.bom_id, COALESCE(bh.bom_version,''),
+			po.order_qty, po.completed_qty, po.bom_id, COALESCE(bh.bom_version,''),
 			po.status, po.priority,
+			po.sales_order_id, COALESCE(so.so_number,''),
+			po.so_item_id,
 			po.planned_start_date, po.planned_end_date,
 			po.actual_start_date, po.actual_end_date,
 			COALESCE(po.notes,''),
@@ -1341,6 +1522,7 @@ func (r *ProductionOrderRepo) List(ctx context.Context, tenantID uuid.UUID, mate
 		FROM production_orders po
 		LEFT JOIN products p ON p.id = po.material_id
 		LEFT JOIN bom_headers bh ON bh.bom_id = po.bom_id
+		LEFT JOIN sales_orders so ON so.id = po.sales_order_id
 		WHERE po.tenant_id = $1`
 
 	args := []interface{}{tenantID}
@@ -1370,8 +1552,10 @@ func (r *ProductionOrderRepo) List(ctx context.Context, tenantID uuid.UUID, mate
 		if err := rows.Scan(
 			&po.ID, &po.TenantID, &po.OrderNumber, &po.MaterialID,
 			&po.MaterialName, &po.MaterialSKU,
-			&po.OrderQty, &po.BOMID, &po.BOMVersion,
+			&po.OrderQty, &po.CompletedQty, &po.BOMID, &po.BOMVersion,
 			&po.Status, &po.Priority,
+			&po.SalesOrderID, &po.SalesOrderNumber,
+			&po.SOItemID,
 			&po.PlannedStartDate, &po.PlannedEndDate,
 			&po.ActualStartDate, &po.ActualEndDate,
 			&po.Notes,
@@ -1424,7 +1608,7 @@ func (r *ProductionOrderRepo) Update(ctx context.Context, id, tenantID uuid.UUID
 	}
 
 	if req.Status != nil {
-		validStatuses := map[string]bool{"DRAFT": true, "RELEASED": true, "IN_PROCESS": true, "COMPLETED": true, "CANCELLED": true}
+		validStatuses := map[string]bool{"DRAFT": true, "RELEASED": true, "IN_PROCESS": true, "PARTIALLY_PRODUCED": true, "COMPLETED": true, "CANCELLED": true}
 		if !validStatuses[*req.Status] {
 			return fmt.Errorf("400_INVALID_STATUS: %s", *req.Status)
 		}
@@ -1436,15 +1620,18 @@ func (r *ProductionOrderRepo) Update(ctx context.Context, id, tenantID uuid.UUID
 			bom_id             = COALESCE($4, bom_id),
 			status             = COALESCE($5, status),
 			priority           = COALESCE($6, priority),
-			planned_start_date = COALESCE($7::timestamptz, planned_start_date),
-			planned_end_date   = COALESCE($8::timestamptz, planned_end_date),
-			actual_start_date  = COALESCE($9::timestamptz, actual_start_date),
-			actual_end_date    = COALESCE($10::timestamptz, actual_end_date),
-			notes              = COALESCE($11, notes),
-			updated_by         = $12,
+			sales_order_id     = COALESCE($7, sales_order_id),
+			so_item_id         = COALESCE($8, so_item_id),
+			planned_start_date = COALESCE($9::timestamptz, planned_start_date),
+			planned_end_date   = COALESCE($10::timestamptz, planned_end_date),
+			actual_start_date  = COALESCE($11::timestamptz, actual_start_date),
+			actual_end_date    = COALESCE($12::timestamptz, actual_end_date),
+			notes              = COALESCE($13, notes),
+			updated_by         = $14,
 			updated_at         = NOW()
 		WHERE id = $1 AND tenant_id = $2`,
 		id, tenantID, req.OrderQty, req.BOMID, req.Status, req.Priority,
+		req.SalesOrderID, req.SOItemID,
 		plannedStart, plannedEnd, actualStart, actualEnd, req.Notes, &userID)
 	return err
 }
@@ -1465,6 +1652,357 @@ func (r *ProductionOrderRepo) enrichMaterialPO(ctx context.Context, po *prodmode
 	_ = r.db.QueryRow(ctx,
 		`SELECT COALESCE(name,''), COALESCE(sku,'') FROM products WHERE id = $1`,
 		po.MaterialID).Scan(&po.MaterialName, &po.MaterialSKU)
+}
+
+// loadPOMaterials loads production_order_materials rows for a given order.
+func (r *ProductionOrderRepo) loadPOMaterials(ctx context.Context, orderID, tenantID uuid.UUID) ([]prodmodels.ProductionOrderMaterial, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT m.id, m.production_order_id, m.component_id,
+			COALESCE(p.name,''), COALESCE(p.sku,''),
+			m.bom_item_id, m.required_qty, m.issue_qty,
+			m.unit_of_measure, m.item_position,
+			m.created_at, m.updated_at
+		FROM production_order_materials m
+		LEFT JOIN products p ON p.id = m.component_id
+		WHERE m.production_order_id = $1 AND m.tenant_id = $2
+		ORDER BY m.item_position
+	`, orderID, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []prodmodels.ProductionOrderMaterial
+	for rows.Next() {
+		var m prodmodels.ProductionOrderMaterial
+		if err := rows.Scan(
+			&m.ID, &m.ProductionOrderID, &m.ComponentID,
+			&m.ComponentName, &m.ComponentSKU,
+			&m.BOMItemID, &m.RequiredQty, &m.IssueQty,
+			&m.UnitOfMeasure, &m.ItemPosition,
+			&m.CreatedAt, &m.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		list = append(list, m)
+	}
+	return list, nil
+}
+
+// SyncPOMaterials explodes the BOM and upserts production_order_materials.
+// Call this whenever bom_id or order_qty changes.
+func (r *ProductionOrderRepo) SyncPOMaterials(ctx context.Context, orderID, tenantID uuid.UUID) error {
+	// 1. Get order details
+	var orderQty float64
+	var bomID *uuid.UUID
+	err := r.db.QueryRow(ctx,
+		`SELECT order_qty, bom_id FROM production_orders WHERE id = $1 AND tenant_id = $2`,
+		orderID, tenantID).Scan(&orderQty, &bomID)
+	if err != nil {
+		return fmt.Errorf("get order: %w", err)
+	}
+	if bomID == nil {
+		// No BOM — clear materials
+		_, err = r.db.Exec(ctx,
+			`DELETE FROM production_order_materials WHERE production_order_id = $1`, orderID)
+		return err
+	}
+
+	// 2. Load BOM items
+	rows, err := r.db.Query(ctx, `
+		SELECT bi.item_id, bi.component_id, bi.quantity, bi.unit_of_measure,
+			bi.scrap_factor, bi.item_position,
+			COALESCE(p.name,''), COALESCE(p.sku,'')
+		FROM bom_items bi
+		LEFT JOIN products p ON p.id = bi.component_id
+		WHERE bi.bom_id = $1
+		ORDER BY bi.item_position
+	`, *bomID)
+	if err != nil {
+		return fmt.Errorf("load bom items: %w", err)
+	}
+	defer rows.Close()
+
+	type bomLine struct {
+		ItemID      uuid.UUID
+		ComponentID uuid.UUID
+		Qty         float64
+		UOM         string
+		Scrap       float64
+		Pos         int
+	}
+	var lines []bomLine
+	for rows.Next() {
+		var l bomLine
+		var name, sku string
+		if err := rows.Scan(&l.ItemID, &l.ComponentID, &l.Qty, &l.UOM, &l.Scrap, &l.Pos, &name, &sku); err != nil {
+			return err
+		}
+		lines = append(lines, l)
+	}
+	rows.Close()
+
+	// 3. Upsert in transaction
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Delete lines not in BOM anymore
+	if len(lines) > 0 {
+		var bomItemIDs []uuid.UUID
+		for _, l := range lines {
+			bomItemIDs = append(bomItemIDs, l.ItemID)
+		}
+		_, err = tx.Exec(ctx, `
+			DELETE FROM production_order_materials
+			WHERE production_order_id = $1
+			  AND bom_item_id IS NOT NULL
+			  AND bom_item_id != ALL($2)
+		`, orderID, bomItemIDs)
+		if err != nil {
+			return fmt.Errorf("delete stale materials: %w", err)
+		}
+	} else {
+		_, err = tx.Exec(ctx,
+			`DELETE FROM production_order_materials WHERE production_order_id = $1`, orderID)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, l := range lines {
+		// required_qty = order_qty * component_qty / (1 - scrap_factor)
+		scrap := l.Scrap
+		if scrap >= 1 {
+			scrap = 0
+		}
+		requiredQty := orderQty * l.Qty / (1 - scrap)
+		uom := l.UOM
+		if uom == "" {
+			uom = "EA"
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO production_order_materials
+				(id, tenant_id, production_order_id, component_id, bom_item_id,
+				 required_qty, unit_of_measure, item_position, issue_qty, created_at, updated_at)
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 0, NOW(), NOW())
+			ON CONFLICT (production_order_id, bom_item_id)
+			DO UPDATE SET
+				required_qty   = EXCLUDED.required_qty,
+				unit_of_measure = EXCLUDED.unit_of_measure,
+				item_position  = EXCLUDED.item_position,
+				updated_at     = NOW()
+		`, tenantID, orderID, l.ComponentID, l.ItemID, requiredQty, uom, l.Pos)
+		if err != nil {
+			return fmt.Errorf("upsert material line: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+// UpdatePOMaterialIssueQty updates the issue_qty for a single material line.
+func (r *ProductionOrderRepo) UpdatePOMaterialIssueQty(ctx context.Context, materialID, tenantID uuid.UUID, issueQty float64) error {
+	_, err := r.db.Exec(ctx, `
+		UPDATE production_order_materials
+		SET issue_qty = $1, updated_at = NOW()
+		WHERE id = $2 AND tenant_id = $3
+	`, issueQty, materialID, tenantID)
+	return err
+}
+
+func (r *ProductionOrderRepo) CreateTimeConfirmation(ctx context.Context, orderID, tenantID, userID uuid.UUID, req *prodmodels.CreateTimeConfirmationRequest) (*prodmodels.ProductionOrderTimeConfirmation, error) {
+	confirmationDate := time.Now()
+	if req.ConfirmationDate != "" {
+		parsed, err := parseTimeFlexible(req.ConfirmationDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid confirmation_date: %w", err)
+		}
+		confirmationDate = parsed
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin time confirmation tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var orderNumber, materialSKU, materialName, status string
+	var bomID *uuid.UUID
+	var orderQty, completedQty float64
+	err = tx.QueryRow(ctx, `
+		SELECT po.order_number, COALESCE(p.sku,''), COALESCE(p.name,''),
+			po.order_qty, po.completed_qty, po.status, po.bom_id
+		FROM production_orders po
+		LEFT JOIN products p ON p.id = po.material_id
+		WHERE po.id = $1 AND po.tenant_id = $2
+		FOR UPDATE OF po
+	`, orderID, tenantID).Scan(&orderNumber, &materialSKU, &materialName, &orderQty, &completedQty, &status, &bomID)
+	if err != nil {
+		return nil, fmt.Errorf("load production order: %w", err)
+	}
+	if status != "RELEASED" && status != "IN_PROCESS" && status != "PARTIALLY_PRODUCED" {
+		return nil, fmt.Errorf("production order %s is %s; only RELEASED, IN_PROCESS or PARTIALLY_PRODUCED orders can be confirmed", orderNumber, status)
+	}
+
+	var operationID *uuid.UUID
+	var workCenterID *uuid.UUID
+	var operationNo int
+	var operationName, workCenterCode, workCenterName string
+	isFinalOperation := true
+	if req.OperationID != nil && *req.OperationID != uuid.Nil {
+		if bomID == nil || *bomID == uuid.Nil {
+			return nil, fmt.Errorf("production order %s has no BOM/routing; operation confirmation is not available", orderNumber)
+		}
+		var maxOperationNo int
+		var opID, wcID uuid.UUID
+		err = tx.QueryRow(ctx, `
+			SELECT o.id, o.operation_no, o.operation_name, o.work_center_id,
+				COALESCE(wc.code,''), COALESCE(wc.name,''),
+				(SELECT COALESCE(MAX(o2.operation_no), 0)
+				 FROM template_operations o2
+				 JOIN bom_headers bh2 ON bh2.routing_template_id = o2.template_id
+				 WHERE bh2.bom_id = $3 AND o2.tenant_id = $2 AND o2.is_active = true)
+			FROM template_operations o
+			JOIN bom_headers bh ON bh.routing_template_id = o.template_id
+			LEFT JOIN work_centers wc ON wc.id = o.work_center_id
+			WHERE o.id = $1 AND o.tenant_id = $2 AND bh.bom_id = $3 AND o.is_active = true
+			LIMIT 1
+		`, *req.OperationID, tenantID, *bomID).Scan(
+			&opID, &operationNo, &operationName, &wcID,
+			&workCenterCode, &workCenterName, &maxOperationNo,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("operation does not belong to production order %s routing: %w", orderNumber, err)
+		}
+		operationID = &opID
+		workCenterID = &wcID
+		isFinalOperation = operationNo >= maxOperationNo
+	}
+
+	remainingQty := orderQty - completedQty
+	if isFinalOperation {
+		if remainingQty <= 0 {
+			return nil, fmt.Errorf("production order %s has no remaining quantity to confirm", orderNumber)
+		}
+		if req.YieldQty > remainingQty {
+			return nil, fmt.Errorf("yield quantity %.4f exceeds remaining quantity %.4f for production order %s", req.YieldQty, remainingQty, orderNumber)
+		}
+	}
+
+	confirmationID := uuid.New()
+	now := time.Now()
+	actualWorkHours := req.ActualWorkHours
+	calculatedHours := req.SetupHours + req.LaborHours + req.MachineHours
+	if actualWorkHours <= 0 {
+		actualWorkHours = calculatedHours
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO production_order_time_confirmations
+			(id, tenant_id, production_order_id, operation_id, work_center_id,
+			 yield_qty, scrap_qty, rework_qty, setup_hours, labor_hours, machine_hours,
+			 actual_work_hours, confirmation_date, notes, confirmed_by, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+	`, confirmationID, tenantID, orderID, operationID, workCenterID,
+		req.YieldQty, req.ScrapQty, req.ReworkQty, req.SetupHours, req.LaborHours, req.MachineHours,
+		actualWorkHours, confirmationDate, nullIfEmpty(req.Notes), userID, now)
+	if err != nil {
+		return nil, fmt.Errorf("insert time confirmation: %w", err)
+	}
+
+	newStatus := "IN_PROCESS"
+	completedIncrement := 0.0
+	if isFinalOperation {
+		completedIncrement = req.YieldQty
+		newStatus = "PARTIALLY_PRODUCED"
+	}
+	if completedQty+completedIncrement >= orderQty {
+		newStatus = "COMPLETED"
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE production_orders
+		SET completed_qty = completed_qty + $1,
+			status = $2::varchar,
+			actual_start_date = COALESCE(actual_start_date, $3),
+			actual_end_date = CASE WHEN $2::varchar = 'COMPLETED' THEN COALESCE(actual_end_date, $3) ELSE actual_end_date END,
+			updated_by = $4,
+			updated_at = NOW()
+		WHERE id = $5 AND tenant_id = $6
+	`, completedIncrement, newStatus, confirmationDate, userID, orderID, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("update production order confirmation totals: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit time confirmation: %w", err)
+	}
+
+	return &prodmodels.ProductionOrderTimeConfirmation{
+		ID:                confirmationID,
+		TenantID:          tenantID,
+		ProductionOrderID: orderID,
+		OrderNumber:       orderNumber,
+		MaterialSKU:       materialSKU,
+		MaterialName:      materialName,
+		OperationID:       operationID,
+		OperationNo:       operationNo,
+		OperationName:     operationName,
+		WorkCenterID:      workCenterID,
+		WorkCenterCode:    workCenterCode,
+		WorkCenterName:    workCenterName,
+		YieldQty:          req.YieldQty,
+		ScrapQty:          req.ScrapQty,
+		ReworkQty:         req.ReworkQty,
+		SetupHours:        req.SetupHours,
+		LaborHours:        req.LaborHours,
+		MachineHours:      req.MachineHours,
+		ActualWorkHours:   actualWorkHours,
+		ConfirmationDate:  confirmationDate,
+		Notes:             req.Notes,
+		ConfirmedBy:       &userID,
+		CreatedAt:         now,
+	}, nil
+}
+
+func (r *ProductionOrderRepo) ListTimeConfirmations(ctx context.Context, orderID, tenantID uuid.UUID) ([]*prodmodels.ProductionOrderTimeConfirmation, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT c.id, c.tenant_id, c.production_order_id,
+			COALESCE(po.order_number,''), COALESCE(p.sku,''), COALESCE(p.name,''),
+			c.operation_id, COALESCE(o.operation_no, 0), COALESCE(o.operation_name, ''),
+			c.work_center_id, COALESCE(wc.code,''), COALESCE(wc.name,''),
+			c.yield_qty, c.scrap_qty, c.rework_qty, c.setup_hours, c.labor_hours, c.machine_hours,
+			c.actual_work_hours, c.confirmation_date,
+			COALESCE(c.notes,''), c.confirmed_by, c.created_at
+		FROM production_order_time_confirmations c
+		LEFT JOIN production_orders po ON po.id = c.production_order_id
+		LEFT JOIN products p ON p.id = po.material_id
+		LEFT JOIN template_operations o ON o.id = c.operation_id
+		LEFT JOIN work_centers wc ON wc.id = c.work_center_id
+		WHERE c.tenant_id = $1 AND c.production_order_id = $2
+		ORDER BY c.confirmation_date DESC, c.created_at DESC
+	`, tenantID, orderID)
+	if err != nil {
+		return nil, fmt.Errorf("list time confirmations: %w", err)
+	}
+	defer rows.Close()
+
+	var list []*prodmodels.ProductionOrderTimeConfirmation
+	for rows.Next() {
+		c := &prodmodels.ProductionOrderTimeConfirmation{}
+		if err := rows.Scan(&c.ID, &c.TenantID, &c.ProductionOrderID,
+			&c.OrderNumber, &c.MaterialSKU, &c.MaterialName,
+			&c.OperationID, &c.OperationNo, &c.OperationName,
+			&c.WorkCenterID, &c.WorkCenterCode, &c.WorkCenterName,
+			&c.YieldQty, &c.ScrapQty, &c.ReworkQty, &c.SetupHours, &c.LaborHours, &c.MachineHours,
+			&c.ActualWorkHours, &c.ConfirmationDate,
+			&c.Notes, &c.ConfirmedBy, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		list = append(list, c)
+	}
+	return list, nil
 }
 
 func nullIfEmptyUUID(u *uuid.UUID) *uuid.UUID {

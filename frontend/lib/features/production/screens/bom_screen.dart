@@ -314,10 +314,13 @@ class _BOMDetailScreenState extends State<BOMDetailScreen> {
   // Header fields
   final _versionCtrl = TextEditingController(text: 'V1.0');
   final _baseQtyCtrl = TextEditingController(text: '1.0000');
+  final _descriptionCtrl = TextEditingController();
   String? _materialId, _materialName, _materialSKU;
   String _status = 'NEW';
   DateTime? _validFromDt, _validToDt;
   bool _saving = false;
+  String? _selectedRoutingTemplateId;
+  List<dynamic> _routingTemplates = [];
 
   // Items (inline grid)
   List<Map<String, dynamic>> _items = [];
@@ -334,8 +337,16 @@ class _BOMDetailScreenState extends State<BOMDetailScreen> {
   void initState() {
     super.initState();
     _populate();
+    _loadRoutingTemplates();
     // Fetch full BOM with items from API when editing
     if (_isEdit && !widget.viewOnly) _fetchDetail();
+  }
+
+  Future<void> _loadRoutingTemplates() async {
+    try {
+      final rts = await widget.productionService.listRoutingTemplates();
+      if (mounted) setState(() => _routingTemplates = rts);
+    } catch (_) {}
   }
 
   Future<void> _fetchDetail() async {
@@ -363,6 +374,7 @@ class _BOMDetailScreenState extends State<BOMDetailScreen> {
   void dispose() {
     _versionCtrl.dispose();
     _baseQtyCtrl.dispose();
+    _descriptionCtrl.dispose();
     for (final c in _qtyCtrls) c.dispose();
     for (final c in _scrapCtrls) c.dispose();
     for (final c in _remarkCtrls) c.dispose();
@@ -378,6 +390,8 @@ class _BOMDetailScreenState extends State<BOMDetailScreen> {
     _versionCtrl.text = e['bom_version'] ?? 'V1.0';
     _status = e['status'] ?? 'NEW';
     _baseQtyCtrl.text = (e['base_qty'] as num?)?.toStringAsFixed(4) ?? '1.0000';
+    _descriptionCtrl.text = e['description'] ?? '';
+    _selectedRoutingTemplateId = e['routing_template_id']?.toString();
     _validFromDt = e['valid_from'] is String
         ? DateTime.tryParse(e['valid_from'])
         : null;
@@ -481,7 +495,10 @@ class _BOMDetailScreenState extends State<BOMDetailScreen> {
             ? '${_validToDt!.toUtc().toIso8601String().replaceAll('.000', '')}Z'
                   .replaceAll('ZZ', 'Z')
             : '2099-12-31T23:59:59Z',
+        'description': _descriptionCtrl.text.trim(),
         'is_active': true,
+        if (_selectedRoutingTemplateId != null)
+          'routing_template_id': _selectedRoutingTemplateId,
         'items': items,
       };
 
@@ -625,6 +642,72 @@ class _BOMDetailScreenState extends State<BOMDetailScreen> {
                         label: 'Valid To',
                         date: _validToDt,
                         onSelected: (d) => setState(() => _validToDt = d),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _descriptionCtrl,
+                        maxLines: 2,
+                        decoration: const InputDecoration(
+                          labelText: 'Description',
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          border: OutlineInputBorder(),
+                        ),
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value:
+                            _routingTemplates.any(
+                              (rt) =>
+                                  rt['id']?.toString() ==
+                                  _selectedRoutingTemplateId,
+                            )
+                            ? _selectedRoutingTemplateId
+                            : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Routing Template',
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 8,
+                          ),
+                          border: OutlineInputBorder(),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black,
+                        ),
+                        items: _routingTemplates.map<DropdownMenuItem<String>>((
+                          rt,
+                        ) {
+                          final rtId = (rt['id'] ?? '').toString();
+                          final rtName =
+                              '${rt['template_code'] ?? ''} - ${rt['template_name'] ?? ''}';
+                          return DropdownMenuItem(
+                            value: rtId,
+                            child: Text(
+                              rtName,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: widget.viewOnly
+                            ? null
+                            : (v) => setState(
+                                () => _selectedRoutingTemplateId = v,
+                              ),
                       ),
                     ),
                   ],

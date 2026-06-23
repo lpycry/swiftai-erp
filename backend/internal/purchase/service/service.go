@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	glmodels "github.com/swiftai-erp/backend/internal/gl/models"
@@ -83,42 +85,305 @@ func (s *PurchaseService) UpdatePOStatus(ctx context.Context, id, orgID uuid.UUI
 
 // ── Purchase Receipts (核心事务：收货→更新库存→业务事件→会计分录) ──
 
-func (s *PurchaseService) ExecuteGoodsReceipt(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreateReceiptRequest, userID *uuid.UUID) (*purchasemodels.PurchaseReceipt, *purchasemodels.BusinessEvent, error) {
+func (s *PurchaseService) ExecuteGoodsReceipt(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreateReceiptRequest, userID *uuid.UUID) (*purchasemodels.PurchaseReceipt, *purchasemodels.BusinessEvent, string, error) {
 	po, err := s.repo.GetPO(ctx, req.POID, orgID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	receipt, event, err := s.repo.ExecuteGoodsReceipt(ctx, orgID, req, userID, po.Status)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	// ── Auto-create GL Journal Entry ──
-	// Debit:  company-level vendor reconciliation account (from org_reconciliation_accounts)
-	// Credit: vendor-specific reconciliation account (from vendors.reconciliation_account_id)
-	// Amount: receipt quantity × unit_cost
-	if err := s.createReceiptJournalEntry(ctx, orgID, po, req, receipt, userID); err != nil {
-		// Log error but don't fail the receipt — the receipt is already recorded
-		// Accounting can be fixed later via manual journal entry
-		fmt.Printf("WARN: failed to create GL journal entry for receipt %s: %v\n", receipt.ID, err)
+	var glWarning string
+	if glErr := s.createReceiptJournalEntry(ctx, orgID, po, req, receipt, userID); glErr != nil {
+		// Log error but don't fail the receipt — receipt is already recorded
+		fmt.Printf("WARN: failed to create GL journal entry for receipt %s: %v\n", receipt.ID, glErr)
+		glWarning = glErr.Error()
 	}
 
-	return receipt, event, nil
+	return receipt, event, glWarning, nil
+}
+
+func (s *PurchaseService) ExecuteWorkOrderReceipt(ctx context.Context, orgContextID uuid.UUID, req *purchasemodels.CreateWorkOrderReceiptRequest, userID *uuid.UUID) (*purchasemodels.WorkOrderReceipt, string, error) {
+	tenantID, err := s.resolveTenantID(ctx, orgContextID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	receipt, materialType, inventoryAccountType, err := s.postWorkOrderReceipt(ctx, tenantID, req, userID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var glWarning string
+	if glErr := s.createWorkOrderReceiptJournalEntry(ctx, tenantID, receipt, materialType, inventoryAccountType, userID); glErr != nil {
+		fmt.Printf("WARN: failed to create GL journal entry for work order receipt %s: %v\n", receipt.ID, glErr)
+		glWarning = glErr.Error()
+	}
+
+	return receipt, glWarning, nil
+}
+
+func (s *PurchaseService) postWorkOrderReceipt(ctx context.Context, tenantID uuid.UUID, req *purchasemodels.CreateWorkOrderReceiptRequest, userID *uuid.UUID) (*purchasemodels.WorkOrderReceipt, string, string, error) {
+	receiptID := uuid.New()
+	now := time.Now()
+	movementUserID := uuid.Nil
+	if userID != nil {
+		movementUserID = *userID
+	}
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("begin work order receipt tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var orderNumber, status, materialSKU, materialName, materialType string
+	var materialID uuid.UUID
+	var orderQty, completedQty, unitCost float64
+	err = tx.QueryRow(ctx, `
+		SELECT po.order_number, po.material_id, COALESCE(p.sku,''), COALESCE(p.name,''),
+			COALESCE(p.material_type,''), po.order_qty, po.completed_qty, po.status,
+			COALESCE(NULLIF(p.standard_cost, 0), NULLIF(p.moving_avg_cost, 0), NULLIF(p.last_cost, 0), 0)
+		FROM production_orders po
+		JOIN products p ON p.id = po.material_id
+		WHERE po.id = $1 AND po.tenant_id = $2
+		FOR UPDATE
+	`, req.ProductionOrderID, tenantID).Scan(
+		&orderNumber, &materialID, &materialSKU, &materialName, &materialType,
+		&orderQty, &completedQty, &status, &unitCost,
+	)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("load work order: %w", err)
+	}
+	if status != "RELEASED" && status != "PARTIALLY_PRODUCED" {
+		return nil, "", "", fmt.Errorf("work order %s is %s; only RELEASED or PARTIALLY_PRODUCED work orders can be received", orderNumber, status)
+	}
+	remainingQty := orderQty - completedQty
+	if remainingQty <= 0 {
+		return nil, "", "", fmt.Errorf("work order %s has no remaining quantity to receive", orderNumber)
+	}
+	if req.Quantity > remainingQty {
+		return nil, "", "", fmt.Errorf("receive quantity %.4f exceeds remaining quantity %.4f for work order %s", req.Quantity, remainingQty, orderNumber)
+	}
+
+	inventoryAccountType := inventoryAccountTypeForMaterialType(materialType)
+	if inventoryAccountType == "" {
+		return nil, "", "", fmt.Errorf("production material %s has no material_type; cannot resolve inventory account type", materialSKU)
+	}
+
+	warehouseID := uuid.Nil
+	if req.WarehouseID != nil {
+		warehouseID = *req.WarehouseID
+	}
+	if warehouseID == uuid.Nil && req.BinID != nil {
+		_ = tx.QueryRow(ctx, `SELECT warehouse_id FROM warehouse_bins WHERE id = $1`, req.BinID).Scan(&warehouseID)
+	}
+	if warehouseID == uuid.Nil {
+		return nil, "", "", fmt.Errorf("warehouse or bin location is required for work order receiving")
+	}
+
+	batchNo := strings.TrimSpace(req.BatchNo)
+	if batchNo == "" {
+		batchNo, err = s.generateProductionBatchNo(ctx, tx, tenantID, now)
+		if err != nil {
+			return nil, "", "", fmt.Errorf("generate production batch number: %w", err)
+		}
+	}
+
+	totalCost := req.Quantity * unitCost
+	_, err = tx.Exec(ctx, `
+		INSERT INTO work_order_receipts (id, tenant_id, production_order_id, material_id, site_id, warehouse_id, bin_id,
+			quantity, unit_cost, total_cost, batch_no, receipt_date, received_by, created_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+	`, receiptID, tenantID, req.ProductionOrderID, materialID, req.SiteID, warehouseID, req.BinID,
+		req.Quantity, unitCost, totalCost, batchNo, now, userID, now)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("insert work order receipt: %w", err)
+	}
+
+	newCompletedQty := completedQty + req.Quantity
+	newStatus := "PARTIALLY_PRODUCED"
+	if newCompletedQty >= orderQty {
+		newStatus = "COMPLETED"
+	}
+	_, err = tx.Exec(ctx, `
+		UPDATE production_orders
+		SET completed_qty = completed_qty + $1, status = $2, updated_by = $3, updated_at = NOW()
+		WHERE id = $4 AND tenant_id = $5
+	`, req.Quantity, newStatus, userID, req.ProductionOrderID, tenantID)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("update production order completed qty: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO stock_items (id, tenant_id, product_id, warehouse_id, bin_id, batch_id, quantity_on_hand, unit_cost, total_cost, created_at, updated_at)
+		VALUES (uuid_generate_v4(), $1, $2, $3, $4, NULL, $5, $6, $7, NOW(), NOW())
+		ON CONFLICT (tenant_id, product_id, warehouse_id, bin_id) DO UPDATE SET
+			quantity_on_hand = stock_items.quantity_on_hand + $5,
+			unit_cost = $6,
+			total_cost = stock_items.total_cost + $7,
+			last_movement_at = NOW(),
+			updated_at = NOW()
+	`, tenantID, materialID, warehouseID, req.BinID, req.Quantity, unitCost, totalCost)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("upsert work order receipt stock: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO stock_movements (id, tenant_id, transaction_type, reference_type, reference_id, reference_no,
+			product_id, warehouse_id, bin_id, quantity, unit_cost, total_cost, description, status, created_by, created_at, posted_at, posted_by)
+		VALUES ($1,$2,'goods_receipt','work_order_receipt',$3,$4,$5,$6,$7,$8,$9,$10,'Work Order Receiving','posted',$11,NOW(),NOW(),$11)
+	`, uuid.New(), tenantID, receiptID, orderNumber, materialID, warehouseID, req.BinID, req.Quantity, unitCost, totalCost, movementUserID)
+	if err != nil {
+		return nil, "", "", fmt.Errorf("insert work order receipt movement: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, "", "", fmt.Errorf("commit work order receipt: %w", err)
+	}
+
+	return &purchasemodels.WorkOrderReceipt{
+		ID:                receiptID,
+		TenantID:          tenantID,
+		ProductionOrderID: req.ProductionOrderID,
+		OrderNumber:       orderNumber,
+		MaterialID:        materialID,
+		MaterialSKU:       materialSKU,
+		MaterialName:      materialName,
+		SiteID:            req.SiteID,
+		WarehouseID:       warehouseID,
+		BinID:             req.BinID,
+		Quantity:          req.Quantity,
+		UnitCost:          unitCost,
+		TotalCost:         totalCost,
+		BatchNo:           batchNo,
+		ReceiptDate:       now,
+		ReceivedBy:        userID,
+		CreatedAt:         now,
+	}, materialType, inventoryAccountType, nil
+}
+
+func (s *PurchaseService) generateProductionBatchNo(ctx context.Context, tx pgx.Tx, tenantID uuid.UUID, receiptDate time.Time) (string, error) {
+	datePart := receiptDate.Format("20060102")
+	var seq int
+	if err := tx.QueryRow(ctx, `
+		SELECT COUNT(*) + 1
+		FROM work_order_receipts
+		WHERE tenant_id = $1 AND batch_no LIKE $2
+	`, tenantID, "PRD-"+datePart+"-%").Scan(&seq); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("PRD-%s-%04d", datePart, seq), nil
+}
+
+func (s *PurchaseService) createWorkOrderReceiptJournalEntry(ctx context.Context, tenantID uuid.UUID, receipt *purchasemodels.WorkOrderReceipt, materialType, inventoryAccountType string, userID *uuid.UUID) error {
+	realOrgID, err := s.resolveOrgForAccountTypes(ctx, tenantID, inventoryAccountType, "DM_CONS")
+	if err != nil {
+		return err
+	}
+
+	drAccountID, err := s.accountForType(ctx, realOrgID, inventoryAccountType)
+	if err != nil {
+		return fmt.Errorf("no %s account configured for production material %s (material_type=%s) in Finance Settings (Account Types tab) for org %s; cannot create work order receipt journal entry", inventoryAccountType, receipt.MaterialSKU, materialType, realOrgID)
+	}
+	crAccountID, err := s.accountForType(ctx, realOrgID, "DM_CONS")
+	if err != nil {
+		return fmt.Errorf("no DM_CONS account configured in Finance Settings (Account Types tab) for org %s; cannot create work order receipt journal entry", realOrgID)
+	}
+
+	glUserID := uuid.Nil
+	if userID != nil {
+		glUserID = *userID
+	}
+	if glUserID == uuid.Nil {
+		_ = s.db.QueryRow(ctx, `SELECT id FROM users WHERE tenant_id = $1 LIMIT 1`, tenantID).Scan(&glUserID)
+	}
+
+	description := fmt.Sprintf("Work Order Receiving - %s / Receipt %s", receipt.OrderNumber, receipt.ID.String()[:8])
+	lineDescription := fmt.Sprintf("WO Receive: %s x %.2f @ %.2f", receipt.MaterialSKU, receipt.Quantity, receipt.UnitCost)
+	entryReq := &glmodels.CreateJournalEntryRequest{
+		PostingDate:    receipt.ReceiptDate,
+		Description:    description,
+		Reference:      receipt.OrderNumber,
+		EntryType:      "normal",
+		Source:         "purchase",
+		OrganizationID: &realOrgID,
+		Lines: []glmodels.CreateJournalLineRequest{
+			{
+				AccountID:   drAccountID,
+				Debit:       receipt.TotalCost,
+				Credit:      0,
+				Description: lineDescription,
+			},
+			{
+				AccountID:   crAccountID,
+				Debit:       0,
+				Credit:      receipt.TotalCost,
+				Description: lineDescription,
+			},
+		},
+	}
+
+	entry, err := s.glSvc.CreateJournalEntry(ctx, tenantID, glUserID, entryReq)
+	if err != nil {
+		return fmt.Errorf("create journal entry: %w", err)
+	}
+	if _, err = s.glSvc.UpdateJournalEntryStatus(ctx, entry.ID, tenantID, glUserID, "posted"); err != nil {
+		return fmt.Errorf("post journal entry: %w", err)
+	}
+	if _, err = s.db.Exec(ctx, `UPDATE work_order_receipts SET gl_je_id = $1 WHERE id = $2`, entry.ID, receipt.ID); err != nil {
+		return fmt.Errorf("link work order receipt journal entry: %w", err)
+	}
+	receipt.GLJournalEntryID = &entry.ID
+	return nil
 }
 
 func (s *PurchaseService) createReceiptJournalEntry(ctx context.Context, orgID uuid.UUID, po *purchasemodels.PurchaseOrder, req *purchasemodels.CreateReceiptRequest, receipt *purchasemodels.PurchaseReceipt, userID *uuid.UUID) error {
+	materialSKU, materialType, debitAccountType, err := s.resolveReceiptMaterialAccountType(ctx, req.POID, req.ItemID)
+	if err != nil {
+		return err
+	}
+
 	// Resolve the actual organization UUID (PO's org, not the JWT tenant_id)
+	// Priority: po.OrganizationID > lookup org by tenant_id > orgID as-is
 	realOrgID := orgID
 	if po.OrganizationID != nil && *po.OrganizationID != uuid.Nil {
 		realOrgID = *po.OrganizationID
+	} else {
+		// po.OrganizationID is NULL — try to find the organization for this tenant
+		// First try: look for an org under this tenant that has the material-type account configured.
+		var foundOrgID uuid.UUID
+		_ = s.db.QueryRow(ctx,
+			`SELECT ra.org_id FROM org_reconciliation_accounts ra
+			 JOIN organizations o ON o.id = ra.org_id
+			 WHERE o.tenant_id = $1 AND LOWER(ra.account_type) = LOWER($2)
+			 LIMIT 1`, orgID, debitAccountType).Scan(&foundOrgID)
+		if foundOrgID != uuid.Nil {
+			realOrgID = foundOrgID
+		} else {
+			// Second try: find any org for this tenant
+			_ = s.db.QueryRow(ctx,
+				`SELECT id FROM organizations WHERE tenant_id = $1 AND is_active = true LIMIT 1`, orgID).Scan(&foundOrgID)
+			if foundOrgID != uuid.Nil {
+				realOrgID = foundOrgID
+			}
+		}
 	}
 
 	// 1. Get Inventory account (DEBIT) from org_reconciliation_accounts
 	var inventoryID uuid.UUID
-	err := s.db.QueryRow(ctx, `SELECT account_id FROM org_reconciliation_accounts WHERE org_id = $1 AND account_type = 'INVENTORY'`, realOrgID).Scan(&inventoryID)
+	err = s.db.QueryRow(ctx, `
+		SELECT account_id
+		FROM org_reconciliation_accounts
+		WHERE org_id = $1 AND LOWER(account_type) = LOWER($2)
+		LIMIT 1
+	`, realOrgID, debitAccountType).Scan(&inventoryID)
 	if err != nil || inventoryID == uuid.Nil {
-		return fmt.Errorf("no INVENTORY account configured for org %s in Finance Settings (Account Types tab); cannot create journal entry", realOrgID)
+		return fmt.Errorf("no %s account configured for material %s (material_type=%s) in Finance Settings (Account Types tab) for org %s; cannot create journal entry", debitAccountType, materialSKU, materialType, realOrgID)
 	}
 
 	// 2. Get GR/IR Clearing account (CREDIT) from org_reconciliation_accounts
@@ -149,10 +414,10 @@ func (s *PurchaseService) createReceiptJournalEntry(ctx context.Context, orgID u
 		OrganizationID: &realOrgID,
 		Lines: []glmodels.CreateJournalLineRequest{
 			{
-				AccountID:   inventoryID, // Dr: Inventory (Raw Materials)
+				AccountID:   inventoryID, // Dr: Inventory account derived from product material type
 				Debit:       totalAmount,
 				Credit:      0,
-				Description: fmt.Sprintf("GR: %s x %.2f @ %.2f", receipt.ItemSKU, receipt.Quantity, receipt.UnitCost),
+				Description: fmt.Sprintf("GR: %s x %.2f @ %.2f", materialSKU, receipt.Quantity, receipt.UnitCost),
 				PartnerID:   &po.VendorID,
 				PartnerType: "vendor",
 			},
@@ -160,7 +425,7 @@ func (s *PurchaseService) createReceiptJournalEntry(ctx context.Context, orgID u
 				AccountID:   grIrID, // Cr: GR/IR Clearing (unbilled GR)
 				Debit:       0,
 				Credit:      totalAmount,
-				Description: fmt.Sprintf("GR: %s x %.2f @ %.2f", receipt.ItemSKU, receipt.Quantity, receipt.UnitCost),
+				Description: fmt.Sprintf("GR: %s x %.2f @ %.2f", materialSKU, receipt.Quantity, receipt.UnitCost),
 				PartnerID:   &po.VendorID,
 				PartnerType: "vendor",
 			},
@@ -192,8 +457,119 @@ func (s *PurchaseService) createReceiptJournalEntry(ctx context.Context, orgID u
 	return nil
 }
 
+func (s *PurchaseService) resolveReceiptMaterialAccountType(ctx context.Context, poID, itemID uuid.UUID) (string, string, string, error) {
+	var materialSKU string
+	var materialType string
+	err := s.db.QueryRow(ctx, `
+		SELECT COALESCE(p.sku, ''), COALESCE(p.material_type, '')
+		FROM purchase_order_items poi
+		JOIN products p ON p.id = poi.item_id
+		WHERE poi.po_id = $1 AND poi.item_id = $2
+		LIMIT 1
+	`, poID, itemID).Scan(&materialSKU, &materialType)
+	if err != nil {
+		return "", "", "", fmt.Errorf("resolve PO item material type for po %s item %s: %w", poID, itemID, err)
+	}
+
+	accountType := receiptDebitAccountTypeForMaterialType(materialType)
+	if accountType == "" {
+		return materialSKU, materialType, "", fmt.Errorf("material %s has no material_type; cannot resolve debit account type for goods receipt", materialSKU)
+	}
+	return materialSKU, materialType, accountType, nil
+}
+
+func receiptDebitAccountTypeForMaterialType(materialType string) string {
+	return inventoryAccountTypeForMaterialType(materialType)
+}
+
+func inventoryAccountTypeForMaterialType(materialType string) string {
+	normalized := strings.TrimSpace(materialType)
+	if normalized == "" {
+		return ""
+	}
+
+	key := strings.ToLower(strings.ReplaceAll(normalized, "-", "_"))
+	key = strings.ReplaceAll(key, " ", "_")
+	switch key {
+	case "raw_material", "raw_mat", "raw":
+		return "RAW_MAT"
+	case "finished_goods", "finished_good", "fg", "fgs":
+		return "FGS"
+	case "semi_finished_goods", "semi_finished_good", "half_finished_goods", "half_finished_good":
+		return "SFGS"
+	case "wip", "work_in_process", "work_in_progress":
+		return "WIP"
+	case "other", "other_inv", "other_inventory":
+		return "Other_Inv"
+	default:
+		return normalized
+	}
+}
+
+func (s *PurchaseService) resolveTenantID(ctx context.Context, orgContextID uuid.UUID) (uuid.UUID, error) {
+	if orgContextID == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("missing tenant or organization context")
+	}
+
+	var tenantID uuid.UUID
+	err := s.db.QueryRow(ctx, `SELECT tenant_id FROM organizations WHERE id = $1`, orgContextID).Scan(&tenantID)
+	if err == nil && tenantID != uuid.Nil {
+		return tenantID, nil
+	}
+	return orgContextID, nil
+}
+
+func (s *PurchaseService) resolveOrgForAccountTypes(ctx context.Context, tenantID uuid.UUID, accountTypes ...string) (uuid.UUID, error) {
+	if tenantID == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("missing tenant context")
+	}
+	for _, accountType := range accountTypes {
+		if accountType == "" {
+			return uuid.Nil, fmt.Errorf("missing account type")
+		}
+	}
+
+	args := []interface{}{tenantID}
+	query := `SELECT o.id FROM organizations o WHERE o.tenant_id = $1 AND o.is_active = true`
+	for i, accountType := range accountTypes {
+		args = append(args, accountType)
+		query += fmt.Sprintf(` AND EXISTS (
+			SELECT 1 FROM org_reconciliation_accounts ra
+			WHERE ra.org_id = o.id AND LOWER(ra.account_type) = LOWER($%d)
+		)`, i+2)
+	}
+	query += ` LIMIT 1`
+
+	var orgID uuid.UUID
+	if err := s.db.QueryRow(ctx, query, args...).Scan(&orgID); err == nil && orgID != uuid.Nil {
+		return orgID, nil
+	}
+	if err := s.db.QueryRow(ctx, `SELECT id FROM organizations WHERE tenant_id = $1 AND is_active = true LIMIT 1`, tenantID).Scan(&orgID); err == nil && orgID != uuid.Nil {
+		return orgID, nil
+	}
+	return uuid.Nil, fmt.Errorf("no active organization found for tenant %s", tenantID)
+}
+
+func (s *PurchaseService) accountForType(ctx context.Context, orgID uuid.UUID, accountType string) (uuid.UUID, error) {
+	var accountID uuid.UUID
+	err := s.db.QueryRow(ctx, `
+		SELECT account_id
+		FROM org_reconciliation_accounts
+		WHERE org_id = $1 AND LOWER(account_type) = LOWER($2)
+		LIMIT 1
+	`, orgID, accountType).Scan(&accountID)
+	if err != nil || accountID == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("account type %s not configured for org %s", accountType, orgID)
+	}
+	return accountID, nil
+}
+
 func (s *PurchaseService) ListReceipts(ctx context.Context, orgID uuid.UUID, poID uuid.UUID) ([]*purchasemodels.PurchaseReceipt, error) {
-	return s.repo.ListReceipts(ctx, orgID, poID)
+	tenantID, err := s.resolveTenantID(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	return s.repo.ListReceipts(ctx, orgID, tenantID, poID)
 }
 
 // ── Receipt Reversal ──
@@ -240,7 +616,9 @@ func (s *PurchaseService) ReverseGoodsReceipt(ctx context.Context, orgID uuid.UU
 			jeTenantID = orgID
 		}
 		glUserID := uuid.Nil
-		if userID != nil { glUserID = *userID }
+		if userID != nil {
+			glUserID = *userID
+		}
 		if glUserID == uuid.Nil {
 			_ = s.db.QueryRow(ctx, `SELECT id FROM users WHERE tenant_id = $1 LIMIT 1`, jeTenantID).Scan(&glUserID)
 		}
@@ -253,6 +631,34 @@ func (s *PurchaseService) ReverseGoodsReceipt(ctx context.Context, orgID uuid.UU
 }
 
 // ── Purchase Invoices ──
+
+func (s *PurchaseService) ReverseWorkOrderReceipt(ctx context.Context, orgContextID uuid.UUID, receiptID uuid.UUID, userID *uuid.UUID) error {
+	tenantID, err := s.resolveTenantID(ctx, orgContextID)
+	if err != nil {
+		return err
+	}
+
+	je, jeErr := s.repo.FindJournalEntryForReceipt(ctx, receiptID)
+	if err := s.repo.ReverseWorkOrderReceipt(ctx, receiptID, tenantID, userID); err != nil {
+		return err
+	}
+
+	if jeErr == nil {
+		jeID, _ := uuid.Parse(je["id"].(string))
+		glUserID := uuid.Nil
+		if userID != nil {
+			glUserID = *userID
+		}
+		if glUserID == uuid.Nil {
+			_ = s.db.QueryRow(ctx, `SELECT id FROM users WHERE tenant_id = $1 LIMIT 1`, tenantID).Scan(&glUserID)
+		}
+		if _, err := s.glSvc.ReverseJournalEntry(ctx, tenantID, glUserID, jeID, "negative"); err != nil {
+			return fmt.Errorf("work order receipt reversed, but failed to reverse JE %s: %w", jeID.String()[:8], err)
+		}
+	}
+
+	return nil
+}
 
 func (s *PurchaseService) CreateInvoice(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreateInvoiceRequest, createdBy *uuid.UUID) (*purchasemodels.PurchaseInvoice, *purchasemodels.BusinessEvent, error) {
 	invoice, event, err := s.repo.CreateInvoice(ctx, orgID, req, createdBy)
@@ -293,8 +699,12 @@ func (s *PurchaseService) ListOutstandingInvoices(ctx context.Context, orgIDStr,
 		return nil, fmt.Errorf("invalid org id: %w", err)
 	}
 	var vID, iID string
-	if vendorID != "" && vendorID != "all" { vID = vendorID }
-	if itemID != "" && itemID != "all" { iID = itemID }
+	if vendorID != "" && vendorID != "all" {
+		vID = vendorID
+	}
+	if itemID != "" && itemID != "all" {
+		iID = itemID
+	}
 	var df, dt time.Time
 	if dateFrom != "" {
 		df, _ = time.Parse("2006-01-02", dateFrom)
@@ -730,11 +1140,11 @@ func (s *PurchaseService) PostDownPayment(ctx context.Context, orgID uuid.UUID, 
 	// Create Journal Entry: Dr AP_DP (prepayment reconciliation account), Cr user-specified account
 	description := fmt.Sprintf("Down Payment %s - PO %s / Vendor %s", dp.DPNumber, dp.PONumber, dp.VendorName)
 	entryReq := &glmodels.CreateJournalEntryRequest{
-		PostingDate:    time.Now(),
-		Description:    description,
-		Reference:      dp.DPNumber,
-		EntryType:      "normal",
-		Source:         "purchase",
+		PostingDate: time.Now(),
+		Description: description,
+		Reference:   dp.DPNumber,
+		EntryType:   "normal",
+		Source:      "purchase",
 		Lines: []glmodels.CreateJournalLineRequest{
 			{
 				AccountID:   dp.APDPAccountID, // Dr: AP_DP (vendor prepayment reconciliation)
@@ -836,11 +1246,11 @@ func (s *PurchaseService) RefundDownPayment(ctx context.Context, orgID uuid.UUID
 	// Create refund journal entry: Dr credit account (reverse of original Cr), Cr AP_DP (reverse of original Dr)
 	description := fmt.Sprintf("Down Payment Refund %s - %s", dp.DPNumber, req.Reason)
 	entryReq := &glmodels.CreateJournalEntryRequest{
-		PostingDate:    refundDate,
-		Description:    description,
-		Reference:      dp.DPNumber,
-		EntryType:      "normal",
-		Source:         "purchase",
+		PostingDate: refundDate,
+		Description: description,
+		Reference:   dp.DPNumber,
+		EntryType:   "normal",
+		Source:      "purchase",
 		Lines: []glmodels.CreateJournalLineRequest{
 			{
 				AccountID:   dp.CreditAccountID, // Dr: original credit account (money comes back)
@@ -874,16 +1284,16 @@ func (s *PurchaseService) RefundDownPayment(ctx context.Context, orgID uuid.UUID
 	// Create refund record
 	refundID := uuid.New()
 	refund := &purchasemodels.DownPaymentRefund{
-		ID:               refundID,
-		DPID:             dpID,
-		RefundAmount:     req.RefundAmount,
-		RefundDate:       refundDate,
-		RefundMethod:     req.RefundMethod,
-		SourceAccountID:  req.SourceAccountID,
-		GLJEID:           &entry.ID,
-		Reason:           req.Reason,
-		CreatedBy:        userID,
-		CreatedAt:        time.Now(),
+		ID:              refundID,
+		DPID:            dpID,
+		RefundAmount:    req.RefundAmount,
+		RefundDate:      refundDate,
+		RefundMethod:    req.RefundMethod,
+		SourceAccountID: req.SourceAccountID,
+		GLJEID:          &entry.ID,
+		Reason:          req.Reason,
+		CreatedBy:       userID,
+		CreatedAt:       time.Now(),
 	}
 	if err := s.repo.CreateDownPaymentRefund(ctx, refund); err != nil {
 		return nil, fmt.Errorf("create refund record: %w", err)
@@ -999,7 +1409,9 @@ func (s *PurchaseService) ListPaymentHistory(ctx context.Context, orgIDStr, vend
 		return nil, fmt.Errorf("invalid org id: %w", err)
 	}
 	var vID string
-	if vendorID != "" && vendorID != "all" { vID = vendorID }
+	if vendorID != "" && vendorID != "all" {
+		vID = vendorID
+	}
 	var df, dt time.Time
 	if dateFrom != "" {
 		df, _ = time.Parse("2006-01-02", dateFrom)

@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	glmodels "github.com/swiftai-erp/backend/internal/gl/models"
+	glsvc "github.com/swiftai-erp/backend/internal/gl/service"
 	whrepo "github.com/swiftai-erp/backend/internal/warehouse/repository"
 
 	whmodels "github.com/swiftai-erp/backend/internal/warehouse/models"
@@ -17,16 +19,22 @@ import (
 
 // WarehouseService coordinates warehouse operations.
 type WarehouseService struct {
-	db         *pgxpool.Pool
-	productRepo *whrepo.ProductRepo
+	db            *pgxpool.Pool
+	productRepo   *whrepo.ProductRepo
 	warehouseRepo *whrepo.WarehouseRepo
+	glSvc         *glsvc.GLService
 }
 
-func NewWarehouseService(db *pgxpool.Pool, productRepo *whrepo.ProductRepo, warehouseRepo *whrepo.WarehouseRepo) *WarehouseService {
+func NewWarehouseService(db *pgxpool.Pool, productRepo *whrepo.ProductRepo, warehouseRepo *whrepo.WarehouseRepo, glSvc ...*glsvc.GLService) *WarehouseService {
+	var gs *glsvc.GLService
+	if len(glSvc) > 0 {
+		gs = glSvc[0]
+	}
 	return &WarehouseService{
 		db:            db,
 		productRepo:   productRepo,
 		warehouseRepo: warehouseRepo,
+		glSvc:         gs,
 	}
 }
 
@@ -244,50 +252,50 @@ func (s *WarehouseService) getMovement(ctx context.Context, id uuid.UUID) (*whmo
 }
 
 func (s *WarehouseService) ListStock(ctx context.Context, tenantID, productID, warehouseID, binID uuid.UUID, groupBySku bool, dateFrom, dateTo string) ([]*whmodels.StockItem, error) {
-    args := []interface{}{tenantID}
-    argIdx := 2
+	args := []interface{}{tenantID}
+	argIdx := 2
 
-    // WHERE clauses
-    var wheres []string
-    if productID != uuid.Nil {
-        wheres = append(wheres, fmt.Sprintf("si.product_id = $%d", argIdx))
-        args = append(args, productID)
-        argIdx++
-    }
-    if warehouseID != uuid.Nil {
-        wheres = append(wheres, fmt.Sprintf("si.warehouse_id = $%d", argIdx))
-        args = append(args, warehouseID)
-        argIdx++
-    }
-    if binID != uuid.Nil {
-        wheres = append(wheres, fmt.Sprintf("si.bin_id = $%d", argIdx))
-        args = append(args, binID)
-        argIdx++
-    }
-    if dateFrom != "" {
-        wheres = append(wheres, fmt.Sprintf("si.last_movement_at >= $%d::timestamptz", argIdx))
-        args = append(args, dateFrom)
-        argIdx++
-    }
-    if dateTo != "" {
-        wheres = append(wheres, fmt.Sprintf("si.last_movement_at <= $%d::timestamptz", argIdx))
-        args = append(args, dateTo)
-        argIdx++
-    }
+	// WHERE clauses
+	var wheres []string
+	if productID != uuid.Nil {
+		wheres = append(wheres, fmt.Sprintf("si.product_id = $%d", argIdx))
+		args = append(args, productID)
+		argIdx++
+	}
+	if warehouseID != uuid.Nil {
+		wheres = append(wheres, fmt.Sprintf("si.warehouse_id = $%d", argIdx))
+		args = append(args, warehouseID)
+		argIdx++
+	}
+	if binID != uuid.Nil {
+		wheres = append(wheres, fmt.Sprintf("si.bin_id = $%d", argIdx))
+		args = append(args, binID)
+		argIdx++
+	}
+	if dateFrom != "" {
+		wheres = append(wheres, fmt.Sprintf("si.last_movement_at >= $%d::timestamptz", argIdx))
+		args = append(args, dateFrom)
+		argIdx++
+	}
+	if dateTo != "" {
+		wheres = append(wheres, fmt.Sprintf("si.last_movement_at <= $%d::timestamptz", argIdx))
+		args = append(args, dateTo)
+		argIdx++
+	}
 
-    whereClause := ""
-    if len(wheres) > 0 {
-        whereClause = "WHERE si.tenant_id = $1 AND " + strings.Join(wheres, " AND ")
-    } else {
-        whereClause = "WHERE si.tenant_id = $1"
-    }
+	whereClause := ""
+	if len(wheres) > 0 {
+		whereClause = "WHERE si.tenant_id = $1 AND " + strings.Join(wheres, " AND ")
+	} else {
+		whereClause = "WHERE si.tenant_id = $1"
+	}
 
-    var rows pgx.Rows
-    var err error
+	var rows pgx.Rows
+	var err error
 
-    if groupBySku {
-        // Aggregated by product — each SKU appears once
-        groupedQuery := fmt.Sprintf(`
+	if groupBySku {
+		// Aggregated by product — each SKU appears once
+		groupedQuery := fmt.Sprintf(`
             SELECT p.id, COALESCE(p.sku,''), COALESCE(p.name,''),
                    SUM(si.quantity_on_hand), SUM(si.quantity_reserved), SUM(si.quantity_in_transit),
                    CASE WHEN SUM(si.quantity_on_hand) > 0
@@ -301,28 +309,30 @@ func (s *WarehouseService) ListStock(ctx context.Context, tenantID, productID, w
             GROUP BY p.id, p.sku, p.name
             ORDER BY p.sku
         `, whereClause)
-        rows, err = s.db.Query(ctx, groupedQuery, args...)
-        if err != nil { return nil, fmt.Errorf("list stock grouped: %w", err) }
-        defer rows.Close()
+		rows, err = s.db.Query(ctx, groupedQuery, args...)
+		if err != nil {
+			return nil, fmt.Errorf("list stock grouped: %w", err)
+		}
+		defer rows.Close()
 
-        var items []*whmodels.StockItem
-        for rows.Next() {
-            item := &whmodels.StockItem{}
-            if err := rows.Scan(
-                &item.ProductID, &item.ProductSKU, &item.ProductName,
-                &item.QuantityOnHand, &item.QuantityReserved, &item.QuantityInTransit,
-                &item.UnitCost, &item.TotalCost,
-                &item.LastMovementAt,
-            ); err != nil {
-                return nil, fmt.Errorf("scan grouped stock: %w", err)
-            }
-            items = append(items, item)
-        }
-        return items, nil
-    }
+		var items []*whmodels.StockItem
+		for rows.Next() {
+			item := &whmodels.StockItem{}
+			if err := rows.Scan(
+				&item.ProductID, &item.ProductSKU, &item.ProductName,
+				&item.QuantityOnHand, &item.QuantityReserved, &item.QuantityInTransit,
+				&item.UnitCost, &item.TotalCost,
+				&item.LastMovementAt,
+			); err != nil {
+				return nil, fmt.Errorf("scan grouped stock: %w", err)
+			}
+			items = append(items, item)
+		}
+		return items, nil
+	}
 
-    // Detailed (non-grouped) — individual bin-level records
-    detailQuery := fmt.Sprintf(`
+	// Detailed (non-grouped) — individual bin-level records
+	detailQuery := fmt.Sprintf(`
         SELECT si.id, si.tenant_id, si.product_id, COALESCE(p.sku,''), COALESCE(p.name,''),
                si.warehouse_id, COALESCE(w.name,''),
                si.bin_id, COALESCE(b.code,''),
@@ -340,29 +350,31 @@ func (s *WarehouseService) ListStock(ctx context.Context, tenantID, productID, w
         %s
         ORDER BY p.sku, w.code, b.code
     `, whereClause)
-    rows, err = s.db.Query(ctx, detailQuery, args...)
-    if err != nil { return nil, fmt.Errorf("list stock detail: %w", err) }
-    defer rows.Close()
+	rows, err = s.db.Query(ctx, detailQuery, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list stock detail: %w", err)
+	}
+	defer rows.Close()
 
-    var items []*whmodels.StockItem
-    for rows.Next() {
-        item := &whmodels.StockItem{}
-        if err := rows.Scan(
-            &item.ID, &item.TenantID, &item.ProductID, &item.ProductSKU, &item.ProductName,
-            &item.WarehouseID, &item.WarehouseName,
-            &item.BinID, &item.BinCode,
-            &item.BatchID, &item.BatchNo,
-            &item.LotNo,
-            &item.QuantityOnHand, &item.QuantityReserved, &item.QuantityInTransit,
-            &item.UnitCost, &item.TotalCost,
-            &item.LastMovementAt, &item.LastCountedAt,
-            &item.CreatedAt, &item.UpdatedAt,
-        ); err != nil {
-            return nil, fmt.Errorf("scan stock: %w", err)
-        }
-        items = append(items, item)
-    }
-    return items, nil
+	var items []*whmodels.StockItem
+	for rows.Next() {
+		item := &whmodels.StockItem{}
+		if err := rows.Scan(
+			&item.ID, &item.TenantID, &item.ProductID, &item.ProductSKU, &item.ProductName,
+			&item.WarehouseID, &item.WarehouseName,
+			&item.BinID, &item.BinCode,
+			&item.BatchID, &item.BatchNo,
+			&item.LotNo,
+			&item.QuantityOnHand, &item.QuantityReserved, &item.QuantityInTransit,
+			&item.UnitCost, &item.TotalCost,
+			&item.LastMovementAt, &item.LastCountedAt,
+			&item.CreatedAt, &item.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan stock: %w", err)
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }
 
 // ── Barcodes ──
@@ -421,13 +433,300 @@ func (s *WarehouseService) ListOutbound(ctx context.Context, tenantID uuid.UUID)
 	return s.warehouseRepo.ListOutbound(ctx, tenantID)
 }
 
+func (s *WarehouseService) UpdateOutbound(ctx context.Context, id, tenantID uuid.UUID, req *whmodels.CreateOutboundRequest) error {
+	return s.warehouseRepo.UpdateOutbound(ctx, id, tenantID, req)
+}
+
 func (s *WarehouseService) ShipOutbound(ctx context.Context, id, tenantID, userID uuid.UUID) error {
-	return s.warehouseRepo.ShipOutbound(ctx, id, tenantID, userID)
+	if err := s.warehouseRepo.ShipOutbound(ctx, id, tenantID, userID); err != nil {
+		return err
+	}
+	if s.glSvc == nil {
+		return nil
+	}
+	ob, err := s.warehouseRepo.GetOutboundByID(ctx, id, tenantID)
+	if err != nil {
+		return err
+	}
+	if ob.GLJEID != nil {
+		return nil
+	}
+	return s.createOutboundJournalEntry(ctx, tenantID, userID, ob)
+}
+
+func (s *WarehouseService) ReverseOutbound(ctx context.Context, id, tenantID, userID uuid.UUID) error {
+	jeID, err := s.warehouseRepo.ReverseOutbound(ctx, id, tenantID, userID)
+	if err != nil {
+		return err
+	}
+	if s.glSvc != nil && jeID != nil && *jeID != uuid.Nil {
+		if _, err := s.glSvc.ReverseJournalEntry(ctx, tenantID, userID, *jeID, "negative"); err != nil {
+			return fmt.Errorf("reverse goods issue journal entry: %w", err)
+		}
+	}
+	return nil
 }
 
 // ═══════════════════════════════════════════════════════════════
 // Cycle Count (REQ-CC-001~008)
 // ═══════════════════════════════════════════════════════════════
+
+func (s *WarehouseService) GetOutboundJournalEntry(ctx context.Context, id, tenantID, userID uuid.UUID) (map[string]interface{}, error) {
+	ob, err := s.warehouseRepo.GetOutboundByID(ctx, id, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	if s.glSvc == nil {
+		return nil, fmt.Errorf("gl service not available")
+	}
+
+	jeID := ob.GLJEID
+	if jeID == nil || *jeID == uuid.Nil {
+		var recoveredID uuid.UUID
+		err := s.db.QueryRow(ctx, `
+			SELECT id
+			FROM gl_journal_entries
+			WHERE tenant_id = $1
+			  AND reference = $2
+			  AND source = 'warehouse'
+			ORDER BY created_at DESC
+			LIMIT 1
+		`, tenantID, ob.OrderNo).Scan(&recoveredID)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				if ob.Status != "issued" && ob.Status != "shipped" {
+					return nil, fmt.Errorf("no journal entry found for goods issue")
+				}
+				if err := s.repairOutboundIssueCosts(ctx, tenantID, ob.ID); err != nil {
+					return nil, err
+				}
+				ob, err = s.warehouseRepo.GetOutboundByID(ctx, id, tenantID)
+				if err != nil {
+					return nil, err
+				}
+				if err := s.createOutboundJournalEntry(ctx, tenantID, userID, ob); err != nil {
+					return nil, err
+				}
+				ob, err = s.warehouseRepo.GetOutboundByID(ctx, id, tenantID)
+				if err != nil {
+					return nil, err
+				}
+				if ob.GLJEID == nil || *ob.GLJEID == uuid.Nil {
+					return nil, fmt.Errorf("no journal entry found for goods issue")
+				}
+				jeID = ob.GLJEID
+				goto loadJournalEntry
+			}
+			return nil, fmt.Errorf("find goods issue journal entry: %w", err)
+		}
+		if recoveredID == uuid.Nil {
+			return nil, fmt.Errorf("no journal entry found for goods issue")
+		}
+		if err := s.warehouseRepo.LinkOutboundJournalEntry(ctx, ob.ID, tenantID, recoveredID); err != nil {
+			return nil, fmt.Errorf("link goods issue journal entry: %w", err)
+		}
+		jeID = &recoveredID
+	}
+
+loadJournalEntry:
+	je, err := s.glSvc.GetJournalEntry(ctx, *jeID, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"journal_entry": je}, nil
+}
+
+func (s *WarehouseService) createOutboundJournalEntry(ctx context.Context, tenantID, userID uuid.UUID, ob *whmodels.OutboundOrder) error {
+	totalByAccount := map[uuid.UUID]float64{}
+	totalCost := 0.0
+	for _, line := range ob.Lines {
+		if line.TotalCost <= 0 {
+			continue
+		}
+		var materialType string
+		if err := s.db.QueryRow(ctx, `SELECT COALESCE(material_type,'') FROM products WHERE id = $1`, line.ProductID).Scan(&materialType); err != nil {
+			return fmt.Errorf("load product material type: %w", err)
+		}
+		inventoryType := warehouseInventoryAccountTypeForMaterialType(materialType)
+		if inventoryType == "" {
+			return fmt.Errorf("product %s has no material_type; cannot resolve inventory account type", line.ProductSKU)
+		}
+		orgID, err := s.resolveOrgForAccountTypes(ctx, tenantID, "DM_CONS", inventoryType)
+		if err != nil {
+			return err
+		}
+		accountID, err := s.accountForType(ctx, orgID, inventoryType)
+		if err != nil {
+			return err
+		}
+		totalByAccount[accountID] += line.TotalCost
+		totalCost += line.TotalCost
+	}
+	if totalCost <= 0 {
+		return fmt.Errorf("goods issue %s has zero total cost; maintain inventory or material cost before posting", ob.OrderNo)
+	}
+
+	orgID, err := s.resolveOrgForAccountTypes(ctx, tenantID, "DM_CONS")
+	if err != nil {
+		return err
+	}
+	dmConsAccountID, err := s.accountForType(ctx, orgID, "DM_CONS")
+	if err != nil {
+		return err
+	}
+
+	lines := []glmodels.CreateJournalLineRequest{{
+		AccountID:   dmConsAccountID,
+		Debit:       totalCost,
+		Credit:      0,
+		Description: fmt.Sprintf("Goods Issue %s", ob.OrderNo),
+	}}
+	for accountID, amount := range totalByAccount {
+		lines = append(lines, glmodels.CreateJournalLineRequest{
+			AccountID:   accountID,
+			Debit:       0,
+			Credit:      amount,
+			Description: fmt.Sprintf("Goods Issue inventory credit %s", ob.OrderNo),
+		})
+	}
+	entry, err := s.glSvc.CreateJournalEntry(ctx, tenantID, userID, &glmodels.CreateJournalEntryRequest{
+		PostingDate:    time.Now(),
+		Description:    fmt.Sprintf("Goods Issue - %s", ob.OrderNo),
+		Reference:      ob.OrderNo,
+		EntryType:      "normal",
+		Source:         "warehouse",
+		OrganizationID: &orgID,
+		Lines:          lines,
+	})
+	if err != nil {
+		return fmt.Errorf("create goods issue journal entry: %w", err)
+	}
+	if _, err := s.glSvc.UpdateJournalEntryStatus(ctx, entry.ID, tenantID, userID, "posted"); err != nil {
+		return fmt.Errorf("post goods issue journal entry: %w", err)
+	}
+	return s.warehouseRepo.LinkOutboundJournalEntry(ctx, ob.ID, tenantID, entry.ID)
+}
+
+func (s *WarehouseService) repairOutboundIssueCosts(ctx context.Context, tenantID, outboundID uuid.UUID) error {
+	rows, err := s.db.Query(ctx, `
+		SELECT l.id, l.product_id, COALESCE(p.sku,''), l.shipped_qty,
+			COALESCE(
+				NULLIF(si.unit_cost, 0),
+				NULLIF(si.total_cost / NULLIF(si.quantity_on_hand, 0), 0),
+				NULLIF(p.standard_cost, 0),
+				NULLIF(p.moving_avg_cost, 0),
+				NULLIF(p.last_cost, 0),
+				0
+			)
+		FROM outbound_orders o
+		JOIN outbound_order_lines l ON l.order_id = o.id
+		JOIN products p ON p.id = l.product_id
+		LEFT JOIN stock_items si ON si.tenant_id = o.tenant_id
+			AND si.product_id = l.product_id
+			AND si.warehouse_id = COALESCE(l.warehouse_id, o.warehouse_id)
+			AND ((l.from_bin_id IS NULL AND si.bin_id IS NULL) OR si.bin_id = l.from_bin_id)
+		WHERE o.id = $1
+		  AND o.tenant_id = $2
+		  AND o.status IN ('issued', 'shipped')
+		  AND COALESCE(l.shipped_qty, 0) > 0
+		  AND COALESCE(l.total_cost, 0) <= 0
+	`, outboundID, tenantID)
+	if err != nil {
+		return fmt.Errorf("load goods issue costs: %w", err)
+	}
+	defer rows.Close()
+
+	type costLine struct {
+		id        uuid.UUID
+		productID uuid.UUID
+		sku       string
+		qty       float64
+		unitCost  float64
+	}
+	var lines []costLine
+	for rows.Next() {
+		var line costLine
+		if err := rows.Scan(&line.id, &line.productID, &line.sku, &line.qty, &line.unitCost); err != nil {
+			return fmt.Errorf("scan goods issue cost: %w", err)
+		}
+		lines = append(lines, line)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("scan goods issue costs: %w", err)
+	}
+	for _, line := range lines {
+		if line.unitCost <= 0 {
+			return fmt.Errorf("cost is required before creating journal for product %s", line.sku)
+		}
+		if _, err := s.db.Exec(ctx, `
+			UPDATE outbound_order_lines
+			SET unit_cost = $1, total_cost = $2
+			WHERE id = $3
+		`, line.unitCost, line.qty*line.unitCost, line.id); err != nil {
+			return fmt.Errorf("repair goods issue cost: %w", err)
+		}
+	}
+	return nil
+}
+
+func warehouseInventoryAccountTypeForMaterialType(materialType string) string {
+	normalized := strings.TrimSpace(materialType)
+	if normalized == "" {
+		return ""
+	}
+	key := strings.ToLower(strings.ReplaceAll(normalized, "-", "_"))
+	key = strings.ReplaceAll(key, " ", "_")
+	switch key {
+	case "raw_material", "raw_mat", "raw":
+		return "RAW_MAT"
+	case "finished_goods", "finished_good", "fg", "fgs":
+		return "FGS"
+	case "semi_finished_goods", "semi_finished_good", "half_finished_goods", "half_finished_good":
+		return "SFGS"
+	case "wip", "work_in_process", "work_in_progress":
+		return "WIP"
+	case "other", "other_inv", "other_inventory":
+		return "Other_Inv"
+	default:
+		return normalized
+	}
+}
+
+func (s *WarehouseService) resolveOrgForAccountTypes(ctx context.Context, tenantID uuid.UUID, accountTypes ...string) (uuid.UUID, error) {
+	args := []interface{}{tenantID}
+	query := `SELECT o.id FROM organizations o WHERE o.tenant_id = $1 AND o.is_active = true`
+	for i, accountType := range accountTypes {
+		args = append(args, accountType)
+		query += fmt.Sprintf(` AND EXISTS (
+			SELECT 1 FROM org_reconciliation_accounts ra
+			WHERE ra.org_id = o.id AND LOWER(ra.account_type) = LOWER($%d)
+		)`, i+2)
+	}
+	query += ` LIMIT 1`
+
+	var orgID uuid.UUID
+	if err := s.db.QueryRow(ctx, query, args...).Scan(&orgID); err == nil && orgID != uuid.Nil {
+		return orgID, nil
+	}
+	if err := s.db.QueryRow(ctx, `SELECT id FROM organizations WHERE tenant_id = $1 AND is_active = true LIMIT 1`, tenantID).Scan(&orgID); err == nil && orgID != uuid.Nil {
+		return orgID, nil
+	}
+	return uuid.Nil, fmt.Errorf("no active organization found for tenant %s", tenantID)
+}
+
+func (s *WarehouseService) accountForType(ctx context.Context, orgID uuid.UUID, accountType string) (uuid.UUID, error) {
+	var accountID uuid.UUID
+	err := s.db.QueryRow(ctx, `
+		SELECT account_id
+		FROM org_reconciliation_accounts
+		WHERE org_id = $1 AND LOWER(account_type) = LOWER($2)
+		LIMIT 1
+	`, orgID, accountType).Scan(&accountID)
+	if err != nil || accountID == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("account type %s not configured for org %s", accountType, orgID)
+	}
+	return accountID, nil
+}
 
 func (s *WarehouseService) CreateCycleCount(ctx context.Context, tenantID uuid.UUID, req *whmodels.CreateCycleCountRequest) (*whmodels.CycleCount, error) {
 	return s.warehouseRepo.CreateCycleCount(ctx, tenantID, req)

@@ -39,26 +39,26 @@ import (
 	"github.com/swiftai-erp/backend/internal/middleware"
 	orghandler "github.com/swiftai-erp/backend/internal/org/handler"
 	orgrepo "github.com/swiftai-erp/backend/internal/org/repository"
+	"github.com/swiftai-erp/backend/internal/rbac"
 	whhandler "github.com/swiftai-erp/backend/internal/warehouse/handler"
 	whrepo "github.com/swiftai-erp/backend/internal/warehouse/repository"
 	whsvc "github.com/swiftai-erp/backend/internal/warehouse/service"
-	"github.com/swiftai-erp/backend/internal/rbac"
 
+	purchasehandler "github.com/swiftai-erp/backend/internal/purchase/handler"
 	purchaserepo "github.com/swiftai-erp/backend/internal/purchase/repository"
 	purchasessvc "github.com/swiftai-erp/backend/internal/purchase/service"
-	purchasehandler "github.com/swiftai-erp/backend/internal/purchase/handler"
 
+	fshandler "github.com/swiftai-erp/backend/internal/financesettings/handler"
 	fsrepo "github.com/swiftai-erp/backend/internal/financesettings/repository"
 	fssvc "github.com/swiftai-erp/backend/internal/financesettings/service"
-	fshandler "github.com/swiftai-erp/backend/internal/financesettings/handler"
 
+	saleshandler "github.com/swiftai-erp/backend/internal/sales/handler"
 	salesrepo "github.com/swiftai-erp/backend/internal/sales/repository"
 	salessvc "github.com/swiftai-erp/backend/internal/sales/service"
-	saleshandler "github.com/swiftai-erp/backend/internal/sales/handler"
 
+	arhandler "github.com/swiftai-erp/backend/internal/ar/handler"
 	arrepo "github.com/swiftai-erp/backend/internal/ar/repository"
 	arsvc "github.com/swiftai-erp/backend/internal/ar/service"
-	arhandler "github.com/swiftai-erp/backend/internal/ar/handler"
 
 	prodh "github.com/swiftai-erp/backend/internal/production/handler"
 	prodr "github.com/swiftai-erp/backend/internal/production/repository"
@@ -124,7 +124,7 @@ func main() {
 	// Warehouse
 	whProductRepo := whrepo.NewProductRepo(pool)
 	whWarehouseRepo := whrepo.NewWarehouseRepo(pool)
-	whSvc := whsvc.NewWarehouseService(pool, whProductRepo, whWarehouseRepo)
+	whSvc := whsvc.NewWarehouseService(pool, whProductRepo, whWarehouseRepo, glSvc)
 	whHandler := whhandler.NewWarehouseHandler(whSvc)
 
 	// Purchase
@@ -265,13 +265,13 @@ func main() {
 		protected.PUT("/gl/journal-entries/:id", glHandler.UpdateDraftEntry)
 		protected.DELETE("/gl/journal-entries/:id", glHandler.DeleteJournalEntry)
 		protected.POST("/gl/journal-entries/:id/reverse", glHandler.ReverseJournalEntry)
-				protected.POST("/gl/journal-entries/:id/unpost", glHandler.UnpostEntry)
+		protected.POST("/gl/journal-entries/:id/unpost", glHandler.UnpostEntry)
 
 		// ---- GL: AI ----
 		protected.POST("/gl/ai/suggest", glHandler.AISuggest)
 		protected.POST("/gl/ai/ocr", glHandler.AnalyzeOCR)
-				protected.POST("/gl/reset-database", glHandler.ResetDatabase)
-				protected.POST("/gl/initialize-coa", glHandler.InitializeCoA)
+		protected.POST("/gl/reset-database", glHandler.ResetDatabase)
+		protected.POST("/gl/initialize-coa", glHandler.InitializeCoA)
 
 		// ---- GL: Attachments ----
 		protected.POST("/gl/journal-entries/:id/attachments", glHandler.UploadAttachment)
@@ -316,7 +316,10 @@ func main() {
 		// ---- Warehouse: Outbound Order (REQ-OB-001~018) ----
 		protected.GET("/warehouse/outbound", whHandler.ListOutbound)
 		protected.POST("/warehouse/outbound", whHandler.CreateOutbound)
+		protected.PUT("/warehouse/outbound/:id", whHandler.UpdateOutbound)
 		protected.POST("/warehouse/outbound/:id/ship", whHandler.ShipOutbound)
+		protected.POST("/warehouse/outbound/:id/reverse", whHandler.ReverseOutbound)
+		protected.GET("/warehouse/outbound/:id/journal", whHandler.GetOutboundJournalEntry)
 
 		// ---- Warehouse: Cycle Count (REQ-CC-001~008) ----
 		protected.GET("/warehouse/cycle-counts", whHandler.ListCycleCounts)
@@ -368,6 +371,8 @@ func main() {
 		protected.GET("/purchase/payment-history", purchaseHandler.ListPaymentHistory)
 
 		protected.POST("/purchase/receipts", purchaseHandler.ExecuteGoodsReceipt)
+		protected.POST("/purchase/work-order-receipts", purchaseHandler.ExecuteWorkOrderReceipt)
+		protected.POST("/purchase/work-order-receipts/:id/reverse", purchaseHandler.ReverseWorkOrderReceipt)
 		protected.GET("/purchase/receipts", purchaseHandler.ListReceipts)
 		protected.GET("/purchase/receipts/:id/journal", purchaseHandler.GetReceiptJournalEntry)
 		protected.POST("/purchase/receipts/:id/reverse", purchaseHandler.ReverseGoodsReceipt)
@@ -483,7 +488,7 @@ func main() {
 		protected.GET("/sales/orders/:id", salesHandler.GetSalesOrder)
 		protected.PUT("/sales/orders/:id", salesHandler.UpdateSalesOrder)
 		protected.PUT("/sales/orders/:id/status", salesHandler.UpdateSOStatus)
-		protected.GET("/sales/atp-check", salesHandler.CheckATP)          // ?product_id=&quantity=
+		protected.GET("/sales/atp-check", salesHandler.CheckATP) // ?product_id=&quantity=
 		protected.POST("/sales/calculate-price", salesHandler.CalculatePrice)
 		protected.DELETE("/sales/orders/:id", salesHandler.DeleteSalesOrder)
 
@@ -524,15 +529,15 @@ func main() {
 
 		// ---- Positions ----
 		protected.POST("/positions", positionHandler.CreatePosition)
-		protected.GET("/positions", positionHandler.ListPositions)     // ?mode=tree
+		protected.GET("/positions", positionHandler.ListPositions) // ?mode=tree
 		protected.GET("/positions/:id", positionHandler.GetPosition)
 		protected.PUT("/positions/:id", positionHandler.UpdatePosition)
 		protected.DELETE("/positions/:id", positionHandler.DeletePosition)
 
 		// ---- Employees ----
 		protected.POST("/employees", employeeHandler.CreateEmployee)
-		protected.GET("/employees", employeeHandler.ListEmployees)     // ?mode=current for current view
-		protected.GET("/employees/:id", employeeHandler.GetEmployee)    // ?include=all for full detail
+		protected.GET("/employees", employeeHandler.ListEmployees)   // ?mode=current for current view
+		protected.GET("/employees/:id", employeeHandler.GetEmployee) // ?include=all for full detail
 		protected.PUT("/employees/:id", employeeHandler.UpdateEmployee)
 		protected.DELETE("/employees/:id", employeeHandler.DeleteEmployee)
 
@@ -587,6 +592,10 @@ func main() {
 		protected.PUT("/production/orders/:id", prodHandler.UpdateProductionOrder)
 		protected.DELETE("/production/orders/:id", prodHandler.DeleteProductionOrder)
 		protected.GET("/production/orders/:id/routing", prodHandler.GetPORoutingInfo)
+		protected.POST("/production/orders/:id/sync-materials", prodHandler.SyncPOMaterials)
+		protected.POST("/production/orders/:id/time-confirmations", prodHandler.CreateTimeConfirmation)
+		protected.GET("/production/orders/:id/time-confirmations", prodHandler.ListTimeConfirmations)
+		protected.PUT("/production/orders/materials/:mat_id/issue-qty", prodHandler.UpdatePOMaterialIssueQty)
 
 	}
 

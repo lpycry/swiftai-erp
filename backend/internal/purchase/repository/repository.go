@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,26 +27,30 @@ func NewPurchaseRepo(db *pgxpool.Pool) *PurchaseRepo {
 
 func (r *PurchaseRepo) CreateVendor(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreateVendorRequest) (*purchasemodels.Vendor, error) {
 	v := &purchasemodels.Vendor{
-		ID:                     uuid.New(),
-		OrgID:                  orgID,
-		VendorCode:             req.VendorCode,
-		Name:                   req.Name,
-		TaxNumber:              req.TaxNumber,
-		Currency:               req.Currency,
-		PaymentTerms:           req.PaymentTerms,
-		Status:                 "active",
-		LeadTimeDays:           req.LeadTimeDays,
-		Address:                req.Address,
-		ContactPerson:          req.ContactPerson,
-		ContactEmail:           req.ContactEmail,
-		ContactPhone:           req.ContactPhone,
+		ID:            uuid.New(),
+		OrgID:         orgID,
+		VendorCode:    req.VendorCode,
+		Name:          req.Name,
+		TaxNumber:     req.TaxNumber,
+		Currency:      req.Currency,
+		PaymentTerms:  req.PaymentTerms,
+		Status:        "active",
+		LeadTimeDays:  req.LeadTimeDays,
+		Address:       req.Address,
+		ContactPerson: req.ContactPerson,
+		ContactEmail:  req.ContactEmail,
+		ContactPhone:  req.ContactPhone,
 
-		IsActive:               true,
-		CreatedAt:              time.Now(),
-		UpdatedAt:              time.Now(),
+		IsActive:  true,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
-	if v.Currency == "" { v.Currency = "USD" }
-	if v.PaymentTerms == "" { v.PaymentTerms = "Net 30" }
+	if v.Currency == "" {
+		v.Currency = "USD"
+	}
+	if v.PaymentTerms == "" {
+		v.PaymentTerms = "Net 30"
+	}
 
 	_, err := r.db.Exec(ctx, `
 		INSERT INTO vendors(id, org_id, vendor_code, name, tax_number, currency, payment_terms, status,
@@ -68,7 +73,7 @@ func (r *PurchaseRepo) GetVendor(ctx context.Context, id, orgID uuid.UUID) (*pur
 		FROM vendors v
 		WHERE v.id = $1 AND v.org_id = $2
 	`, id, orgID).Scan(
-		&v.ID, &v.OrgID, &v.VendorCode, &v.Name, &v.TaxNumber, &v.Currency, &v.PaymentTerms, &v.Status,&v.AIRating, &v.LeadTimeDays, &v.Address, &v.ContactPerson, &v.ContactEmail, &v.ContactPhone, &v.IsActive, &v.CreatedAt, &v.UpdatedAt)
+		&v.ID, &v.OrgID, &v.VendorCode, &v.Name, &v.TaxNumber, &v.Currency, &v.PaymentTerms, &v.Status, &v.AIRating, &v.LeadTimeDays, &v.Address, &v.ContactPerson, &v.ContactEmail, &v.ContactPhone, &v.IsActive, &v.CreatedAt, &v.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get vendor: %w", err)
 	}
@@ -93,7 +98,9 @@ func (r *PurchaseRepo) ListVendors(ctx context.Context, orgID uuid.UUID, search 
 	query += " ORDER BY v.vendor_code"
 
 	rows, err := r.db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var list []*purchasemodels.Vendor
@@ -168,7 +175,9 @@ func (r *PurchaseRepo) CreatePO(ctx context.Context, orgID uuid.UUID, req *purch
 	}
 
 	currency := req.Currency
-	if currency == "" { currency = "USD" }
+	if currency == "" {
+		currency = "USD"
+	}
 
 	poDate := time.Now()
 	if req.PODate != "" {
@@ -178,7 +187,9 @@ func (r *PurchaseRepo) CreatePO(ctx context.Context, orgID uuid.UUID, req *purch
 	}
 
 	tx, err := r.db.Begin(ctx)
-	if err != nil { return nil, fmt.Errorf("begin tx: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
 	defer tx.Rollback(ctx)
 
 	_, err = tx.Exec(ctx, `
@@ -187,11 +198,15 @@ func (r *PurchaseRepo) CreatePO(ctx context.Context, orgID uuid.UUID, req *purch
 		VALUES ($1,$2,$3,$4,$5,$6,'DRAFT',$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())
 	`, poID, orgID, poNumber, req.VendorID, totalAmount, currency, req.Notes,
 		req.OrganizationID, poDate, req.PaymentTermCode, req.DeliveryAddress, req.IncotermCode, createdBy)
-	if err != nil { return nil, fmt.Errorf("insert po: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("insert po: %w", err)
+	}
 
 	for _, it := range req.Items {
 		uom := it.UOM
-		if uom == "" { uom = "EA" }
+		if uom == "" {
+			uom = "EA"
+		}
 		lineTotal := it.Quantity * it.UnitPrice
 
 		var deliveryDate *time.Time
@@ -205,10 +220,14 @@ func (r *PurchaseRepo) CreatePO(ctx context.Context, orgID uuid.UUID, req *purch
 			INSERT INTO purchase_order_items (id, po_id, item_id, quantity, unit_price, received_quantity, unit_of_measure, line_total, expected_delivery_date, delivery_address)
 			VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,$9)
 		`, uuid.New(), poID, it.ItemID, it.Quantity, it.UnitPrice, uom, lineTotal, deliveryDate, it.DeliveryAddress)
-		if err != nil { return nil, fmt.Errorf("insert po item: %w", err) }
+		if err != nil {
+			return nil, fmt.Errorf("insert po item: %w", err)
+		}
 	}
 
-	if err := tx.Commit(ctx); err != nil { return nil, fmt.Errorf("commit po: %w", err) }
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit po: %w", err)
+	}
 
 	return r.GetPO(ctx, poID, orgID)
 }
@@ -229,11 +248,15 @@ func (r *PurchaseRepo) GetPO(ctx context.Context, id, orgID uuid.UUID) (*purchas
 		&po.TotalAmount, &po.Currency, &po.Status, &po.Notes, &po.CreatedBy, &po.CreatedAt, &po.UpdatedAt,
 		&po.OrganizationID, &po.OrgCode, &po.OrgName, &po.PODate,
 		&po.PaymentTermCode, &po.DeliveryAddress, &po.IncotermCode)
-	if err != nil { return nil, fmt.Errorf("get po: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("get po: %w", err)
+	}
 
 	// Load items
 	items, err := r.getPOItems(ctx, id)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	po.Items = items
 	return po, nil
 }
@@ -263,7 +286,9 @@ func (r *PurchaseRepo) ListPOs(ctx context.Context, orgID uuid.UUID, status stri
 	query += " ORDER BY po.created_at DESC"
 
 	rows, err := r.db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var list []*purchasemodels.PurchaseOrder
@@ -296,7 +321,9 @@ func (r *PurchaseRepo) getPOItems(ctx context.Context, poID uuid.UUID) ([]purcha
 		LEFT JOIN products p ON p.id = poi.item_id
 		WHERE poi.po_id = $1 ORDER BY poi.id
 	`, poID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var items []purchasemodels.PurchaseOrderItem
@@ -339,7 +366,9 @@ func (r *PurchaseRepo) ListPendingInvoicePOs(ctx context.Context, orgID uuid.UUI
 		ORDER BY po.created_at DESC`
 
 	rows, err := r.db.Query(ctx, query, orgID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var list []*purchasemodels.PurchaseOrder
@@ -370,7 +399,9 @@ func (r *PurchaseRepo) ExecuteGoodsReceipt(ctx context.Context, orgID uuid.UUID,
 	now := time.Now()
 
 	tx, err := r.db.Begin(ctx)
-	if err != nil { return nil, nil, fmt.Errorf("begin tx: %w", err) }
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin tx: %w", err)
+	}
 	defer tx.Rollback(ctx)
 
 	totalCost := req.Quantity * req.UnitCost
@@ -414,18 +445,24 @@ func (r *PurchaseRepo) ExecuteGoodsReceipt(ctx context.Context, orgID uuid.UUID,
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 	`, receiptID, orgID, req.POID, req.ItemID, req.SiteID, req.BinID, nilIfUUID(warehouseID), req.Quantity, req.UnitCost, totalCost,
 		req.BatchNo, now, userID, now)
-	if err != nil { return nil, nil, fmt.Errorf("insert receipt: %w", err) }
+	if err != nil {
+		return nil, nil, fmt.Errorf("insert receipt: %w", err)
+	}
 
 	// 2. Update PO item received_quantity
 	_, err = tx.Exec(ctx, `
 		UPDATE purchase_order_items SET received_quantity = received_quantity + $1 WHERE po_id = $2 AND item_id = $3
 	`, req.Quantity, req.POID, req.ItemID)
-	if err != nil { return nil, nil, fmt.Errorf("update po item: %w", err) }
+	if err != nil {
+		return nil, nil, fmt.Errorf("update po item: %w", err)
+	}
 
 	// 3. Update PO status to RECEIVED if not already
 	if poStatus != "RECEIVED" && poStatus != "INVOICED" {
 		_, err = tx.Exec(ctx, `UPDATE purchase_orders SET status = 'RECEIVED', updated_at = NOW() WHERE id = $1`, req.POID)
-		if err != nil { return nil, nil, fmt.Errorf("update po status: %w", err) }
+		if err != nil {
+			return nil, nil, fmt.Errorf("update po status: %w", err)
+		}
 	}
 
 	// 4. Update warehouse stock (stock_items upsert) — skip if no warehouse resolved
@@ -441,7 +478,9 @@ func (r *PurchaseRepo) ExecuteGoodsReceipt(ctx context.Context, orgID uuid.UUID,
 				last_movement_at = NOW(),
 				updated_at = NOW()
 		`, orgID, req.ItemID, warehouseID, req.BinID, req.Quantity, req.UnitCost, totalCost)
-		if err != nil { return nil, nil, fmt.Errorf("upsert stock: %w", err) }
+		if err != nil {
+			return nil, nil, fmt.Errorf("upsert stock: %w", err)
+		}
 
 		// 5. Record stock movement
 		moveID = uuid.New()
@@ -451,26 +490,30 @@ func (r *PurchaseRepo) ExecuteGoodsReceipt(ctx context.Context, orgID uuid.UUID,
 			VALUES ($1,$2,'goods_receipt','purchase_receipt',$3, $4, $5,$6,$7,$8,$9,$10,'PO Goods Receipt','posted',$11,NOW(),NOW(),$11)
 		`, moveID, orgID, receiptID, req.POID.String(), req.ItemID, warehouseID, req.BinID,
 			req.Quantity, req.UnitCost, totalCost, userID)
-		if err != nil { return nil, nil, fmt.Errorf("insert movement: %w", err) }
+		if err != nil {
+			return nil, nil, fmt.Errorf("insert movement: %w", err)
+		}
 	}
 
 	// 6. Create business event for AI GL posting
 	eventData, _ := json.Marshal(map[string]interface{}{
-		"receipt_id":    receiptID.String(),
-		"po_id":         req.POID.String(),
-		"item_id":       req.ItemID.String(),
-		"site_id":       req.SiteID.String(),
-		"quantity":      req.Quantity,
-		"unit_cost":     req.UnitCost,
-		"total_cost":    totalCost,
-		"movement_id":   moveID.String(),
+		"receipt_id":  receiptID.String(),
+		"po_id":       req.POID.String(),
+		"item_id":     req.ItemID.String(),
+		"site_id":     req.SiteID.String(),
+		"quantity":    req.Quantity,
+		"unit_cost":   req.UnitCost,
+		"total_cost":  totalCost,
+		"movement_id": moveID.String(),
 	})
 	eventID := uuid.New()
 	_, err = tx.Exec(ctx, `
 		INSERT INTO business_events (id, org_id, event_type, source_id, source_type, event_data, status, created_at)
 		VALUES ($1,$2,'PO_GOODS_RECEIVED',$3,'purchase_receipt',$4,'PENDING',NOW())
 	`, eventID, orgID, receiptID, eventData)
-	if err != nil { return nil, nil, fmt.Errorf("insert business event: %w", err) }
+	if err != nil {
+		return nil, nil, fmt.Errorf("insert business event: %w", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, nil, fmt.Errorf("commit receipt: %w", err)
@@ -496,7 +539,7 @@ func (r *PurchaseRepo) ExecuteGoodsReceipt(ctx context.Context, orgID uuid.UUID,
 	return receipt, event, nil
 }
 
-func (r *PurchaseRepo) ListReceipts(ctx context.Context, orgID uuid.UUID, poID uuid.UUID) ([]*purchasemodels.PurchaseReceipt, error) {
+func (r *PurchaseRepo) ListReceipts(ctx context.Context, orgID uuid.UUID, tenantID uuid.UUID, poID uuid.UUID) ([]*purchasemodels.PurchaseReceipt, error) {
 	query := `SELECT pr.id, pr.org_id, pr.po_id, pr.item_id, pr.site_id, pr.bin_id, pr.warehouse_id,
 		pr.quantity, pr.unit_cost, pr.total_cost, COALESCE(pr.batch_no,''), pr.receipt_date, pr.received_by, pr.created_at,
 		pr.is_reversed, pr.reversed_at,
@@ -507,9 +550,9 @@ func (r *PurchaseRepo) ListReceipts(ctx context.Context, orgID uuid.UUID, poID u
 		LEFT JOIN products p ON p.id = pr.item_id
 		LEFT JOIN sites s ON s.id = pr.site_id
 		LEFT JOIN warehouses w ON w.id = pr.warehouse_id
-		WHERE pr.org_id = $1`
-	args := []interface{}{orgID}
-	argIdx := 2
+		WHERE (pr.org_id = $1 OR pr.org_id = $2 OR pr.org_id IN (SELECT id FROM organizations WHERE tenant_id = $2))`
+	args := []interface{}{orgID, tenantID}
+	argIdx := 3
 	if poID != uuid.Nil {
 		query += fmt.Sprintf(" AND pr.po_id = $%d", argIdx)
 		args = append(args, poID)
@@ -518,7 +561,9 @@ func (r *PurchaseRepo) ListReceipts(ctx context.Context, orgID uuid.UUID, poID u
 	query += " ORDER BY pr.created_at DESC"
 
 	rows, err := r.db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var list []*purchasemodels.PurchaseReceipt
@@ -531,8 +576,46 @@ func (r *PurchaseRepo) ListReceipts(ctx context.Context, orgID uuid.UUID, poID u
 			&r.WhCode, &r.WhName); err != nil {
 			return nil, err
 		}
+		r.ReceiptSource = "PO"
 		list = append(list, r)
 	}
+
+	if poID == uuid.Nil {
+		woRows, err := r.db.Query(ctx, `
+			SELECT wor.id, wor.tenant_id, wor.production_order_id, wor.material_id, wor.site_id, wor.bin_id, wor.warehouse_id,
+				wor.quantity, wor.unit_cost, wor.total_cost, COALESCE(wor.batch_no,''), wor.receipt_date, wor.received_by, wor.created_at,
+				wor.is_reversed, wor.reversed_at,
+				COALESCE(po.order_number,''), COALESCE(p.sku,''), COALESCE(p.name,''), COALESCE(s.site_code,''), COALESCE(s.site_name,''),
+				COALESCE(w.code,''), COALESCE(w.name,'')
+			FROM work_order_receipts wor
+			LEFT JOIN production_orders po ON po.id = wor.production_order_id
+			LEFT JOIN products p ON p.id = wor.material_id
+			LEFT JOIN sites s ON s.id = wor.site_id
+			LEFT JOIN warehouses w ON w.id = wor.warehouse_id
+			WHERE wor.tenant_id = $1
+			ORDER BY wor.created_at DESC
+		`, tenantID)
+		if err != nil {
+			return nil, err
+		}
+		defer woRows.Close()
+		for woRows.Next() {
+			rec := &purchasemodels.PurchaseReceipt{}
+			if err := woRows.Scan(&rec.ID, &rec.OrgID, &rec.POID, &rec.ItemID, &rec.SiteID, &rec.BinID, &rec.WarehouseID,
+				&rec.Quantity, &rec.UnitCost, &rec.TotalCost, &rec.BatchNo, &rec.ReceiptDate, &rec.ReceivedBy, &rec.CreatedAt,
+				&rec.IsReversed, &rec.ReversedAt,
+				&rec.PONumber, &rec.ItemSKU, &rec.ItemName, &rec.SiteCode, &rec.SiteName,
+				&rec.WhCode, &rec.WhName); err != nil {
+				return nil, err
+			}
+			rec.ReceiptSource = "WORK_ORDER"
+			list = append(list, rec)
+		}
+	}
+
+	sort.SliceStable(list, func(i, j int) bool {
+		return list[i].CreatedAt.After(list[j].CreatedAt)
+	})
 	return list, nil
 }
 
@@ -542,7 +625,9 @@ func (r *PurchaseRepo) ListReceipts(ctx context.Context, orgID uuid.UUID, poID u
 
 func (r *PurchaseRepo) ReverseGoodsReceipt(ctx context.Context, receiptID, orgID uuid.UUID, userID *uuid.UUID) error {
 	tx, err := r.db.Begin(ctx)
-	if err != nil { return fmt.Errorf("begin tx: %w", err) }
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
 	defer tx.Rollback(ctx)
 
 	// 1. Get the original receipt
@@ -566,7 +651,9 @@ func (r *PurchaseRepo) ReverseGoodsReceipt(ctx context.Context, receiptID, orgID
 		UPDATE purchase_order_items SET received_quantity = GREATEST(0, received_quantity - $1)
 		WHERE po_id = $2 AND item_id = $3
 	`, rec.Quantity, rec.POID, rec.ItemID)
-	if err != nil { return fmt.Errorf("revert po item: %w", err) }
+	if err != nil {
+		return fmt.Errorf("revert po item: %w", err)
+	}
 	if res.RowsAffected() == 0 {
 		return fmt.Errorf("no PO item found for receipt") // should not happen
 	}
@@ -623,11 +710,15 @@ func (r *PurchaseRepo) ReverseGoodsReceipt(ctx context.Context, receiptID, orgID
 	err = tx.QueryRow(ctx, `
 		SELECT COALESCE(SUM(received_quantity),0) FROM purchase_order_items WHERE po_id = $1
 	`, rec.POID).Scan(&totalReceived)
-	if err != nil { return fmt.Errorf("check po received: %w", err) }
+	if err != nil {
+		return fmt.Errorf("check po received: %w", err)
+	}
 
 	if totalReceived <= 0 {
 		_, err = tx.Exec(ctx, `UPDATE purchase_orders SET status = 'CONFIRMED', updated_at = NOW() WHERE id = $1`, rec.POID)
-		if err != nil { return fmt.Errorf("revert po status: %w", err) }
+		if err != nil {
+			return fmt.Errorf("revert po status: %w", err)
+		}
 	}
 
 	// 4. Mark receipt as reversed
@@ -635,7 +726,9 @@ func (r *PurchaseRepo) ReverseGoodsReceipt(ctx context.Context, receiptID, orgID
 	_, err = tx.Exec(ctx, `
 		UPDATE purchase_receipts SET is_reversed = true, reversed_at = $1 WHERE id = $2
 	`, now, receiptID)
-	if err != nil { return fmt.Errorf("mark reversed: %w", err) }
+	if err != nil {
+		return fmt.Errorf("mark reversed: %w", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit reversal: %w", err)
@@ -648,21 +741,110 @@ func (r *PurchaseRepo) ReverseGoodsReceipt(ctx context.Context, receiptID, orgID
 //  PURCHASE INVOICES  (联动财务结算)
 // ══════════════════════════════════════════
 
+func (r *PurchaseRepo) ReverseWorkOrderReceipt(ctx context.Context, receiptID, tenantID uuid.UUID, userID *uuid.UUID) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin work order receipt reversal tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var rec purchasemodels.PurchaseReceipt
+	err = tx.QueryRow(ctx, `
+		SELECT id, tenant_id, production_order_id, material_id, site_id, bin_id, warehouse_id,
+			quantity, unit_cost, total_cost, is_reversed
+		FROM work_order_receipts
+		WHERE id = $1 AND tenant_id = $2
+		FOR UPDATE
+	`, receiptID, tenantID).Scan(
+		&rec.ID, &rec.OrgID, &rec.POID, &rec.ItemID, &rec.SiteID, &rec.BinID, &rec.WarehouseID,
+		&rec.Quantity, &rec.UnitCost, &rec.TotalCost, &rec.IsReversed,
+	)
+	if err != nil {
+		return fmt.Errorf("work order receipt not found: %w", err)
+	}
+	if rec.IsReversed {
+		return fmt.Errorf("work order receipt %s is already reversed", receiptID.String()[:8])
+	}
+	if rec.WarehouseID == nil || *rec.WarehouseID == uuid.Nil {
+		return fmt.Errorf("work order receipt %s has no warehouse to reverse", receiptID.String()[:8])
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE stock_items SET
+			quantity_on_hand = GREATEST(0, quantity_on_hand - $1),
+			total_cost = GREATEST(0, total_cost - $2),
+			last_movement_at = NOW(),
+			updated_at = NOW()
+		WHERE tenant_id = $3 AND product_id = $4 AND warehouse_id = $5 AND ($6::uuid IS NULL OR bin_id = $6)
+	`, rec.Quantity, rec.TotalCost, tenantID, rec.ItemID, *rec.WarehouseID, rec.BinID)
+	if err != nil {
+		return fmt.Errorf("revert work order stock: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		INSERT INTO stock_movements (id, tenant_id, transaction_type, reference_type, reference_id, reference_no,
+			product_id, warehouse_id, bin_id, quantity, unit_cost, total_cost, description, status, created_by, created_at, posted_at, posted_by)
+		VALUES (uuid_generate_v4(), $1,'goods_receipt','work_order_receipt',$2,$3,
+			$4,$5,$6,$7,$8,$9,'Work Order Receiving Reversal','posted',$10,NOW(),NOW(),$10)
+	`, tenantID, receiptID, rec.POID.String(), rec.ItemID, *rec.WarehouseID, rec.BinID,
+		-rec.Quantity, rec.UnitCost, rec.TotalCost, userID)
+	if err != nil {
+		return fmt.Errorf("insert work order reversal movement: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE production_orders
+		SET completed_qty = GREATEST(0, completed_qty - $1),
+			status = CASE
+				WHEN GREATEST(0, completed_qty - $1) <= 0 THEN 'RELEASED'
+				WHEN GREATEST(0, completed_qty - $1) >= order_qty THEN 'COMPLETED'
+				ELSE 'PARTIALLY_PRODUCED'
+			END,
+			updated_by = $2,
+			updated_at = NOW()
+		WHERE id = $3 AND tenant_id = $4
+	`, rec.Quantity, userID, rec.POID, tenantID)
+	if err != nil {
+		return fmt.Errorf("revert production order completed qty: %w", err)
+	}
+
+	now := time.Now()
+	_, err = tx.Exec(ctx, `
+		UPDATE work_order_receipts
+		SET is_reversed = true, reversed_at = $1, updated_at = NOW()
+		WHERE id = $2 AND tenant_id = $3
+	`, now, receiptID, tenantID)
+	if err != nil {
+		return fmt.Errorf("mark work order receipt reversed: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit work order receipt reversal: %w", err)
+	}
+	return nil
+}
+
 func (r *PurchaseRepo) CreateInvoice(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreateInvoiceRequest, createdBy *uuid.UUID) (*purchasemodels.PurchaseInvoice, *purchasemodels.BusinessEvent, error) {
 	invoiceID := uuid.New()
 	now := time.Now()
 
 	tx, err := r.db.Begin(ctx)
-	if err != nil { return nil, nil, fmt.Errorf("begin tx: %w", err) }
+	if err != nil {
+		return nil, nil, fmt.Errorf("begin tx: %w", err)
+	}
 	defer tx.Rollback(ctx)
 
 	invoiceDate := now
 	if req.InvoiceDate != "" {
 		parsed, err := time.Parse("2006-01-02", req.InvoiceDate)
-		if err == nil { invoiceDate = parsed }
+		if err == nil {
+			invoiceDate = parsed
+		}
 	}
 	currency := req.Currency
-	if currency == "" { currency = "USD" }
+	if currency == "" {
+		currency = "USD"
+	}
 
 	var event *purchasemodels.BusinessEvent
 
@@ -681,7 +863,9 @@ func (r *PurchaseRepo) CreateInvoice(ctx context.Context, orgID uuid.UUID, req *
 		INSERT INTO purchase_invoices (id, org_id, invoice_number, vendor_id, po_id, invoice_date, total_amount, tax_amount, currency, status, created_by, created_at, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'DRAFT',$10,NOW(),NOW())
 	`, invoiceID, orgID, req.InvoiceNumber, req.VendorID, req.POID, invoiceDate, req.TotalAmount, req.TaxAmount, currency, createdBy)
-	if err != nil { return nil, nil, fmt.Errorf("insert invoice: %w", err) }
+	if err != nil {
+		return nil, nil, fmt.Errorf("insert invoice: %w", err)
+	}
 
 	matchResult := "NO_MATCH"
 	var totalPriceDiff float64
@@ -777,7 +961,9 @@ func (r *PurchaseRepo) CreateInvoice(ctx context.Context, orgID uuid.UUID, req *
 		matchJSON, _ := json.Marshal(matchDetails)
 		_, err = tx.Exec(ctx, `UPDATE purchase_invoices SET match_status = $2, status = $3, match_detail = $4, updated_at = NOW() WHERE id = $1`,
 			invoiceID, matchResult, status, matchJSON)
-		if err != nil { return nil, nil, fmt.Errorf("update invoice match: %w", err) }
+		if err != nil {
+			return nil, nil, fmt.Errorf("update invoice match: %w", err)
+		}
 
 		// Update PO status (for both FULL and PARTIAL match)
 		var totalOpen float64
@@ -787,7 +973,9 @@ func (r *PurchaseRepo) CreateInvoice(ctx context.Context, orgID uuid.UUID, req *
 			poStatus = "INVOICED"
 		}
 		_, err = tx.Exec(ctx, `UPDATE purchase_orders SET status = $2, updated_at = NOW() WHERE id = $1`, *req.POID, poStatus)
-		if err != nil { return nil, nil, fmt.Errorf("update po status: %w", err) }
+		if err != nil {
+			return nil, nil, fmt.Errorf("update po status: %w", err)
+		}
 
 		// Create business event
 		eventType := "PO_INVOICE_MATCHED"
@@ -795,12 +983,12 @@ func (r *PurchaseRepo) CreateInvoice(ctx context.Context, orgID uuid.UUID, req *
 			eventType = "PO_INVOICE_SETTLED"
 		}
 		eventData, _ := json.Marshal(map[string]interface{}{
-			"invoice_id":    invoiceID.String(),
-			"po_id":         req.POID.String(),
-			"vendor_id":     req.VendorID.String(),
-			"total_amount":  req.TotalAmount,
-			"tax_amount":    req.TaxAmount,
-			"match_status":  matchResult,
+			"invoice_id":       invoiceID.String(),
+			"po_id":            req.POID.String(),
+			"vendor_id":        req.VendorID.String(),
+			"total_amount":     req.TotalAmount,
+			"tax_amount":       req.TaxAmount,
+			"match_status":     matchResult,
 			"total_price_diff": totalPriceDiff,
 		})
 		eventID := uuid.New()
@@ -808,7 +996,9 @@ func (r *PurchaseRepo) CreateInvoice(ctx context.Context, orgID uuid.UUID, req *
 			INSERT INTO business_events (id, org_id, event_type, source_id, source_type, event_data, status, created_at)
 			VALUES ($1,$2,$3,$4,'purchase_invoice',$5,'PENDING',NOW())
 		`, eventID, orgID, eventType, invoiceID, eventData)
-		if err != nil { return nil, nil, fmt.Errorf("insert business event: %w", err) }
+		if err != nil {
+			return nil, nil, fmt.Errorf("insert business event: %w", err)
+		}
 
 		// Build event for return
 		event = &purchasemodels.BusinessEvent{
@@ -841,7 +1031,9 @@ func (r *PurchaseRepo) GetInvoice(ctx context.Context, id, orgID uuid.UUID) (*pu
 		&inv.TotalAmount, &inv.TaxAmount, &inv.Currency, &inv.Status, &inv.MatchStatus,
 		&inv.Notes, &inv.CreatedBy, &inv.CreatedAt, &inv.UpdatedAt,
 		&inv.VendorName, &inv.PONumber)
-	if err != nil { return nil, fmt.Errorf("get invoice: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("get invoice: %w", err)
+	}
 	return inv, nil
 }
 
@@ -855,7 +1047,9 @@ func (r *PurchaseRepo) GetInvoiceItems(ctx context.Context, invoiceID uuid.UUID)
 		WHERE ii.invoice_id = $1
 		ORDER BY ii.id
 	`, invoiceID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var list []purchasemodels.InvoiceItem
 	for rows.Next() {
@@ -889,7 +1083,9 @@ func (r *PurchaseRepo) ListInvoices(ctx context.Context, orgID uuid.UUID, vendor
 	query += " ORDER BY pi.created_at DESC"
 
 	rows, err := r.db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var list []*purchasemodels.PurchaseInvoice
@@ -952,7 +1148,9 @@ func (r *PurchaseRepo) ListOutstandingInvoices(ctx context.Context, orgID uuid.U
 	query += ` ORDER BY due_date ASC`
 
 	rows, err := r.db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	now := time.Now()
@@ -1015,8 +1213,12 @@ func (r *PurchaseRepo) ListAttachments(ctx context.Context, orgID, poID uuid.UUI
 			"file_size":  fileSize,
 			"created_at": createdAt.Format("2006-01-02 15:04:05"),
 		}
-		if desc != nil { m["description"] = *desc }
-		if uploadedBy != nil { m["uploaded_by"] = *uploadedBy }
+		if desc != nil {
+			m["description"] = *desc
+		}
+		if uploadedBy != nil {
+			m["uploaded_by"] = *uploadedBy
+		}
 		list = append(list, m)
 	}
 	return list, nil
@@ -1052,6 +1254,27 @@ func (r *PurchaseRepo) GetAttachment(ctx context.Context, orgID, poID, attachID 
 // FindJournalEntryForReceipt looks up the GL journal entry linked to a purchase receipt.
 // The JE's description contains the receipt ID prefix.
 func (r *PurchaseRepo) FindJournalEntryForReceipt(ctx context.Context, receiptID uuid.UUID) (map[string]interface{}, error) {
+	var linkedJEID uuid.UUID
+	_ = r.db.QueryRow(ctx, `SELECT gl_je_id FROM work_order_receipts WHERE id = $1 AND gl_je_id IS NOT NULL`, receiptID).Scan(&linkedJEID)
+	if linkedJEID != uuid.Nil {
+		var jeID, docNo, status, description string
+		err := r.db.QueryRow(ctx, `
+			SELECT id, document_no, status, description
+			FROM gl_journal_entries
+			WHERE id = $1
+			LIMIT 1
+		`, linkedJEID).Scan(&jeID, &docNo, &status, &description)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{
+			"id":          jeID,
+			"document_no": docNo,
+			"status":      status,
+			"description": description,
+		}, nil
+	}
+
 	prefix := receiptID.String()[:8]
 	// Search by description pattern — the JE description contains "Receipt XXXX..."
 	var jeID, docNo, status, description string
@@ -1103,7 +1326,9 @@ func (r *PurchaseRepo) GetJournalEntryLines(ctx context.Context, jeID uuid.UUID)
 			"description":  desc,
 			"partner_type": pType,
 		}
-		if partnerID != nil { m["partner_id"] = *partnerID }
+		if partnerID != nil {
+			m["partner_id"] = *partnerID
+		}
 		lines = append(lines, m)
 	}
 	return lines, nil
@@ -1120,7 +1345,9 @@ func (r *PurchaseRepo) RecommendVendors(ctx context.Context, orgID uuid.UUID, pr
 		ORDER BY v.ai_rating DESC, v.lead_time_days ASC
 		LIMIT 5
 	`, orgID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var recs []*purchasemodels.VendorRecommendation
@@ -1132,8 +1359,12 @@ func (r *PurchaseRepo) RecommendVendors(ctx context.Context, orgID uuid.UUID, pr
 			return nil, err
 		}
 		score := v.AIRating*0.5 + 0.3 + (1.0-float64(v.LeadTimeDays)/30.0)*0.2
-		if score > 5.0 { score = 5.0 }
-		if score < 0 { score = 0 }
+		if score > 5.0 {
+			score = 5.0
+		}
+		if score < 0 {
+			score = 0
+		}
 
 		reason := "Good rating"
 		if v.AIRating >= 4.0 {
@@ -1233,19 +1464,29 @@ func (r *PurchaseRepo) EnsureDownPaymentTable(ctx context.Context) error {
 	}
 
 	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dp_org ON down_payments(org_id)`)
-	if err != nil { return fmt.Errorf("create index idx_dp_org: %w", err) }
+	if err != nil {
+		return fmt.Errorf("create index idx_dp_org: %w", err)
+	}
 
 	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dp_vendor ON down_payments(vendor_id)`)
-	if err != nil { return fmt.Errorf("create index idx_dp_vendor: %w", err) }
+	if err != nil {
+		return fmt.Errorf("create index idx_dp_vendor: %w", err)
+	}
 
 	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dp_status ON down_payments(status)`)
-	if err != nil { return fmt.Errorf("create index idx_dp_status: %w", err) }
+	if err != nil {
+		return fmt.Errorf("create index idx_dp_status: %w", err)
+	}
 
 	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dpc_dp ON down_payment_clearings(dp_id)`)
-	if err != nil { return fmt.Errorf("create index idx_dpc_dp: %w", err) }
+	if err != nil {
+		return fmt.Errorf("create index idx_dpc_dp: %w", err)
+	}
 
 	_, err = r.db.Exec(ctx, `CREATE INDEX IF NOT EXISTS idx_dpr_dp ON down_payment_refunds(dp_id)`)
-	if err != nil { return fmt.Errorf("create index idx_dpr_dp: %w", err) }
+	if err != nil {
+		return fmt.Errorf("create index idx_dpr_dp: %w", err)
+	}
 
 	return nil
 }
@@ -1384,7 +1625,9 @@ func (r *PurchaseRepo) ListDownPayments(ctx context.Context, orgID uuid.UUID, ve
 	query += " ORDER BY dp.created_at DESC"
 
 	rows, err := r.db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var list []*purchasemodels.DownPayment
@@ -1420,7 +1663,9 @@ func (r *PurchaseRepo) UpdateDownPaymentStatus(ctx context.Context, id uuid.UUID
 			} else {
 				_, err = pgxTx.Exec(ctx, `UPDATE down_payments SET status = $2, remaining_amount = $3, updated_at = NOW() WHERE id = $1`, id, status, remainingAmount)
 			}
-			if err != nil { return fmt.Errorf("update down payment status (tx): %w", err) }
+			if err != nil {
+				return fmt.Errorf("update down payment status (tx): %w", err)
+			}
 			return nil
 		}
 	}
@@ -1431,7 +1676,9 @@ func (r *PurchaseRepo) UpdateDownPaymentStatus(ctx context.Context, id uuid.UUID
 	} else {
 		_, err = db.Exec(ctx, `UPDATE down_payments SET status = $2, remaining_amount = $3, updated_at = NOW() WHERE id = $1`, id, status, remainingAmount)
 	}
-	if err != nil { return fmt.Errorf("update down payment status: %w", err) }
+	if err != nil {
+		return fmt.Errorf("update down payment status: %w", err)
+	}
 	return nil
 }
 
@@ -1447,7 +1694,9 @@ func (r *PurchaseRepo) UpdateDownPaymentGLJE(ctx context.Context, id uuid.UUID, 
 			} else {
 				_, err = pgxTx.Exec(ctx, `UPDATE down_payments SET gl_je_id = $2, posted_by = $3, posted_at = NOW(), updated_at = NOW() WHERE id = $1`, id, glJeID, postedBy)
 			}
-			if err != nil { return fmt.Errorf("update down payment gl je (tx): %w", err) }
+			if err != nil {
+				return fmt.Errorf("update down payment gl je (tx): %w", err)
+			}
 			return nil
 		}
 	}
@@ -1458,7 +1707,9 @@ func (r *PurchaseRepo) UpdateDownPaymentGLJE(ctx context.Context, id uuid.UUID, 
 	} else {
 		_, err = db.Exec(ctx, `UPDATE down_payments SET gl_je_id = $2, posted_by = $3, posted_at = NOW(), updated_at = NOW() WHERE id = $1`, id, glJeID, postedBy)
 	}
-	if err != nil { return fmt.Errorf("update down payment gl je: %w", err) }
+	if err != nil {
+		return fmt.Errorf("update down payment gl je: %w", err)
+	}
 	return nil
 }
 
@@ -1483,7 +1734,9 @@ func (r *PurchaseRepo) ListDPClearings(ctx context.Context, dpID uuid.UUID) ([]*
 		WHERE dpc.dp_id = $1
 		ORDER BY dpc.created_at DESC
 	`, dpID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var list []*purchasemodels.DownPaymentClearing
@@ -1521,7 +1774,9 @@ func (r *PurchaseRepo) ListDPRefunds(ctx context.Context, dpID uuid.UUID) ([]*pu
 		WHERE dpr.dp_id = $1
 		ORDER BY dpr.created_at DESC
 	`, dpID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var list []*purchasemodels.DownPaymentRefund
@@ -1537,8 +1792,6 @@ func (r *PurchaseRepo) ListDPRefunds(ctx context.Context, dpID uuid.UUID) ([]*pu
 	}
 	return list, nil
 }
-
-
 
 // ══════════════════════════════════════════
 //  VENDOR PAYMENTS & OPEN ITEMS
@@ -1714,7 +1967,9 @@ func (r *PurchaseRepo) ListPaymentHistory(ctx context.Context, orgID uuid.UUID, 
 	query += ` ORDER BY vp.payment_date DESC, vp.created_at DESC`
 
 	rows, err := r.db.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var list []*purchasemodels.PaymentHistoryItem
@@ -1739,8 +1994,12 @@ func (r *PurchaseRepo) generatePONumber(ctx context.Context) string {
 		SELECT COALESCE(MAX(CAST(SUBSTRING(po_number FROM '.{4}$') AS INTEGER)), 0) + 1
 		FROM purchase_orders WHERE po_number LIKE $1
 	`, "PO-"+today+"%").Scan(&seq)
-	if seq < 1 { seq = 1 }
-	if seq > 9999 { seq = 1 }
+	if seq < 1 {
+		seq = 1
+	}
+	if seq > 9999 {
+		seq = 1
+	}
 	return fmt.Sprintf("PO-%s%04d", today, seq)
 }
 
@@ -1751,7 +2010,3 @@ func nilIfUUID(id uuid.UUID) *uuid.UUID {
 	}
 	return &id
 }
-
-
-
-

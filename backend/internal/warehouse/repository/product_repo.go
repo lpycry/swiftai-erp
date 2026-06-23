@@ -994,13 +994,28 @@ func (r *WarehouseRepo) PostGR(ctx context.Context, id, tenantID, userID uuid.UU
 
 func (r *WarehouseRepo) CreateOutbound(ctx context.Context, tenantID, userID uuid.UUID, req *whmodels.CreateOutboundRequest) (*whmodels.OutboundOrder, error) {
 	now := time.Now()
+	headerWarehouseID := uuid.Nil
+	if req.WarehouseID != nil {
+		headerWarehouseID = *req.WarehouseID
+	}
+	if headerWarehouseID == uuid.Nil {
+		for _, line := range req.Lines {
+			if line.WarehouseID != nil && *line.WarehouseID != uuid.Nil {
+				headerWarehouseID = *line.WarehouseID
+				break
+			}
+		}
+	}
+	if headerWarehouseID == uuid.Nil {
+		return nil, fmt.Errorf("warehouse is required on outbound header or item line")
+	}
 	ob := &whmodels.OutboundOrder{
 		ID:           uuid.New(),
 		TenantID:     tenantID,
 		OrderNo:      fmt.Sprintf("OB-%s", uuid.New().String()[:8]),
 		OrderType:    req.OrderType,
 		ReferenceNo:  req.ReferenceNo,
-		WarehouseID:  req.WarehouseID,
+		WarehouseID:  headerWarehouseID,
 		CustomerName: req.CustomerName,
 		Status:       "draft",
 		Priority:     "normal",
@@ -1026,15 +1041,19 @@ func (r *WarehouseRepo) CreateOutbound(ctx context.Context, tenantID, userID uui
 
 	for _, line := range req.Lines {
 		lineID := uuid.New()
+		lineWarehouseID := headerWarehouseID
+		if line.WarehouseID != nil && *line.WarehouseID != uuid.Nil {
+			lineWarehouseID = *line.WarehouseID
+		}
 		_, err = tx.Exec(ctx, `
-			INSERT INTO outbound_order_lines (id, order_id, product_id, ordered_qty, picked_qty, shipped_qty, pick_status)
-			VALUES ($1,$2,$3,$4,0,0,'pending')
-		`, lineID, ob.ID, line.ProductID, line.OrderedQty)
+			INSERT INTO outbound_order_lines (id, order_id, product_id, warehouse_id, from_bin_id, ordered_qty, picked_qty, shipped_qty, pick_status)
+			VALUES ($1,$2,$3,$4,$5,$6,0,0,'pending')
+		`, lineID, ob.ID, line.ProductID, lineWarehouseID, line.BinID, line.OrderedQty)
 		if err != nil {
 			return nil, fmt.Errorf("insert outbound line: %w", err)
 		}
 		obLine := whmodels.OutboundOrderLine{
-			ID: lineID, OrderID: ob.ID, ProductID: line.ProductID,
+			ID: lineID, OrderID: ob.ID, ProductID: line.ProductID, WarehouseID: &lineWarehouseID, BinID: line.BinID,
 			OrderedQty: line.OrderedQty,
 		}
 		ob.Lines = append(ob.Lines, obLine)
@@ -1051,7 +1070,8 @@ func (r *WarehouseRepo) ListOutbound(ctx context.Context, tenantID uuid.UUID) ([
         SELECT o.id, o.tenant_id, o.order_no, o.order_type,
             COALESCE(o.reference_no,''), o.warehouse_id, COALESCE(w.name,''),
             COALESCE(o.customer_name,''), o.status, o.priority,
-            COALESCE(o.notes,''), o.created_by, o.created_at, o.shipped_at, o.delivered_at
+            COALESCE(o.notes,''), o.created_by, o.created_at, o.shipped_at, o.delivered_at,
+            o.gl_je_id, COALESCE(o.is_reversed, false), o.reversed_at
         FROM outbound_orders o
         LEFT JOIN warehouses w ON w.id = o.warehouse_id
         WHERE o.tenant_id = $1
@@ -1070,6 +1090,7 @@ func (r *WarehouseRepo) ListOutbound(ctx context.Context, tenantID uuid.UUID) ([
 			&ob.ReferenceNo, &ob.WarehouseID, &ob.WarehouseName,
 			&ob.CustomerName, &ob.Status, &ob.Priority,
 			&ob.Notes, &ob.CreatedBy, &ob.CreatedAt, &ob.ShippedAt, &ob.DeliveredAt,
+			&ob.GLJEID, &ob.IsReversed, &ob.ReversedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1085,8 +1106,16 @@ func (r *WarehouseRepo) ListOutbound(ctx context.Context, tenantID uuid.UUID) ([
 
 func (r *WarehouseRepo) getOutboundLines(ctx context.Context, orderID uuid.UUID) ([]whmodels.OutboundOrderLine, error) {
 	rows, err := r.db.Query(ctx, `
-        SELECT id, order_id, product_id, ordered_qty, picked_qty, shipped_qty, COALESCE(batch_no,'')
-        FROM outbound_order_lines WHERE order_id = $1 ORDER BY id
+        SELECT l.id, l.order_id, l.product_id,
+            l.warehouse_id, COALESCE(w.name,''), l.from_bin_id, COALESCE(b.code,''),
+            COALESCE(p.sku,''), COALESCE(p.name,''),
+            l.ordered_qty, l.picked_qty, l.shipped_qty,
+            COALESCE(l.unit_cost, 0), COALESCE(l.total_cost, 0), COALESCE(l.batch_no,'')
+        FROM outbound_order_lines l
+        LEFT JOIN products p ON p.id = l.product_id
+        LEFT JOIN warehouses w ON w.id = l.warehouse_id
+        LEFT JOIN warehouse_bins b ON b.id = l.from_bin_id
+        WHERE l.order_id = $1 ORDER BY l.id
     `, orderID)
 	if err != nil {
 		return nil, err
@@ -1095,7 +1124,10 @@ func (r *WarehouseRepo) getOutboundLines(ctx context.Context, orderID uuid.UUID)
 	var lines []whmodels.OutboundOrderLine
 	for rows.Next() {
 		var l whmodels.OutboundOrderLine
-		if err := rows.Scan(&l.ID, &l.OrderID, &l.ProductID, &l.OrderedQty, &l.PickedQty, &l.ShippedQty, &l.BatchNo); err != nil {
+		if err := rows.Scan(&l.ID, &l.OrderID, &l.ProductID,
+			&l.WarehouseID, &l.WarehouseName, &l.BinID, &l.BinCode,
+			&l.ProductSKU, &l.ProductName,
+			&l.OrderedQty, &l.PickedQty, &l.ShippedQty, &l.UnitCost, &l.TotalCost, &l.BatchNo); err != nil {
 			return nil, err
 		}
 		lines = append(lines, l)
@@ -1113,41 +1145,65 @@ func (r *WarehouseRepo) ShipOutbound(ctx context.Context, id, tenantID, userID u
 	now := time.Now()
 
 	// Update status
-	_, err = tx.Exec(ctx, `UPDATE outbound_orders SET status = 'shipped', shipped_at = $1 WHERE id = $2 AND tenant_id = $3`,
-		now, id, tenantID)
-	if err != nil {
-		return fmt.Errorf("update status: %w", err)
-	}
-
 	// Get info
 	var warehouseID uuid.UUID
-	var orderNo string
-	err = tx.QueryRow(ctx, `SELECT warehouse_id, order_no FROM outbound_orders WHERE id = $1 AND tenant_id = $2`, id, tenantID).Scan(&warehouseID, &orderNo)
+	var orderNo, orderType, referenceNo, status string
+	var isReversed bool
+	err = tx.QueryRow(ctx, `
+		SELECT warehouse_id, order_no, order_type, COALESCE(reference_no,''), status, COALESCE(is_reversed, false)
+		FROM outbound_orders
+		WHERE id = $1 AND tenant_id = $2
+		FOR UPDATE
+	`, id, tenantID).Scan(&warehouseID, &orderNo, &orderType, &referenceNo, &status, &isReversed)
 	if err != nil {
 		return fmt.Errorf("get order: %w", err)
+	}
+	if isReversed {
+		return fmt.Errorf("outbound order %s is reversed", orderNo)
+	}
+	if status == "issued" || status == "shipped" {
+		return fmt.Errorf("outbound order %s is already issued", orderNo)
 	}
 
 	// Get lines directly via tx
 	lineRows, err := tx.Query(ctx, `
-        SELECT id, product_id, ordered_qty, shipped_qty, COALESCE(batch_no,'')
-        FROM outbound_order_lines WHERE order_id = $1 ORDER BY id
-    `, id)
+        SELECT l.id, l.product_id, COALESCE(l.warehouse_id, $2), l.from_bin_id,
+            l.ordered_qty, l.shipped_qty, COALESCE(l.batch_no,''),
+            COALESCE(
+                NULLIF(si.unit_cost, 0),
+                NULLIF(si.total_cost / NULLIF(si.quantity_on_hand, 0), 0),
+                NULLIF(p.standard_cost, 0),
+                NULLIF(p.moving_avg_cost, 0),
+                NULLIF(p.last_cost, 0),
+                0
+            )
+        FROM outbound_order_lines l
+        JOIN products p ON p.id = l.product_id
+        LEFT JOIN stock_items si ON si.tenant_id = $3
+            AND si.product_id = l.product_id
+            AND si.warehouse_id = COALESCE(l.warehouse_id, $2)
+            AND ((l.from_bin_id IS NULL AND si.bin_id IS NULL) OR si.bin_id = l.from_bin_id)
+        WHERE l.order_id = $1 ORDER BY l.id
+    `, id, warehouseID, tenantID)
 	if err != nil {
 		return fmt.Errorf("query lines: %w", err)
 	}
 	defer lineRows.Close()
 
 	type obLineBrief struct {
-		ID         uuid.UUID
-		ProductID  uuid.UUID
-		OrderedQty float64
-		ShippedQty float64
-		BatchNo    string
+		ID          uuid.UUID
+		ProductID   uuid.UUID
+		WarehouseID uuid.UUID
+		BinID       *uuid.UUID
+		OrderedQty  float64
+		ShippedQty  float64
+		BatchNo     string
+		UnitCost    float64
 	}
 	var lines []obLineBrief
 	for lineRows.Next() {
 		var l obLineBrief
-		if err := lineRows.Scan(&l.ID, &l.ProductID, &l.OrderedQty, &l.ShippedQty, &l.BatchNo); err != nil {
+		if err := lineRows.Scan(&l.ID, &l.ProductID, &l.WarehouseID, &l.BinID, &l.OrderedQty, &l.ShippedQty, &l.BatchNo, &l.UnitCost); err != nil {
 			return fmt.Errorf("scan line: %w", err)
 		}
 		lines = append(lines, l)
@@ -1159,10 +1215,14 @@ func (r *WarehouseRepo) ShipOutbound(ctx context.Context, id, tenantID, userID u
 		if shipQty <= 0 {
 			shipQty = line.OrderedQty
 		}
+		if line.UnitCost <= 0 {
+			return fmt.Errorf("cost is required before issuing product %s", line.ProductID)
+		}
 
 		// Update shipped quantity
-		_, err = tx.Exec(ctx, `UPDATE outbound_order_lines SET shipped_qty = $1 WHERE id = $2`,
-			shipQty, line.ID)
+		totalCost := shipQty * line.UnitCost
+		_, err = tx.Exec(ctx, `UPDATE outbound_order_lines SET shipped_qty = $1, unit_cost = $2, total_cost = $3 WHERE id = $4`,
+			shipQty, line.UnitCost, totalCost, line.ID)
 		if err != nil {
 			return fmt.Errorf("update line: %w", err)
 		}
@@ -1172,12 +1232,12 @@ func (r *WarehouseRepo) ShipOutbound(ctx context.Context, id, tenantID, userID u
 		_, err = tx.Exec(ctx, `
             INSERT INTO stock_movements (id, tenant_id, transaction_type,
                 reference_type, reference_id, reference_no,
-                product_id, warehouse_id, quantity, unit_cost, total_cost,
+                product_id, warehouse_id, bin_id, quantity, unit_cost, total_cost,
                 status, created_by, created_at, posted_at, posted_by)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
         `, movementID, tenantID, "goods_issue",
 			"outbound_order", &id, orderNo,
-			line.ProductID, warehouseID, -shipQty, 0, 0,
+			line.ProductID, line.WarehouseID, line.BinID, -shipQty, line.UnitCost, -totalCost,
 			"posted", userID, now, now, userID)
 		if err != nil {
 			return fmt.Errorf("insert movement: %w", err)
@@ -1190,10 +1250,32 @@ func (r *WarehouseRepo) ShipOutbound(ctx context.Context, id, tenantID, userID u
                 last_movement_at = NOW(),
                 updated_at = NOW()
             WHERE tenant_id = $2 AND product_id = $3 AND warehouse_id = $4
-        `, shipQty, tenantID, line.ProductID, warehouseID)
+              AND (($5::uuid IS NULL AND bin_id IS NULL) OR bin_id = $5)
+        `, shipQty, tenantID, line.ProductID, line.WarehouseID, line.BinID)
 		if err != nil {
 			return fmt.Errorf("update stock: %w", err)
 		}
+		if orderType == "work_order" && referenceNo != "" {
+			_, err = tx.Exec(ctx, `
+				UPDATE production_order_materials pom
+				SET issue_qty = issue_qty + $1, updated_at = NOW()
+				FROM production_orders po
+				WHERE pom.production_order_id = po.id
+				  AND pom.tenant_id = $2
+				  AND po.tenant_id = $2
+				  AND po.order_number = $3
+				  AND pom.component_id = $4
+			`, shipQty, tenantID, referenceNo, line.ProductID)
+			if err != nil {
+				return fmt.Errorf("update work order issued material qty: %w", err)
+			}
+		}
+	}
+
+	_, err = tx.Exec(ctx, `UPDATE outbound_orders SET status = 'issued', shipped_at = $1 WHERE id = $2 AND tenant_id = $3`,
+		now, id, tenantID)
+	if err != nil {
+		return fmt.Errorf("update status: %w", err)
 	}
 
 	return tx.Commit(ctx)
@@ -1202,6 +1284,207 @@ func (r *WarehouseRepo) ShipOutbound(ctx context.Context, id, tenantID, userID u
 // ═══════════════════════════════════════════════════════════════
 // Cycle Count (REQ-CC-001~008)
 // ═══════════════════════════════════════════════════════════════
+
+func (r *WarehouseRepo) UpdateOutbound(ctx context.Context, id, tenantID uuid.UUID, req *whmodels.CreateOutboundRequest) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin outbound update tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var status string
+	if err := tx.QueryRow(ctx, `
+		SELECT status FROM outbound_orders WHERE id = $1 AND tenant_id = $2 FOR UPDATE
+	`, id, tenantID).Scan(&status); err != nil {
+		return fmt.Errorf("load outbound order: %w", err)
+	}
+	if status != "draft" {
+		return fmt.Errorf("only draft outbound orders can be edited")
+	}
+
+	headerWarehouseID := uuid.Nil
+	if req.WarehouseID != nil {
+		headerWarehouseID = *req.WarehouseID
+	}
+	if headerWarehouseID == uuid.Nil {
+		for _, line := range req.Lines {
+			if line.WarehouseID != nil && *line.WarehouseID != uuid.Nil {
+				headerWarehouseID = *line.WarehouseID
+				break
+			}
+		}
+	}
+	if headerWarehouseID == uuid.Nil {
+		return fmt.Errorf("warehouse is required on outbound header or item line")
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE outbound_orders
+		SET order_type = $1, reference_no = $2, warehouse_id = $3, customer_name = $4
+		WHERE id = $5 AND tenant_id = $6
+	`, req.OrderType, req.ReferenceNo, headerWarehouseID, req.CustomerName, id, tenantID)
+	if err != nil {
+		return fmt.Errorf("update outbound order: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `DELETE FROM outbound_order_lines WHERE order_id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("replace outbound lines: %w", err)
+	}
+	for _, line := range req.Lines {
+		lineWarehouseID := headerWarehouseID
+		if line.WarehouseID != nil && *line.WarehouseID != uuid.Nil {
+			lineWarehouseID = *line.WarehouseID
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO outbound_order_lines (id, order_id, product_id, warehouse_id, from_bin_id, ordered_qty, picked_qty, shipped_qty, pick_status)
+			VALUES ($1,$2,$3,$4,$5,$6,0,0,'pending')
+		`, uuid.New(), id, line.ProductID, lineWarehouseID, line.BinID, line.OrderedQty)
+		if err != nil {
+			return fmt.Errorf("insert outbound line: %w", err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *WarehouseRepo) LinkOutboundJournalEntry(ctx context.Context, id, tenantID, jeID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `UPDATE outbound_orders SET gl_je_id = $1 WHERE id = $2 AND tenant_id = $3`, jeID, id, tenantID)
+	return err
+}
+
+func (r *WarehouseRepo) GetOutboundByID(ctx context.Context, id, tenantID uuid.UUID) (*whmodels.OutboundOrder, error) {
+	list, err := r.ListOutbound(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	for _, ob := range list {
+		if ob.ID == id {
+			return ob, nil
+		}
+	}
+	return nil, fmt.Errorf("outbound order not found")
+}
+
+func (r *WarehouseRepo) ReverseOutbound(ctx context.Context, id, tenantID, userID uuid.UUID) (*uuid.UUID, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin outbound reverse tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var warehouseID uuid.UUID
+	var orderNo, orderType, referenceNo, status string
+	var glJEID *uuid.UUID
+	var isReversed bool
+	err = tx.QueryRow(ctx, `
+		SELECT warehouse_id, order_no, order_type, COALESCE(reference_no,''), status, gl_je_id, COALESCE(is_reversed, false)
+		FROM outbound_orders
+		WHERE id = $1 AND tenant_id = $2
+		FOR UPDATE
+	`, id, tenantID).Scan(&warehouseID, &orderNo, &orderType, &referenceNo, &status, &glJEID, &isReversed)
+	if err != nil {
+		return nil, fmt.Errorf("load outbound order: %w", err)
+	}
+	if isReversed {
+		return nil, fmt.Errorf("outbound order %s is already reversed", orderNo)
+	}
+	if status != "issued" && status != "shipped" {
+		return nil, fmt.Errorf("only issued outbound orders can be reversed")
+	}
+
+	rows, err := tx.Query(ctx, `
+		SELECT id, product_id, COALESCE(warehouse_id, $2), from_bin_id,
+			shipped_qty, COALESCE(unit_cost, 0), COALESCE(total_cost, 0)
+		FROM outbound_order_lines
+		WHERE order_id = $1
+	`, id, warehouseID)
+	if err != nil {
+		return nil, fmt.Errorf("load outbound lines: %w", err)
+	}
+	type lineBrief struct {
+		ID          uuid.UUID
+		ProductID   uuid.UUID
+		WarehouseID uuid.UUID
+		BinID       *uuid.UUID
+		Qty         float64
+		UnitCost    float64
+		TotalCost   float64
+	}
+	var lines []lineBrief
+	for rows.Next() {
+		var l lineBrief
+		if err := rows.Scan(&l.ID, &l.ProductID, &l.WarehouseID, &l.BinID, &l.Qty, &l.UnitCost, &l.TotalCost); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		lines = append(lines, l)
+	}
+	rows.Close()
+
+	now := time.Now()
+	for _, line := range lines {
+		if line.Qty <= 0 {
+			continue
+		}
+		_, err = tx.Exec(ctx, `
+			UPDATE stock_items
+			SET quantity_on_hand = quantity_on_hand + $1,
+				total_cost = total_cost + $2,
+				last_movement_at = NOW(),
+				updated_at = NOW()
+			WHERE tenant_id = $3 AND product_id = $4 AND warehouse_id = $5
+			  AND (($6::uuid IS NULL AND bin_id IS NULL) OR bin_id = $6)
+		`, line.Qty, line.TotalCost, tenantID, line.ProductID, line.WarehouseID, line.BinID)
+		if err != nil {
+			return nil, fmt.Errorf("reverse outbound stock: %w", err)
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO stock_movements (id, tenant_id, transaction_type,
+				reference_type, reference_id, reference_no,
+				product_id, warehouse_id, bin_id, quantity, unit_cost, total_cost,
+				description, status, created_by, created_at, posted_at, posted_by)
+			VALUES ($1,$2,'goods_issue','outbound_order',$3,$4,$5,$6,$7,$8,$9,$10,
+				'Goods Issue Reversal','posted',$11,$12,$12,$11)
+		`, uuid.New(), tenantID, id, orderNo, line.ProductID, line.WarehouseID, line.BinID, line.Qty,
+			line.UnitCost, line.TotalCost, userID, now)
+		if err != nil {
+			return nil, fmt.Errorf("insert outbound reversal movement: %w", err)
+		}
+		_, err = tx.Exec(ctx, `UPDATE outbound_order_lines SET shipped_qty = 0 WHERE id = $1`, line.ID)
+		if err != nil {
+			return nil, fmt.Errorf("reset outbound line shipped qty: %w", err)
+		}
+		if orderType == "work_order" && referenceNo != "" {
+			_, err = tx.Exec(ctx, `
+				UPDATE production_order_materials pom
+				SET issue_qty = GREATEST(0, issue_qty - $1), updated_at = NOW()
+				FROM production_orders po
+				WHERE pom.production_order_id = po.id
+				  AND pom.tenant_id = $2
+				  AND po.tenant_id = $2
+				  AND po.order_number = $3
+				  AND pom.component_id = $4
+			`, line.Qty, tenantID, referenceNo, line.ProductID)
+			if err != nil {
+				return nil, fmt.Errorf("reverse work order issued material qty: %w", err)
+			}
+		}
+	}
+
+	_, err = tx.Exec(ctx, `
+		UPDATE outbound_orders
+		SET status = 'reversed', is_reversed = true, reversed_at = $1
+		WHERE id = $2 AND tenant_id = $3
+	`, now, id, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("mark outbound reversed: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit outbound reverse tx: %w", err)
+	}
+	return glJEID, nil
+}
 
 func (r *WarehouseRepo) CreateCycleCount(ctx context.Context, tenantID uuid.UUID, req *whmodels.CreateCycleCountRequest) (*whmodels.CycleCount, error) {
 	cc := &whmodels.CycleCount{

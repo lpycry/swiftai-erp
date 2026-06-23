@@ -27,48 +27,50 @@ var ValidBOMUsages = map[string]bool{
 // ---------------------------------------------------------------
 
 type BOMHeader struct {
-	BOMID        uuid.UUID  `json:"bom_id"`
-	TenantID     uuid.UUID  `json:"tenant_id"`
-	MaterialID   uuid.UUID  `json:"material_id"`
-	MaterialName string     `json:"material_name,omitempty"`
-	MaterialSKU  string     `json:"material_sku,omitempty"`
-	BOMVersion   string     `json:"bom_version"`
-	BOMUsage     string     `json:"bom_usage"`
-	Status       string     `json:"status"`
-	BaseQty      float64    `json:"base_qty"`
-	ValidFrom    time.Time  `json:"valid_from"`
+	BOMID               uuid.UUID  `json:"bom_id"`
+	TenantID            uuid.UUID  `json:"tenant_id"`
+	MaterialID          uuid.UUID  `json:"material_id"`
+	MaterialName        string     `json:"material_name,omitempty"`
+	MaterialSKU         string     `json:"material_sku,omitempty"`
+	BOMVersion          string     `json:"bom_version"`
+	BOMUsage            string     `json:"bom_usage"`
+	Status              string     `json:"status"`
+	BaseQty             float64    `json:"base_qty"`
+	ValidFrom           time.Time  `json:"valid_from"`
 	ValidTo             time.Time  `json:"valid_to"`
 	Description         string     `json:"description,omitempty"`
 	IsActive            bool       `json:"is_active"`
 	RoutingTemplateID   *uuid.UUID `json:"routing_template_id,omitempty"`
 	RoutingTemplateName string     `json:"routing_template_name,omitempty"`
 	CreatedBy           *uuid.UUID `json:"created_by,omitempty"`
-	UpdatedBy    *uuid.UUID `json:"updated_by,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	Items        []BOMItem  `json:"items,omitempty"`
+	UpdatedBy           *uuid.UUID `json:"updated_by,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+	Items               []BOMItem  `json:"items,omitempty"`
 }
 
 type CreateBOMRequest struct {
-	MaterialID  uuid.UUID              `json:"material_id" binding:"required"`
-	BOMVersion  string                 `json:"bom_version" binding:"required"`
-	BOMUsage    string                 `json:"bom_usage,omitempty"`
-	BaseQty     float64                `json:"base_qty,omitempty"`
-	ValidFrom   string                 `json:"valid_from,omitempty"`
-	ValidTo     string                 `json:"valid_to,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	IsActive    bool                   `json:"is_active"`
-	Items       []CreateBOMItemRequest `json:"items" binding:"required,min=1,dive"`
+	MaterialID        uuid.UUID              `json:"material_id" binding:"required"`
+	BOMVersion        string                 `json:"bom_version" binding:"required"`
+	BOMUsage          string                 `json:"bom_usage,omitempty"`
+	BaseQty           float64                `json:"base_qty,omitempty"`
+	ValidFrom         string                 `json:"valid_from,omitempty"`
+	ValidTo           string                 `json:"valid_to,omitempty"`
+	Description       string                 `json:"description,omitempty"`
+	IsActive          bool                   `json:"is_active"`
+	RoutingTemplateID *uuid.UUID             `json:"routing_template_id,omitempty"`
+	Items             []CreateBOMItemRequest `json:"items" binding:"required,min=1,dive"`
 }
 
 type UpdateBOMRequest struct {
-	BOMVersion  *string  `json:"bom_version,omitempty"`
-	BOMUsage    *string  `json:"bom_usage,omitempty"`
-	BaseQty     *float64 `json:"base_qty,omitempty"`
-	ValidFrom   *string  `json:"valid_from,omitempty"`
-	ValidTo     *string  `json:"valid_to,omitempty"`
-	Description *string  `json:"description,omitempty"`
-	IsActive    *bool    `json:"is_active,omitempty"`
+	BOMVersion        *string    `json:"bom_version,omitempty"`
+	BOMUsage          *string    `json:"bom_usage,omitempty"`
+	BaseQty           *float64   `json:"base_qty,omitempty"`
+	ValidFrom         *string    `json:"valid_from,omitempty"`
+	ValidTo           *string    `json:"valid_to,omitempty"`
+	Description       *string    `json:"description,omitempty"`
+	IsActive          *bool      `json:"is_active,omitempty"`
+	RoutingTemplateID *uuid.UUID `json:"routing_template_id,omitempty"`
 
 	// For BOM item sync during BOM update
 	Items []CreateBOMItemRequest `json:"items,omitempty"`
@@ -218,6 +220,9 @@ type UpdateRoutingTemplateRequest struct {
 	Version      *string `json:"version,omitempty"`
 	Status       *string `json:"status,omitempty"`
 	IsActive     *bool   `json:"is_active,omitempty"`
+
+	// For inline operations sync
+	Operations []CreateTemplateOperationRequest `json:"operations,omitempty"`
 }
 
 // ---------------------------------------------------------------
@@ -242,7 +247,8 @@ type TemplateOperation struct {
 }
 
 type CreateTemplateOperationRequest struct {
-	TemplateID    uuid.UUID `json:"template_id" binding:"required"`
+	ID            uuid.UUID `json:"id,omitempty"`
+	TemplateID    uuid.UUID `json:"template_id,omitempty"`
 	OperationNo   int       `json:"operation_no,omitempty"`
 	OperationName string    `json:"operation_name" binding:"required"`
 	Description   string    `json:"description,omitempty"`
@@ -266,26 +272,33 @@ type UpdateTemplateOperationRequest struct {
 // ---------------------------------------------------------------
 
 type ProductionOrder struct {
-	ID               uuid.UUID  `json:"id"`
-	TenantID         uuid.UUID  `json:"tenant_id"`
-	OrderNumber      string     `json:"order_number"`
-	MaterialID       uuid.UUID  `json:"material_id"`
-	MaterialName     string     `json:"material_name,omitempty"`
-	MaterialSKU      string     `json:"material_sku,omitempty"`
-	OrderQty         float64    `json:"order_qty"`
-	BOMID            *uuid.UUID `json:"bom_id,omitempty"`
-	BOMVersion       string     `json:"bom_version,omitempty"`
-	Status           string     `json:"status"`
-	Priority         string     `json:"priority"`
-	PlannedStartDate *time.Time `json:"planned_start_date,omitempty"`
-	PlannedEndDate   *time.Time `json:"planned_end_date,omitempty"`
-	ActualStartDate  *time.Time `json:"actual_start_date,omitempty"`
-	ActualEndDate    *time.Time `json:"actual_end_date,omitempty"`
-	Notes            string     `json:"notes,omitempty"`
-	CreatedBy        *uuid.UUID `json:"created_by,omitempty"`
-	UpdatedBy        *uuid.UUID `json:"updated_by,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID                uuid.UUID                 `json:"id"`
+	TenantID          uuid.UUID                 `json:"tenant_id"`
+	OrderNumber       string                    `json:"order_number"`
+	MaterialID        uuid.UUID                 `json:"material_id"`
+	MaterialName      string                    `json:"material_name,omitempty"`
+	MaterialSKU       string                    `json:"material_sku,omitempty"`
+	OrderQty          float64                   `json:"order_qty"`
+	CompletedQty      float64                   `json:"completed_qty"`
+	BOMID             *uuid.UUID                `json:"bom_id,omitempty"`
+	BOMVersion        string                    `json:"bom_version,omitempty"`
+	Status            string                    `json:"status"`
+	Priority          string                    `json:"priority"`
+	SalesOrderID      *uuid.UUID                `json:"sales_order_id,omitempty"`
+	SalesOrderNumber  string                    `json:"sales_order_number,omitempty"`
+	SOItemID          *uuid.UUID                `json:"so_item_id,omitempty"`
+	SOItemLineNo      *int                      `json:"so_item_line_no,omitempty"`
+	SOItemProductName string                    `json:"so_item_product_name,omitempty"`
+	PlannedStartDate  *time.Time                `json:"planned_start_date,omitempty"`
+	PlannedEndDate    *time.Time                `json:"planned_end_date,omitempty"`
+	ActualStartDate   *time.Time                `json:"actual_start_date,omitempty"`
+	ActualEndDate     *time.Time                `json:"actual_end_date,omitempty"`
+	Notes             string                    `json:"notes,omitempty"`
+	CreatedBy         *uuid.UUID                `json:"created_by,omitempty"`
+	UpdatedBy         *uuid.UUID                `json:"updated_by,omitempty"`
+	CreatedAt         time.Time                 `json:"created_at"`
+	UpdatedAt         time.Time                 `json:"updated_at"`
+	Materials         []ProductionOrderMaterial `json:"materials,omitempty"`
 }
 
 type CreateProductionOrderRequest struct {
@@ -293,6 +306,8 @@ type CreateProductionOrderRequest struct {
 	OrderQty         float64    `json:"order_qty" binding:"required,min=0.0001"`
 	BOMID            *uuid.UUID `json:"bom_id,omitempty"`
 	Priority         string     `json:"priority,omitempty"`
+	SalesOrderID     *uuid.UUID `json:"sales_order_id,omitempty"`
+	SOItemID         *uuid.UUID `json:"so_item_id,omitempty"`
 	PlannedStartDate string     `json:"planned_start_date,omitempty"`
 	PlannedEndDate   string     `json:"planned_end_date,omitempty"`
 	Notes            string     `json:"notes,omitempty"`
@@ -303,9 +318,77 @@ type UpdateProductionOrderRequest struct {
 	BOMID            *uuid.UUID `json:"bom_id,omitempty"`
 	Status           *string    `json:"status,omitempty"`
 	Priority         *string    `json:"priority,omitempty"`
+	SalesOrderID     *uuid.UUID `json:"sales_order_id,omitempty"`
+	SOItemID         *uuid.UUID `json:"so_item_id,omitempty"`
 	PlannedStartDate *string    `json:"planned_start_date,omitempty"`
 	PlannedEndDate   *string    `json:"planned_end_date,omitempty"`
 	ActualStartDate  *string    `json:"actual_start_date,omitempty"`
 	ActualEndDate    *string    `json:"actual_end_date,omitempty"`
 	Notes            *string    `json:"notes,omitempty"`
+}
+
+// ---------------------------------------------------------------
+// Production Order Materials
+// ---------------------------------------------------------------
+
+type ProductionOrderMaterial struct {
+	ID                uuid.UUID  `json:"id"`
+	ProductionOrderID uuid.UUID  `json:"production_order_id"`
+	ComponentID       uuid.UUID  `json:"component_id"`
+	ComponentName     string     `json:"component_name,omitempty"`
+	ComponentSKU      string     `json:"component_sku,omitempty"`
+	BOMItemID         *uuid.UUID `json:"bom_item_id,omitempty"`
+	RequiredQty       float64    `json:"required_qty"`
+	IssueQty          float64    `json:"issue_qty"`
+	UnitOfMeasure     string     `json:"unit_of_measure"`
+	ItemPosition      int        `json:"item_position"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+type UpdatePOMaterialIssueRequest struct {
+	IssueQty float64 `json:"issue_qty" binding:"required,min=0"`
+}
+
+// ---------------------------------------------------------------
+// Production Order Time Confirmation
+// ---------------------------------------------------------------
+
+type ProductionOrderTimeConfirmation struct {
+	ID                uuid.UUID  `json:"id"`
+	TenantID          uuid.UUID  `json:"tenant_id"`
+	ProductionOrderID uuid.UUID  `json:"production_order_id"`
+	OrderNumber       string     `json:"order_number,omitempty"`
+	MaterialSKU       string     `json:"material_sku,omitempty"`
+	MaterialName      string     `json:"material_name,omitempty"`
+	OperationID       *uuid.UUID `json:"operation_id,omitempty"`
+	OperationNo       int        `json:"operation_no,omitempty"`
+	OperationName     string     `json:"operation_name,omitempty"`
+	WorkCenterID      *uuid.UUID `json:"work_center_id,omitempty"`
+	WorkCenterCode    string     `json:"work_center_code,omitempty"`
+	WorkCenterName    string     `json:"work_center_name,omitempty"`
+	YieldQty          float64    `json:"yield_qty"`
+	ScrapQty          float64    `json:"scrap_qty"`
+	ReworkQty         float64    `json:"rework_qty"`
+	SetupHours        float64    `json:"setup_hours"`
+	LaborHours        float64    `json:"labor_hours"`
+	MachineHours      float64    `json:"machine_hours"`
+	ActualWorkHours   float64    `json:"actual_work_hours"`
+	ConfirmationDate  time.Time  `json:"confirmation_date"`
+	Notes             string     `json:"notes,omitempty"`
+	ConfirmedBy       *uuid.UUID `json:"confirmed_by,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+}
+
+type CreateTimeConfirmationRequest struct {
+	OperationID      *uuid.UUID `json:"operation_id,omitempty"`
+	YieldQty         float64    `json:"yield_qty" binding:"required,gt=0"`
+	ScrapQty         float64    `json:"scrap_qty" binding:"gte=0"`
+	ReworkQty        float64    `json:"rework_qty" binding:"gte=0"`
+	SetupHours       float64    `json:"setup_hours" binding:"gte=0"`
+	LaborHours       float64    `json:"labor_hours" binding:"gte=0"`
+	MachineHours     float64    `json:"machine_hours" binding:"gte=0"`
+	ActualWorkHours  float64    `json:"actual_work_hours" binding:"gte=0"`
+	ConfirmationDate string     `json:"confirmation_date,omitempty"`
+	Notes            string     `json:"notes,omitempty"`
 }

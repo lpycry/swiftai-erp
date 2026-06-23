@@ -1,11 +1,11 @@
 package service
 
 import (
-	"os"
 	"context"
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,17 +15,17 @@ import (
 )
 
 var (
-	ErrInvalidBalance           = errors.New("debits must equal credits")
-	ErrNoLines                  = errors.New("journal entry must have at least 2 lines")
-	ErrAccountNotLeaf           = errors.New("account is not a leaf account; cannot post to it")
-	ErrAccountInactive          = errors.New("account is inactive")
-	ErrAccountIsReconciliation  = errors.New("reconciliation account (统御科目) cannot be used directly in journal entries")
-	ErrPeriodClosed             = errors.New("period is closed or locked")
-	ErrEntryNotFound            = errors.New("journal entry not found")
-	ErrEntryAlreadyPosted       = errors.New("journal entry is already posted")
-	ErrNoAccountMatch           = errors.New("no matching account found")
-	ErrEntryAlreadyReversed     = errors.New("entry has already been reversed or is a reversal")
-	ErrNegativeAmount           = errors.New("debit and credit amounts must be positive")
+	ErrInvalidBalance          = errors.New("debits must equal credits")
+	ErrNoLines                 = errors.New("journal entry must have at least 2 lines")
+	ErrAccountNotLeaf          = errors.New("account is not a leaf account; cannot post to it")
+	ErrAccountInactive         = errors.New("account is inactive")
+	ErrAccountIsReconciliation = errors.New("reconciliation account (统御科目) cannot be used directly in journal entries")
+	ErrPeriodClosed            = errors.New("period is closed or locked")
+	ErrEntryNotFound           = errors.New("journal entry not found")
+	ErrEntryAlreadyPosted      = errors.New("journal entry is already posted")
+	ErrNoAccountMatch          = errors.New("no matching account found")
+	ErrEntryAlreadyReversed    = errors.New("entry has already been reversed or is a reversal")
+	ErrNegativeAmount          = errors.New("debit and credit amounts must be positive")
 )
 
 // RoundOffTolerance is the maximum acceptable difference (in absolute value)
@@ -74,8 +74,8 @@ func (s *GLService) CreateJournalEntry(ctx context.Context, tenantID, userID uui
 		if !acc.IsLeaf {
 			return nil, fmt.Errorf("%w: %s (%s)", ErrAccountNotLeaf, acc.AccountCode, acc.AccountName)
 		}
-		// Allow reconciliation accounts for system-generated postings (e.g. purchase subledger)
-		if acc.ReconciliationType != "" && acc.ReconciliationType != "none" && req.Source != "purchase" {
+		// Allow reconciliation accounts for system-generated subledger postings.
+		if acc.ReconciliationType != "" && acc.ReconciliationType != "none" && !allowsReconciliationPosting(req.Source) {
 			return nil, fmt.Errorf("%w: %s (%s, type=%s)", ErrAccountIsReconciliation, acc.AccountCode, acc.AccountName, acc.ReconciliationType)
 		}
 	}
@@ -109,6 +109,15 @@ func (s *GLService) CreateJournalEntry(ctx context.Context, tenantID, userID uui
 	}
 
 	return entry, nil
+}
+
+func allowsReconciliationPosting(source string) bool {
+	switch source {
+	case "purchase", "warehouse", "production":
+		return true
+	default:
+		return false
+	}
 }
 
 // GetJournalEntry retrieves a journal entry by ID.
@@ -251,6 +260,7 @@ func (s *GLService) UpdateDraftEntry(ctx context.Context, tenantID, userID uuid.
 
 	return s.GetJournalEntry(ctx, entryID, tenantID)
 }
+
 // UnpostEntry reverses a posted entry back to draft and subtracts from balances.
 func (s *GLService) UnpostEntry(ctx context.Context, tenantID, userID uuid.UUID, entryID uuid.UUID) (*glmodels.JournalEntry, error) {
 	entry, err := s.entryRepo.GetByID(ctx, entryID, tenantID)
@@ -273,6 +283,7 @@ func (s *GLService) UnpostEntry(ctx context.Context, tenantID, userID uuid.UUID,
 
 	return s.entryRepo.GetByID(ctx, entryID, tenantID)
 }
+
 // ReverseJournalEntry creates a reversal entry for a posted entry and posts it immediately.
 // reversalType options:
 //   - "normal":   Swap debit↔credit (add opposite amounts)
@@ -467,6 +478,7 @@ func (s *GLService) InitializeChartOfAccounts(ctx context.Context, coaType strin
 
 	return nil
 }
+
 // GetAccountBalances returns period balances for accounts with date filtering.
 func (s *GLService) GetAccountBalances(ctx context.Context, tenantID uuid.UUID, year, month int) ([]map[string]interface{}, error) {
 	return s.entryRepo.GetAccountBalances(ctx, tenantID, year, month)
@@ -671,6 +683,7 @@ func (s *GLService) ResetDatabase(ctx context.Context) error {
 	}
 	return nil
 }
+
 // DeleteJournalEntry deletes a draft journal entry.
 func (s *GLService) DeleteJournalEntry(ctx context.Context, entryID, tenantID uuid.UUID) error {
 	entry, err := s.entryRepo.GetByID(ctx, entryID, tenantID)

@@ -30,7 +30,10 @@ func NewPurchaseHandler(svc *purchasesvc.PurchaseService) *PurchaseHandler {
 
 func (h *PurchaseHandler) CreateVendor(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	var req purchasemodels.CreateVendorRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
@@ -47,7 +50,10 @@ func (h *PurchaseHandler) CreateVendor(c *gin.Context) {
 
 func (h *PurchaseHandler) ListVendors(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	search := c.Query("q")
 	vendors, err := h.svc.ListVendors(c.Request.Context(), orgID, search)
 	if err != nil {
@@ -60,9 +66,15 @@ func (h *PurchaseHandler) ListVendors(c *gin.Context) {
 
 func (h *PurchaseHandler) GetVendor(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid vendor id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid vendor id")
+		return
+	}
 	vendor, err := h.svc.GetVendor(c.Request.Context(), id, orgID)
 	if err != nil {
 		log.Err(err).Msg("get vendor failed")
@@ -74,9 +86,15 @@ func (h *PurchaseHandler) GetVendor(c *gin.Context) {
 
 func (h *PurchaseHandler) UpdateVendor(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid vendor id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid vendor id")
+		return
+	}
 	var req purchasemodels.UpdateVendorRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid request")
@@ -92,9 +110,15 @@ func (h *PurchaseHandler) UpdateVendor(c *gin.Context) {
 
 func (h *PurchaseHandler) DeleteVendor(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid vendor id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid vendor id")
+		return
+	}
 	if err := h.svc.DeleteVendor(c.Request.Context(), id, orgID); err != nil {
 		log.Err(err).Msg("delete vendor failed")
 		errMsg := err.Error()
@@ -110,7 +134,10 @@ func (h *PurchaseHandler) DeleteVendor(c *gin.Context) {
 
 func (h *PurchaseHandler) RecommendVendors(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	productID, _ := uuid.Parse(c.Query("product_id"))
 	recs, err := h.svc.RecommendVendors(c.Request.Context(), orgID, productID)
 	if err != nil {
@@ -127,7 +154,10 @@ func (h *PurchaseHandler) RecommendVendors(c *gin.Context) {
 
 func (h *PurchaseHandler) CreatePO(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	var req purchasemodels.CreatePORequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -145,7 +175,10 @@ func (h *PurchaseHandler) CreatePO(c *gin.Context) {
 
 func (h *PurchaseHandler) ListPOs(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	status := c.Query("status")
 	vendorID, _ := uuid.Parse(c.Query("vendor_id"))
 	pos, err := h.svc.ListPOs(c.Request.Context(), orgID, status, vendorID)
@@ -159,9 +192,15 @@ func (h *PurchaseHandler) ListPOs(c *gin.Context) {
 
 func (h *PurchaseHandler) GetPO(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid PO id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid PO id")
+		return
+	}
 	po, err := h.svc.GetPO(c.Request.Context(), id, orgID)
 	if err != nil {
 		log.Err(err).Msg("get PO failed")
@@ -173,9 +212,15 @@ func (h *PurchaseHandler) GetPO(c *gin.Context) {
 
 func (h *PurchaseHandler) UpdatePOStatus(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid PO id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid PO id")
+		return
+	}
 	var req purchasemodels.UpdatePOStatusRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid request")
@@ -195,32 +240,69 @@ func (h *PurchaseHandler) UpdatePOStatus(c *gin.Context) {
 
 func (h *PurchaseHandler) ExecuteGoodsReceipt(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	var req purchasemodels.CreateReceiptRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
 		return
 	}
-	receipt, event, err := h.svc.ExecuteGoodsReceipt(c.Request.Context(), orgID, &req, userID)
+	receipt, event, glWarning, err := h.svc.ExecuteGoodsReceipt(c.Request.Context(), orgID, &req, userID)
 	if err != nil {
 		log.Err(err).Msg("execute goods receipt failed")
 		response.InternalError(c, err.Error())
 		return
 	}
-	response.Created(c, map[string]interface{}{
+	respData := map[string]interface{}{
 		"receipt":        receipt,
 		"business_event": event,
-	})
+	}
+	if glWarning != "" {
+		respData["gl_warning"] = glWarning
+		log.Warn().Str("receipt_id", receipt.ID.String()).Str("warning", glWarning).Msg("GR posted but GL journal entry failed")
+	}
+	response.Created(c, respData)
 }
 
 // ══════════════════════════════════════════
 //  PENDING INVOICE POS  (已收货未开票PO概览)
 // ══════════════════════════════════════════
 
+func (h *PurchaseHandler) ExecuteWorkOrderReceipt(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	userID := getUserIDPtr(c)
+	var req purchasemodels.CreateWorkOrderReceiptRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	receipt, glWarning, err := h.svc.ExecuteWorkOrderReceipt(c.Request.Context(), orgID, &req, userID)
+	if err != nil {
+		log.Err(err).Msg("execute work order receipt failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	respData := map[string]interface{}{"receipt": receipt}
+	if glWarning != "" {
+		respData["gl_warning"] = glWarning
+		log.Warn().Str("receipt_id", receipt.ID.String()).Str("warning", glWarning).Msg("WO receipt posted but GL journal entry failed")
+	}
+	response.Created(c, respData)
+}
+
 func (h *PurchaseHandler) ListPendingInvoicePOs(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	pos, err := h.svc.ListPendingInvoicePOs(c.Request.Context(), orgID)
 	if err != nil {
 		log.Err(err).Msg("list pending invoice POs failed")
@@ -232,7 +314,10 @@ func (h *PurchaseHandler) ListPendingInvoicePOs(c *gin.Context) {
 
 func (h *PurchaseHandler) ListReceipts(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	poID, _ := uuid.Parse(c.Query("po_id"))
 	receipts, err := h.svc.ListReceipts(c.Request.Context(), orgID, poID)
 	if err != nil {
@@ -245,10 +330,16 @@ func (h *PurchaseHandler) ListReceipts(c *gin.Context) {
 
 func (h *PurchaseHandler) ReverseGoodsReceipt(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	receiptID, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid receipt id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid receipt id")
+		return
+	}
 
 	if err := h.svc.ReverseGoodsReceipt(c.Request.Context(), orgID, receiptID, userID); err != nil {
 		log.Err(err).Msg("reverse goods receipt failed")
@@ -263,9 +354,33 @@ func (h *PurchaseHandler) ReverseGoodsReceipt(c *gin.Context) {
 //  PURCHASE INVOICES (联动财务结算)
 // ══════════════════════════════════════════
 
+func (h *PurchaseHandler) ReverseWorkOrderReceipt(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	userID := getUserIDPtr(c)
+	receiptID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid receipt id")
+		return
+	}
+
+	if err := h.svc.ReverseWorkOrderReceipt(c.Request.Context(), orgID, receiptID, userID); err != nil {
+		log.Err(err).Msg("reverse work order receipt failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "reversed"})
+}
+
 func (h *PurchaseHandler) CreateInvoice(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	var req purchasemodels.CreateInvoiceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -287,13 +402,20 @@ func (h *PurchaseHandler) CreateInvoice(c *gin.Context) {
 
 func (h *PurchaseHandler) PostInvoice(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	if userID == nil {
-		response.BadRequest(c, "missing user context"); return
+		response.BadRequest(c, "missing user context")
+		return
 	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid invoice id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid invoice id")
+		return
+	}
 	if err := h.svc.PostInvoice(c.Request.Context(), orgID, id, *userID); err != nil {
 		log.Err(err).Msg("post invoice failed")
 		response.InternalError(c, err.Error())
@@ -304,7 +426,10 @@ func (h *PurchaseHandler) PostInvoice(c *gin.Context) {
 
 func (h *PurchaseHandler) ListPaymentHistory(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	vendorID := c.Query("vendor_id")
 	dateFrom := c.Query("date_from")
 	dateTo := c.Query("date_to")
@@ -319,7 +444,10 @@ func (h *PurchaseHandler) ListPaymentHistory(c *gin.Context) {
 
 func (h *PurchaseHandler) ListOutstandingInvoices(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	vendorID := c.Query("vendor_id")
 	itemID := c.Query("item_id")
 	dateFrom := c.Query("date_from")
@@ -335,13 +463,20 @@ func (h *PurchaseHandler) ListOutstandingInvoices(c *gin.Context) {
 
 func (h *PurchaseHandler) CancelInvoice(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	if userID == nil {
-		response.BadRequest(c, "missing user context"); return
+		response.BadRequest(c, "missing user context")
+		return
 	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid invoice id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid invoice id")
+		return
+	}
 	if err := h.svc.CancelInvoice(c.Request.Context(), orgID, id, *userID); err != nil {
 		log.Err(err).Msg("cancel invoice failed")
 		response.InternalError(c, err.Error())
@@ -352,7 +487,10 @@ func (h *PurchaseHandler) CancelInvoice(c *gin.Context) {
 
 func (h *PurchaseHandler) ListInvoices(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	vendorID, _ := uuid.Parse(c.Query("vendor_id"))
 	invoices, err := h.svc.ListInvoices(c.Request.Context(), orgID, vendorID)
 	if err != nil {
@@ -365,9 +503,15 @@ func (h *PurchaseHandler) ListInvoices(c *gin.Context) {
 
 func (h *PurchaseHandler) GetInvoice(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid invoice id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid invoice id")
+		return
+	}
 	invoice, err := h.svc.GetInvoice(c.Request.Context(), id, orgID)
 	if err != nil {
 		log.Err(err).Msg("get invoice failed")
@@ -383,11 +527,17 @@ func (h *PurchaseHandler) GetInvoice(c *gin.Context) {
 
 func (h *PurchaseHandler) UploadPOAttachment(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 
 	poID, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid po id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid po id")
+		return
+	}
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
@@ -443,9 +593,15 @@ func (h *PurchaseHandler) UploadPOAttachment(c *gin.Context) {
 
 func (h *PurchaseHandler) ListPOAttachments(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	poID, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid po id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid po id")
+		return
+	}
 	attachments, err := h.svc.ListAttachments(c.Request.Context(), orgID, poID)
 	if err != nil {
 		log.Err(err).Msg("list attachments failed")
@@ -457,11 +613,20 @@ func (h *PurchaseHandler) ListPOAttachments(c *gin.Context) {
 
 func (h *PurchaseHandler) DownloadPOAttachment(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	poID, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid po id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid po id")
+		return
+	}
 	attachID, err := uuid.Parse(c.Param("attachId"))
-	if err != nil { response.BadRequest(c, "invalid attachment id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid attachment id")
+		return
+	}
 
 	att, err := h.svc.GetAttachment(c.Request.Context(), orgID, poID, attachID)
 	if err != nil {
@@ -479,7 +644,10 @@ func (h *PurchaseHandler) DownloadPOAttachment(c *gin.Context) {
 
 func (h *PurchaseHandler) GetReceiptJournalEntry(c *gin.Context) {
 	receiptID, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid receipt id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid receipt id")
+		return
+	}
 	je, err := h.svc.FindJournalEntryForReceipt(c.Request.Context(), receiptID)
 	if err != nil {
 		log.Err(err).Msg("find journal entry for receipt failed")
@@ -495,7 +663,10 @@ func (h *PurchaseHandler) GetReceiptJournalEntry(c *gin.Context) {
 
 func (h *PurchaseHandler) CreateDownPayment(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	var req purchasemodels.CreateDownPaymentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -513,7 +684,10 @@ func (h *PurchaseHandler) CreateDownPayment(c *gin.Context) {
 
 func (h *PurchaseHandler) ListDownPayments(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	vendorID, _ := uuid.Parse(c.Query("vendor_id"))
 	status := c.Query("status")
 	dateFrom := c.Query("date_from")
@@ -532,9 +706,15 @@ func (h *PurchaseHandler) ListDownPayments(c *gin.Context) {
 
 func (h *PurchaseHandler) GetDownPayment(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid down payment id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid down payment id")
+		return
+	}
 	dp, err := h.svc.GetDownPayment(c.Request.Context(), id, orgID)
 	if err != nil {
 		log.Err(err).Msg("get down payment failed")
@@ -546,10 +726,16 @@ func (h *PurchaseHandler) GetDownPayment(c *gin.Context) {
 
 func (h *PurchaseHandler) PostDownPayment(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid down payment id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid down payment id")
+		return
+	}
 	dp, err := h.svc.PostDownPayment(c.Request.Context(), orgID, id, userID)
 	if err != nil {
 		log.Err(err).Msg("post down payment failed")
@@ -561,10 +747,16 @@ func (h *PurchaseHandler) PostDownPayment(c *gin.Context) {
 
 func (h *PurchaseHandler) RefundDownPayment(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid down payment id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid down payment id")
+		return
+	}
 	var req purchasemodels.CreateDownPaymentRefundRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
@@ -581,10 +773,16 @@ func (h *PurchaseHandler) RefundDownPayment(c *gin.Context) {
 
 func (h *PurchaseHandler) ReverseDownPayment(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	userID := getUserIDPtr(c)
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid down payment id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid down payment id")
+		return
+	}
 	dp, err := h.svc.ReverseDownPayment(c.Request.Context(), orgID, id, userID)
 	if err != nil {
 		log.Err(err).Msg("reverse down payment failed")
@@ -596,7 +794,10 @@ func (h *PurchaseHandler) ReverseDownPayment(c *gin.Context) {
 
 func (h *PurchaseHandler) GetDPClearings(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid down payment id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid down payment id")
+		return
+	}
 	clearings, err := h.svc.GetDPClearings(c.Request.Context(), id)
 	if err != nil {
 		log.Err(err).Msg("get dp clearings failed")
@@ -609,7 +810,9 @@ func (h *PurchaseHandler) GetDPClearings(c *gin.Context) {
 // getFloatQuery safely parses a query param as float64
 func getFloatQuery(c *gin.Context, key string) (float64, error) {
 	val := c.Query(key)
-	if val == "" { return 0, nil }
+	if val == "" {
+		return 0, nil
+	}
 	var f float64
 	_, err := fmt.Sscanf(val, "%f", &f)
 	return f, err
@@ -619,9 +822,15 @@ func getFloatQuery(c *gin.Context, key string) (float64, error) {
 
 func (h *PurchaseHandler) DeleteDownPayment(c *gin.Context) {
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	id, err := uuid.Parse(c.Param("id"))
-	if err != nil { response.BadRequest(c, "invalid down payment id"); return }
+	if err != nil {
+		response.BadRequest(c, "invalid down payment id")
+		return
+	}
 	if err := h.svc.DeleteDownPayment(c.Request.Context(), id, orgID); err != nil {
 		log.Err(err).Msg("delete down payment failed")
 		response.InternalError(c, err.Error())
@@ -641,7 +850,10 @@ func (h *PurchaseHandler) GetVendorOpenItems(c *gin.Context) {
 		return
 	}
 	orgID, err := getOrgID(c)
-	if err != nil { response.BadRequest(c, "missing org context"); return }
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
 	items, err := h.svc.GetVendorOpenItems(c.Request.Context(), vendorID, orgID.String())
 	if err != nil {
 		log.Err(err).Msg("get vendor open items failed")
@@ -687,8 +899,12 @@ func getOrgID(c *gin.Context) (uuid.UUID, error) {
 
 func getUserIDPtr(c *gin.Context) *uuid.UUID {
 	uid := c.GetString("user_id")
-	if uid == "" { return nil }
+	if uid == "" {
+		return nil
+	}
 	parsed, err := uuid.Parse(uid)
-	if err != nil { return nil }
+	if err != nil {
+		return nil
+	}
 	return &parsed
 }

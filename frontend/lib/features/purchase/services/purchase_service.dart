@@ -63,8 +63,10 @@ class VendorModel {
       contactEmail: json['contact_email']?.toString() ?? '',
       contactPhone: json['contact_phone']?.toString() ?? '',
       reconciliationAccountId: json['reconciliation_account_id']?.toString(),
-      reconciliationAccountCode: json['reconciliation_account_code']?.toString() ?? '',
-      reconciliationAccountName: json['reconciliation_account_name']?.toString() ?? '',
+      reconciliationAccountCode:
+          json['reconciliation_account_code']?.toString() ?? '',
+      reconciliationAccountName:
+          json['reconciliation_account_name']?.toString() ?? '',
       isActive: json['is_active'] as bool? ?? true,
       createdAt: json['created_at']?.toString() ?? '',
       updatedAt: json['updated_at']?.toString() ?? '',
@@ -138,8 +140,12 @@ class PurchaseOrderModel {
       paymentTermCode: json['payment_term_code']?.toString() ?? '',
       deliveryAddress: json['delivery_address']?.toString() ?? '',
       incotermCode: json['incoterm_code']?.toString() ?? '',
-      items: (json['items'] as List<dynamic>?)
-              ?.map((e) => PurchaseOrderItemModel.fromJson(e as Map<String, dynamic>))
+      items:
+          (json['items'] as List<dynamic>?)
+              ?.map(
+                (e) =>
+                    PurchaseOrderItemModel.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           [],
     );
@@ -218,6 +224,7 @@ class PurchaseReceiptModel {
   final String itemName;
   final String siteCode;
   final String siteName;
+  final String receiptSource;
 
   PurchaseReceiptModel({
     required this.id,
@@ -238,6 +245,7 @@ class PurchaseReceiptModel {
     this.itemName = '',
     this.siteCode = '',
     this.siteName = '',
+    this.receiptSource = 'PO',
   });
 
   factory PurchaseReceiptModel.fromJson(Map<String, dynamic> json) {
@@ -253,15 +261,20 @@ class PurchaseReceiptModel {
       totalCost: (json['total_cost'] as num?)?.toDouble() ?? 0,
       batchNo: json['batch_no']?.toString() ?? '',
       receiptDate: json['receipt_date']?.toString() ?? '',
-      isReversed: json['is_reversed'] == true || json['is_reversed']?.toString() == 'true',
+      isReversed:
+          json['is_reversed'] == true ||
+          json['is_reversed']?.toString() == 'true',
       reversedAt: json['reversed_at']?.toString(),
       poNumber: json['po_number']?.toString() ?? '',
       itemSku: json['item_sku']?.toString() ?? '',
       itemName: json['item_name']?.toString() ?? '',
       siteCode: json['site_code']?.toString() ?? '',
       siteName: json['site_name']?.toString() ?? '',
+      receiptSource: json['receipt_source']?.toString() ?? 'PO',
     );
   }
+
+  bool get isWorkOrderReceipt => receiptSource == 'WORK_ORDER';
 }
 
 class InvoiceItemModel {
@@ -362,7 +375,8 @@ class PurchaseInvoiceModel {
       notes: json['notes']?.toString() ?? '',
       vendorName: json['vendor_name']?.toString() ?? '',
       poNumber: json['po_number']?.toString() ?? '',
-      items: (json['items'] as List<dynamic>?)
+      items:
+          (json['items'] as List<dynamic>?)
               ?.map((e) => InvoiceItemModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           [],
@@ -377,12 +391,14 @@ class PurchaseService {
   PurchaseService(this._token);
 
   /// Allow late token update (e.g., when screen is instantiated before token is ready)
-  void updateToken(String token) { _token = token; }
+  void updateToken(String token) {
+    _token = token;
+  }
 
   Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_token',
-      };
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $_token',
+  };
 
   // ══════════════════════════════════════════
   //  VENDORS
@@ -391,23 +407,36 @@ class PurchaseService {
   Future<List<VendorModel>> listVendors({String? query}) async {
     final params = <String, String>{};
     if (query != null && query.isNotEmpty) params['q'] = query;
-    final uri = Uri.parse('$_baseUrl/purchase/vendors').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/purchase/vendors',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     final data = body['data'] as List<dynamic>? ?? [];
-    return data.map((e) => VendorModel.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => VendorModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<VendorModel> getVendor(String id) async {
-    final resp = await http.get(Uri.parse('$_baseUrl/purchase/vendors/$id'), headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/purchase/vendors/$id'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return VendorModel.fromJson(body['data'] as Map<String, dynamic>? ?? {});
   }
 
   Future<VendorModel> createVendor(Map<String, dynamic> data) async {
-    final resp = await http.post(Uri.parse('$_baseUrl/purchase/vendors'), headers: _headers, body: jsonEncode(data));
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/vendors'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
       throw Exception(body['message'] ?? 'Create vendor failed');
@@ -417,7 +446,11 @@ class PurchaseService {
   }
 
   Future<void> updateVendor(String id, Map<String, dynamic> data) async {
-    final resp = await http.put(Uri.parse('$_baseUrl/purchase/vendors/$id'), headers: _headers, body: jsonEncode(data));
+    final resp = await http.put(
+      Uri.parse('$_baseUrl/purchase/vendors/$id'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
       throw Exception(body['message'] ?? 'Update vendor failed');
@@ -425,7 +458,10 @@ class PurchaseService {
   }
 
   Future<void> deleteVendor(String id) async {
-    final resp = await http.delete(Uri.parse('$_baseUrl/purchase/vendors/$id'), headers: _headers);
+    final resp = await http.delete(
+      Uri.parse('$_baseUrl/purchase/vendors/$id'),
+      headers: _headers,
+    );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
       throw Exception(body['message'] ?? 'Delete vendor failed');
@@ -434,8 +470,12 @@ class PurchaseService {
 
   /// Fetch GL accounts with reconciliation_type = 'vendor' for dropdown selection.
   Future<List<Map<String, dynamic>>> listVendorReconciliationAccounts() async {
-    final resp = await http.get(Uri.parse('$_baseUrl/gl/accounts?reconciliation_type=vendor'), headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/gl/accounts?reconciliation_type=vendor'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     final data = body['data'] as List<dynamic>? ?? [];
     // Filter on client side in case server doesn't support the query param
@@ -445,12 +485,17 @@ class PurchaseService {
         .toList();
   }
 
-  Future<List<Map<String, dynamic>>> recommendVendors({String? productId}) async {
+  Future<List<Map<String, dynamic>>> recommendVendors({
+    String? productId,
+  }) async {
     final params = <String, String>{};
     if (productId != null) params['product_id'] = productId;
-    final uri = Uri.parse('$_baseUrl/purchase/vendors/recommend').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/purchase/vendors/recommend',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return (body['data'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
   }
@@ -460,32 +505,52 @@ class PurchaseService {
   // ══════════════════════════════════════════
 
   Future<PurchaseOrderModel> createPO(Map<String, dynamic> data) async {
-    final resp = await http.post(Uri.parse('$_baseUrl/purchase/orders'), headers: _headers, body: jsonEncode(data));
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/orders'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
       throw Exception(body['message'] ?? 'Create PO failed');
     }
     final body = jsonDecode(resp.body);
-    return PurchaseOrderModel.fromJson(body['data'] as Map<String, dynamic>? ?? {});
+    return PurchaseOrderModel.fromJson(
+      body['data'] as Map<String, dynamic>? ?? {},
+    );
   }
 
-  Future<List<PurchaseOrderModel>> listPOs({String? status, String? vendorId}) async {
+  Future<List<PurchaseOrderModel>> listPOs({
+    String? status,
+    String? vendorId,
+  }) async {
     final params = <String, String>{};
     if (status != null && status.isNotEmpty) params['status'] = status;
     if (vendorId != null && vendorId.isNotEmpty) params['vendor_id'] = vendorId;
-    final uri = Uri.parse('$_baseUrl/purchase/orders').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/purchase/orders',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     final data = body['data'] as List<dynamic>? ?? [];
-    return data.map((e) => PurchaseOrderModel.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => PurchaseOrderModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<PurchaseOrderModel> getPO(String id) async {
-    final resp = await http.get(Uri.parse('$_baseUrl/purchase/orders/$id'), headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/purchase/orders/$id'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
-    return PurchaseOrderModel.fromJson(body['data'] as Map<String, dynamic>? ?? {});
+    return PurchaseOrderModel.fromJson(
+      body['data'] as Map<String, dynamic>? ?? {},
+    );
   }
 
   Future<void> updatePOStatus(String id, String status) async {
@@ -504,8 +569,14 @@ class PurchaseService {
   //  PURCHASE RECEIPTS
   // ══════════════════════════════════════════
 
-  Future<Map<String, dynamic>> executeGoodsReceipt(Map<String, dynamic> data) async {
-    final resp = await http.post(Uri.parse('$_baseUrl/purchase/receipts'), headers: _headers, body: jsonEncode(data));
+  Future<Map<String, dynamic>> executeGoodsReceipt(
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/receipts'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
       throw Exception(body['message'] ?? 'Execute goods receipt failed');
@@ -516,12 +587,17 @@ class PurchaseService {
   Future<List<PurchaseReceiptModel>> listReceipts({String? poId}) async {
     final params = <String, String>{};
     if (poId != null && poId.isNotEmpty) params['po_id'] = poId;
-    final uri = Uri.parse('$_baseUrl/purchase/receipts').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/purchase/receipts',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     final data = body['data'] as List<dynamic>? ?? [];
-    return data.map((e) => PurchaseReceiptModel.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => PurchaseReceiptModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<void> reverseReceipt(String receiptId) async {
@@ -539,8 +615,23 @@ class PurchaseService {
   //  PURCHASE INVOICES
   // ══════════════════════════════════════════
 
+  Future<void> reverseWorkOrderReceipt(String receiptId) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/work-order-receipts/$receiptId/reverse'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Reverse work order receipt failed');
+    }
+  }
+
   Future<Map<String, dynamic>> createInvoice(Map<String, dynamic> data) async {
-    final resp = await http.post(Uri.parse('$_baseUrl/purchase/invoices'), headers: _headers, body: jsonEncode(data));
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/invoices'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
       throw Exception(body['message'] ?? 'Create invoice failed');
@@ -549,7 +640,10 @@ class PurchaseService {
   }
 
   Future<void> postInvoice(String id) async {
-    final resp = await http.post(Uri.parse('$_baseUrl/purchase/invoices/$id/post'), headers: _headers);
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/invoices/$id/post'),
+      headers: _headers,
+    );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
       throw Exception(body['message'] ?? 'Post invoice failed');
@@ -557,7 +651,10 @@ class PurchaseService {
   }
 
   Future<void> cancelInvoice(String id) async {
-    final resp = await http.post(Uri.parse('$_baseUrl/purchase/invoices/$id/cancel'), headers: _headers);
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/invoices/$id/cancel'),
+      headers: _headers,
+    );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
       throw Exception(body['message'] ?? 'Cancel invoice failed');
@@ -567,19 +664,30 @@ class PurchaseService {
   Future<List<PurchaseInvoiceModel>> listInvoices({String? vendorId}) async {
     final params = <String, String>{};
     if (vendorId != null && vendorId.isNotEmpty) params['vendor_id'] = vendorId;
-    final uri = Uri.parse('$_baseUrl/purchase/invoices').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/purchase/invoices',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     final data = body['data'] as List<dynamic>? ?? [];
-    return data.map((e) => PurchaseInvoiceModel.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => PurchaseInvoiceModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   Future<PurchaseInvoiceModel> getInvoice(String id) async {
-    final resp = await http.get(Uri.parse('$_baseUrl/purchase/invoices/$id'), headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/purchase/invoices/$id'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
-    return PurchaseInvoiceModel.fromJson(body['data'] as Map<String, dynamic>? ?? {});
+    return PurchaseInvoiceModel.fromJson(
+      body['data'] as Map<String, dynamic>? ?? {},
+    );
   }
 
   // ══════════════════════════════════════════
@@ -587,19 +695,31 @@ class PurchaseService {
   // ══════════════════════════════════════════
 
   Future<List<Map<String, dynamic>>> listPOAttachments(String poId) async {
-    final resp = await http.get(Uri.parse('$_baseUrl/purchase/orders/$poId/attachments'), headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
-    return ((jsonDecode(resp.body)['data'] as List<dynamic>?) ?? []).cast<Map<String, dynamic>>();
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/purchase/orders/$poId/attachments'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
+    return ((jsonDecode(resp.body)['data'] as List<dynamic>?) ?? [])
+        .cast<Map<String, dynamic>>();
   }
 
-  Future<void> uploadPOAttachment(String poId, String filePath, String fileName) async {
+  Future<void> uploadPOAttachment(
+    String poId,
+    String filePath,
+    String fileName,
+  ) async {
     final uri = Uri.parse('$_baseUrl/purchase/orders/$poId/attachments');
     final request = http.MultipartRequest('POST', uri);
     request.headers['Authorization'] = 'Bearer $_token';
-    request.files.add(await http.MultipartFile.fromPath('file', filePath, filename: fileName));
+    request.files.add(
+      await http.MultipartFile.fromPath('file', filePath, filename: fileName),
+    );
     final streamedResp = await request.send();
     final resp = await http.Response.fromStream(streamedResp);
-    if (resp.statusCode >= 400) throw Exception('Upload failed: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('Upload failed: ${resp.statusCode}');
   }
 
   // ══════════════════════════════════════════
@@ -611,10 +731,13 @@ class PurchaseService {
       Uri.parse('$_baseUrl/purchase/pending-invoice-pos'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     final data = body['data'] as List<dynamic>? ?? [];
-    return data.map((e) => PurchaseOrderModel.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => PurchaseOrderModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// Format amount with thousand separators

@@ -315,7 +315,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
   final _inHouseProdDaysCtrl = TextEditingController();
 
   String _dimUnit = 'cm', _weightUnit = 'kg', _uom = 'EA', _abcClass = '';
-  String? _materialType;   // null = not selected yet
+  String? _materialType; // null = not selected yet
   String? _storageCondition;
   String? _valuationClass;
   bool _mrpEnabled = true;
@@ -423,7 +423,9 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
     _mrpEnabled = e['mrp_enabled'] ?? true;
     _phantomAssembly = e['phantom_assembly'] ?? false;
     final pt = e['procurement_type']?.toString() ?? '';
-    _productionProcurementType = ['in-house','purchase','mixed'].contains(pt) ? pt : 'in-house';
+    _productionProcurementType = ['in-house', 'purchase', 'mixed'].contains(pt)
+        ? pt
+        : 'in-house';
     _prodLeadTimeCtrl.text = e['production_lead_time']?.toString() ?? '';
     _inHouseProdDaysCtrl.text = e['in_house_production_days']?.toString() ?? '';
   }
@@ -526,7 +528,8 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
       'material_type': _materialType ?? '',
       'mrp_enabled': _mrpEnabled,
       'phantom_assembly': _phantomAssembly,
-      'procurement_type': _productionProcurementType ?? 'in-house',  // nullable-safe
+      'procurement_type':
+          _productionProcurementType ?? 'in-house', // nullable-safe
       'production_lead_time': int.tryParse(_prodLeadTimeCtrl.text),
       'in_house_production_days': int.tryParse(_inHouseProdDaysCtrl.text),
     };
@@ -709,22 +712,34 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
                     labelText: 'Material Type *',
                     isDense: true,
                   ),
-                  hint: const Text('Select type', style: TextStyle(fontSize: 12)),
+                  hint: const Text(
+                    'Select type',
+                    style: TextStyle(fontSize: 12),
+                  ),
                   items: [
                     DropdownMenuItem(
                       value: 'finished_goods',
-                      child: Text('Finished Goods', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        'Finished Goods',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     DropdownMenuItem(
-                      value: 'half_finished_goods',
-                      child: Text('Half Finished Goods', style: TextStyle(fontSize: 12)),
+                      value: 'semi_finished_goods',
+                      child: Text(
+                        'Semi Finished Goods',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     DropdownMenuItem(
                       value: 'raw_material',
-                      child: Text('Raw Material', style: TextStyle(fontSize: 12)),
+                      child: Text(
+                        'Raw Material',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                     DropdownMenuItem(
-                      value: 'other',
+                      value: 'other_Inv',
                       child: Text('Other', style: TextStyle(fontSize: 12)),
                     ),
                   ],
@@ -1135,11 +1150,27 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
                   ),
                   hint: const Text('Select', style: TextStyle(fontSize: 12)),
                   items: [
-                    DropdownMenuItem(value: 'in-house', child: Text('1. In House', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(value: 'purchase', child: Text('2. Purchase', style: TextStyle(fontSize: 12))),
-                    DropdownMenuItem(value: 'mixed',    child: Text('3. Mixed',    style: TextStyle(fontSize: 12))),
+                    DropdownMenuItem(
+                      value: 'in-house',
+                      child: Text(
+                        '1. In House',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'purchase',
+                      child: Text(
+                        '2. Purchase',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'mixed',
+                      child: Text('3. Mixed', style: TextStyle(fontSize: 12)),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => _productionProcurementType = v),
+                  onChanged: (v) =>
+                      setState(() => _productionProcurementType = v),
                 ),
               ),
             ],

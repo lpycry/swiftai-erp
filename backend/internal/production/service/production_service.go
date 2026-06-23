@@ -7,17 +7,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	prorepo "github.com/swiftai-erp/backend/internal/production/repository"
 	prodmodels "github.com/swiftai-erp/backend/internal/production/models"
+	prorepo "github.com/swiftai-erp/backend/internal/production/repository"
 )
 
 type ProductionService struct {
-	db     *pgxpool.Pool
-	bomRepo  *prorepo.BOMRepo
-	wcRepo   *prorepo.WorkCenterRepo
-	rtRepo   *prorepo.RoutingTemplateRepo
-	opRepo   *prorepo.TemplateOperationRepo
-	poRepo   *prorepo.ProductionOrderRepo
+	db      *pgxpool.Pool
+	bomRepo *prorepo.BOMRepo
+	wcRepo  *prorepo.WorkCenterRepo
+	rtRepo  *prorepo.RoutingTemplateRepo
+	opRepo  *prorepo.TemplateOperationRepo
+	poRepo  *prorepo.ProductionOrderRepo
 }
 
 func NewProductionService(db *pgxpool.Pool, bomRepo *prorepo.BOMRepo,
@@ -107,7 +107,16 @@ func (s *ProductionService) DeleteTemplateOperation(ctx context.Context, id, ten
 
 // ── Production Order ──
 func (s *ProductionService) CreateProductionOrder(ctx context.Context, tenantID, userID uuid.UUID, req *prodmodels.CreateProductionOrderRequest) (*prodmodels.ProductionOrder, error) {
-	return s.poRepo.Create(ctx, tenantID, userID, req)
+	po, err := s.poRepo.Create(ctx, tenantID, userID, req)
+	if err != nil {
+		return nil, err
+	}
+	// Auto-sync materials if BOM attached
+	if req.BOMID != nil {
+		_ = s.poRepo.SyncPOMaterials(ctx, po.ID, tenantID)
+		po, _ = s.poRepo.GetByID(ctx, po.ID, tenantID)
+	}
+	return po, nil
 }
 func (s *ProductionService) GetProductionOrder(ctx context.Context, id, tenantID uuid.UUID) (*prodmodels.ProductionOrder, error) {
 	return s.poRepo.GetByID(ctx, id, tenantID)
@@ -116,10 +125,29 @@ func (s *ProductionService) ListProductionOrders(ctx context.Context, tenantID u
 	return s.poRepo.List(ctx, tenantID, materialID, status)
 }
 func (s *ProductionService) UpdateProductionOrder(ctx context.Context, id, tenantID, userID uuid.UUID, req *prodmodels.UpdateProductionOrderRequest) error {
-	return s.poRepo.Update(ctx, id, tenantID, req, userID)
+	if err := s.poRepo.Update(ctx, id, tenantID, req, userID); err != nil {
+		return err
+	}
+	// Re-sync materials whenever bom_id or order_qty changes
+	if req.BOMID != nil || req.OrderQty != nil {
+		_ = s.poRepo.SyncPOMaterials(ctx, id, tenantID)
+	}
+	return nil
 }
 func (s *ProductionService) DeleteProductionOrder(ctx context.Context, id, tenantID, userID uuid.UUID) error {
 	return s.poRepo.Delete(ctx, id, tenantID, userID)
+}
+func (s *ProductionService) SyncPOMaterials(ctx context.Context, id, tenantID uuid.UUID) error {
+	return s.poRepo.SyncPOMaterials(ctx, id, tenantID)
+}
+func (s *ProductionService) UpdatePOMaterialIssueQty(ctx context.Context, materialID, tenantID uuid.UUID, issueQty float64) error {
+	return s.poRepo.UpdatePOMaterialIssueQty(ctx, materialID, tenantID, issueQty)
+}
+func (s *ProductionService) CreateTimeConfirmation(ctx context.Context, orderID, tenantID, userID uuid.UUID, req *prodmodels.CreateTimeConfirmationRequest) (*prodmodels.ProductionOrderTimeConfirmation, error) {
+	return s.poRepo.CreateTimeConfirmation(ctx, orderID, tenantID, userID, req)
+}
+func (s *ProductionService) ListTimeConfirmations(ctx context.Context, orderID, tenantID uuid.UUID) ([]*prodmodels.ProductionOrderTimeConfirmation, error) {
+	return s.poRepo.ListTimeConfirmations(ctx, orderID, tenantID)
 }
 
 // GetPORoutingInfo returns routing template info for a production order via its BOM

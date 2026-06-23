@@ -7,6 +7,7 @@ import 'package:swiftai_erp/features/production/screens/bom_screen.dart';
 import 'package:swiftai_erp/features/production/screens/work_center_screen.dart';
 import 'package:swiftai_erp/features/production/screens/routing_template_screen.dart';
 import 'package:swiftai_erp/features/production/screens/production_order_screen.dart';
+import 'package:swiftai_erp/features/production/screens/time_confirmation_screen.dart';
 
 class ProductionDashboardScreen extends StatelessWidget {
   final AuthService authService;
@@ -148,6 +149,21 @@ class ProductionDashboardScreen extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                       builder: (_) => ProductionOrderScreen(
+                        authService: authService,
+                        productionService: productionService,
+                      ),
+                    ),
+                  ),
+                ),
+                _ProdCard(
+                  icon: Icons.timer_rounded,
+                  title: 'Production Order Time Confirmation',
+                  subtitle: 'Confirm yield quantity and actual work hours',
+                  color: Colors.deepOrange,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ProductionTimeConfirmationScreen(
                         authService: authService,
                         productionService: productionService,
                       ),

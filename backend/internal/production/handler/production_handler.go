@@ -552,21 +552,19 @@ func (h *ProductionHandler) DeleteTemplateOperation(c *gin.Context) {
 		response.BadRequest(c, "missing tenant context")
 		return
 	}
+
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		response.BadRequest(c, "invalid template operation id")
 		return
 	}
-	var req prodmodels.UpdateTemplateOperationRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "invalid request")
-		return
-	}
+
 	if err := h.svc.DeleteTemplateOperation(c.Request.Context(), id, tenantID); err != nil {
 		log.Err(err).Msg("delete template operation failed")
-		response.InternalError(c, "delete template operation failed")
+		response.InternalError(c, err.Error())
 		return
 	}
+
 	response.OK(c, map[string]string{"status": "deleted"})
 }
 
@@ -731,4 +729,99 @@ func (h *ProductionHandler) GetPORoutingInfo(c *gin.Context) {
 		return
 	}
 	response.OK(c, rt)
+}
+
+// SyncPOMaterials (re-)explodes the BOM and syncs material lines for a production order
+func (h *ProductionHandler) SyncPOMaterials(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid production order id")
+		return
+	}
+	if err := h.svc.SyncPOMaterials(c.Request.Context(), id, tenantID); err != nil {
+		log.Err(err).Msg("sync PO materials failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "synced"})
+}
+
+// UpdatePOMaterialIssueQty updates issue_qty for a single material line
+func (h *ProductionHandler) UpdatePOMaterialIssueQty(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	matID, err := uuid.Parse(c.Param("mat_id"))
+	if err != nil {
+		response.BadRequest(c, "invalid material id")
+		return
+	}
+	var req prodmodels.UpdatePOMaterialIssueRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	if err := h.svc.UpdatePOMaterialIssueQty(c.Request.Context(), matID, tenantID, req.IssueQty); err != nil {
+		log.Err(err).Msg("update issue qty failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "updated"})
+}
+
+func (h *ProductionHandler) CreateTimeConfirmation(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	orderID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid production order id")
+		return
+	}
+	var req prodmodels.CreateTimeConfirmationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	conf, err := h.svc.CreateTimeConfirmation(c.Request.Context(), orderID, tenantID, userID, &req)
+	if err != nil {
+		log.Err(err).Msg("create time confirmation failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, conf)
+}
+
+func (h *ProductionHandler) ListTimeConfirmations(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	orderID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid production order id")
+		return
+	}
+	list, err := h.svc.ListTimeConfirmations(c.Request.Context(), orderID, tenantID)
+	if err != nil {
+		log.Err(err).Msg("list time confirmations failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, list)
 }

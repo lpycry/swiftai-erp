@@ -1,8 +1,8 @@
 package models
 
 import (
-	"time"
 	"github.com/google/uuid"
+	"time"
 )
 
 // ── Product / Material Master (Section 4) ──
@@ -26,144 +26,144 @@ type Product struct {
 	MaterialType  string     `json:"material_type,omitempty"`
 	BlockReason   string     `json:"block_reason,omitempty"`
 	// Product Taxability
-	TaxCategory            string     `json:"tax_category"`
-	TaxRate                *float64   `json:"tax_rate,omitempty"`
-	TaxType                string     `json:"tax_type"`
-	TaxExemptReason        string     `json:"tax_exempt_reason,omitempty"`
-	DefaultTaxJurisdictionID *uuid.UUID `json:"default_tax_jurisdiction_id,omitempty"`
-	DimensionLength *float64 `json:"dimension_length,omitempty"`
-	DimensionWidth  *float64 `json:"dimension_width,omitempty"`
-	DimensionHeight *float64 `json:"dimension_height,omitempty"`
-	DimensionUnit   string   `json:"dimension_unit"`
-	GrossWeight     *float64 `json:"gross_weight,omitempty"`
-	NetWeight       *float64 `json:"net_weight,omitempty"`
-	WeightUnit      string   `json:"weight_unit"`
-	VolumeM3        *float64 `json:"volume_m3,omitempty"`
-	StandardCost    float64  `json:"standard_cost"`
-	MovingAvgCost   float64  `json:"moving_avg_cost,omitempty"`
-	LastCost        float64  `json:"last_cost"`
-	AvgCost         float64  `json:"avg_cost"`
-	ValuationClass  string   `json:"valuation_class,omitempty"`
-	ABCClassification string `json:"abc_classification,omitempty"`
-	MinStockQty     *float64 `json:"min_stock_qty,omitempty"`
-	MaxStockQty     *float64 `json:"max_stock_qty,omitempty"`
-	ReorderPoint    *float64 `json:"reorder_point,omitempty"`
-	ReorderQty      *float64 `json:"reorder_qty,omitempty"`
-	LeadTimeDays          *int     `json:"lead_time_days,omitempty"`
-	ProcurementType       string   `json:"procurement_type,omitempty"`
-	StorageCondition      string   `json:"storage_condition,omitempty"`
-	CountryOfOrigin       string   `json:"country_of_origin,omitempty"`
-	HSCode                string   `json:"hs_code,omitempty"`
-	WeightKg              *float64 `json:"weight_kg,omitempty"`
-	IsActive              bool     `json:"is_active"`
-	CreatedAt             time.Time `json:"created_at"`
-	UpdatedAt             time.Time `json:"updated_at"`
-	Photos                []ProductPhoto   `json:"photos,omitempty"`
-	Barcodes              []ProductBarcode `json:"barcodes,omitempty"`
+	TaxCategory              string           `json:"tax_category"`
+	TaxRate                  *float64         `json:"tax_rate,omitempty"`
+	TaxType                  string           `json:"tax_type"`
+	TaxExemptReason          string           `json:"tax_exempt_reason,omitempty"`
+	DefaultTaxJurisdictionID *uuid.UUID       `json:"default_tax_jurisdiction_id,omitempty"`
+	DimensionLength          *float64         `json:"dimension_length,omitempty"`
+	DimensionWidth           *float64         `json:"dimension_width,omitempty"`
+	DimensionHeight          *float64         `json:"dimension_height,omitempty"`
+	DimensionUnit            string           `json:"dimension_unit"`
+	GrossWeight              *float64         `json:"gross_weight,omitempty"`
+	NetWeight                *float64         `json:"net_weight,omitempty"`
+	WeightUnit               string           `json:"weight_unit"`
+	VolumeM3                 *float64         `json:"volume_m3,omitempty"`
+	StandardCost             float64          `json:"standard_cost"`
+	MovingAvgCost            float64          `json:"moving_avg_cost,omitempty"`
+	LastCost                 float64          `json:"last_cost"`
+	AvgCost                  float64          `json:"avg_cost"`
+	ValuationClass           string           `json:"valuation_class,omitempty"`
+	ABCClassification        string           `json:"abc_classification,omitempty"`
+	MinStockQty              *float64         `json:"min_stock_qty,omitempty"`
+	MaxStockQty              *float64         `json:"max_stock_qty,omitempty"`
+	ReorderPoint             *float64         `json:"reorder_point,omitempty"`
+	ReorderQty               *float64         `json:"reorder_qty,omitempty"`
+	LeadTimeDays             *int             `json:"lead_time_days,omitempty"`
+	ProcurementType          string           `json:"procurement_type,omitempty"`
+	StorageCondition         string           `json:"storage_condition,omitempty"`
+	CountryOfOrigin          string           `json:"country_of_origin,omitempty"`
+	HSCode                   string           `json:"hs_code,omitempty"`
+	WeightKg                 *float64         `json:"weight_kg,omitempty"`
+	IsActive                 bool             `json:"is_active"`
+	CreatedAt                time.Time        `json:"created_at"`
+	UpdatedAt                time.Time        `json:"updated_at"`
+	Photos                   []ProductPhoto   `json:"photos,omitempty"`
+	Barcodes                 []ProductBarcode `json:"barcodes,omitempty"`
 	// Production Tab fields
-	MRPEnabled            bool     `json:"mrp_enabled"`
-	PhantomAssembly       bool     `json:"phantom_assembly"`
-	ProductionLeadTime    *int     `json:"production_lead_time,omitempty"`
-	InHouseProductionDays *int     `json:"in_house_production_days,omitempty"`
+	MRPEnabled            bool `json:"mrp_enabled"`
+	PhantomAssembly       bool `json:"phantom_assembly"`
+	ProductionLeadTime    *int `json:"production_lead_time,omitempty"`
+	InHouseProductionDays *int `json:"in_house_production_days,omitempty"`
 }
 
 type CreateProductRequest struct {
-	TaxCategory            string     `json:"tax_category,omitempty"`
-	TaxRate                *float64   `json:"tax_rate,omitempty"`
-	TaxType                string     `json:"tax_type,omitempty"`
-	TaxExemptReason        string     `json:"tax_exempt_reason,omitempty"`
-	DefaultTaxJurisdictionID *string  `json:"default_tax_jurisdiction_id,omitempty"`
-	CategoryID    *uuid.UUID `json:"category_id,omitempty"`
-	SKU           string     `json:"sku" binding:"required"`
-	Barcode       string     `json:"barcode,omitempty"`
-	Name          string     `json:"name" binding:"required"`
-	Description   string     `json:"description,omitempty"`
-	UnitOfMeasure string     `json:"unit_of_measure" binding:"required"`
-	BatchTracked  bool       `json:"batch_tracked"`
-	SerialTracked bool       `json:"serial_tracked"`
-	ShelfLifeDays *int       `json:"shelf_life_days,omitempty"`
-	DimensionLength *float64 `json:"dimension_length,omitempty"`
-	DimensionWidth  *float64 `json:"dimension_width,omitempty"`
-	DimensionHeight *float64 `json:"dimension_height,omitempty"`
-	DimensionUnit   string   `json:"dimension_unit,omitempty"`
-	GrossWeight     *float64 `json:"gross_weight,omitempty"`
-	NetWeight       *float64 `json:"net_weight,omitempty"`
-	WeightUnit      string   `json:"weight_unit,omitempty"`
-	StandardCost    float64  `json:"standard_cost"`
-	MovingAvgCost   float64  `json:"moving_avg_cost,omitempty"`
-	LastCost        float64  `json:"last_cost"`
-	AvgCost         float64  `json:"avg_cost"`
-	WeightKg        *float64 `json:"weight_kg,omitempty"`
-	VolumeM3        *float64 `json:"volume_m3,omitempty"`
-	ABCClassification string `json:"abc_classification,omitempty"`
-	ValuationClass  string   `json:"valuation_class,omitempty"`
-	HSCode          string   `json:"hs_code,omitempty"`
-	CountryOfOrigin string   `json:"country_of_origin,omitempty"`
-	StorageCondition string  `json:"storage_condition,omitempty"`
-	ProcurementType string   `json:"procurement_type,omitempty"`
-	SafetyStock     *float64 `json:"safety_stock,omitempty"`
-	MaxStockQty     *float64 `json:"max_stock_qty,omitempty"`
-	ReorderPoint    *float64 `json:"reorder_point,omitempty"`
-	ReorderQty      *float64 `json:"reorder_qty,omitempty"`
-	LeadTimeDays          *int     `json:"lead_time_days,omitempty"`
-	UOMGroup              string   `json:"uom_group,omitempty"`
-	IsSerialized          bool     `json:"is_serialized"`
-	MaterialType          string   `json:"material_type,omitempty"`
+	TaxCategory              string     `json:"tax_category,omitempty"`
+	TaxRate                  *float64   `json:"tax_rate,omitempty"`
+	TaxType                  string     `json:"tax_type,omitempty"`
+	TaxExemptReason          string     `json:"tax_exempt_reason,omitempty"`
+	DefaultTaxJurisdictionID *string    `json:"default_tax_jurisdiction_id,omitempty"`
+	CategoryID               *uuid.UUID `json:"category_id,omitempty"`
+	SKU                      string     `json:"sku" binding:"required"`
+	Barcode                  string     `json:"barcode,omitempty"`
+	Name                     string     `json:"name" binding:"required"`
+	Description              string     `json:"description,omitempty"`
+	UnitOfMeasure            string     `json:"unit_of_measure" binding:"required"`
+	BatchTracked             bool       `json:"batch_tracked"`
+	SerialTracked            bool       `json:"serial_tracked"`
+	ShelfLifeDays            *int       `json:"shelf_life_days,omitempty"`
+	DimensionLength          *float64   `json:"dimension_length,omitempty"`
+	DimensionWidth           *float64   `json:"dimension_width,omitempty"`
+	DimensionHeight          *float64   `json:"dimension_height,omitempty"`
+	DimensionUnit            string     `json:"dimension_unit,omitempty"`
+	GrossWeight              *float64   `json:"gross_weight,omitempty"`
+	NetWeight                *float64   `json:"net_weight,omitempty"`
+	WeightUnit               string     `json:"weight_unit,omitempty"`
+	StandardCost             float64    `json:"standard_cost"`
+	MovingAvgCost            float64    `json:"moving_avg_cost,omitempty"`
+	LastCost                 float64    `json:"last_cost"`
+	AvgCost                  float64    `json:"avg_cost"`
+	WeightKg                 *float64   `json:"weight_kg,omitempty"`
+	VolumeM3                 *float64   `json:"volume_m3,omitempty"`
+	ABCClassification        string     `json:"abc_classification,omitempty"`
+	ValuationClass           string     `json:"valuation_class,omitempty"`
+	HSCode                   string     `json:"hs_code,omitempty"`
+	CountryOfOrigin          string     `json:"country_of_origin,omitempty"`
+	StorageCondition         string     `json:"storage_condition,omitempty"`
+	ProcurementType          string     `json:"procurement_type,omitempty"`
+	SafetyStock              *float64   `json:"safety_stock,omitempty"`
+	MaxStockQty              *float64   `json:"max_stock_qty,omitempty"`
+	ReorderPoint             *float64   `json:"reorder_point,omitempty"`
+	ReorderQty               *float64   `json:"reorder_qty,omitempty"`
+	LeadTimeDays             *int       `json:"lead_time_days,omitempty"`
+	UOMGroup                 string     `json:"uom_group,omitempty"`
+	IsSerialized             bool       `json:"is_serialized"`
+	MaterialType             string     `json:"material_type,omitempty"`
 	// Production Tab fields
-	MRPEnabled            bool     `json:"mrp_enabled"`
-	PhantomAssembly       bool     `json:"phantom_assembly"`
-	ProductionLeadTime    *int     `json:"production_lead_time,omitempty"`
-	InHouseProductionDays *int     `json:"in_house_production_days,omitempty"`
+	MRPEnabled            bool `json:"mrp_enabled"`
+	PhantomAssembly       bool `json:"phantom_assembly"`
+	ProductionLeadTime    *int `json:"production_lead_time,omitempty"`
+	InHouseProductionDays *int `json:"in_house_production_days,omitempty"`
 }
 
 type UpdateProductRequest struct {
-	TaxCategory            *string    `json:"tax_category,omitempty"`
-	TaxRate                *float64   `json:"tax_rate,omitempty"`
-	TaxType                *string    `json:"tax_type,omitempty"`
-	TaxExemptReason        *string    `json:"tax_exempt_reason,omitempty"`
-	DefaultTaxJurisdictionID *string  `json:"default_tax_jurisdiction_id,omitempty"`
-	CategoryID    *uuid.UUID `json:"category_id,omitempty"`
-	Barcode       string     `json:"barcode,omitempty"`
-	Name          string     `json:"name,omitempty"`
-	Description   string     `json:"description,omitempty"`
-	UnitOfMeasure string     `json:"unit_of_measure,omitempty"`
-	BatchTracked  *bool      `json:"batch_tracked,omitempty"`
-	SerialTracked *bool      `json:"serial_tracked,omitempty"`
-	ShelfLifeDays *int       `json:"shelf_life_days,omitempty"`
-	DimensionLength *float64 `json:"dimension_length,omitempty"`
-	DimensionWidth  *float64 `json:"dimension_width,omitempty"`
-	DimensionHeight *float64 `json:"dimension_height,omitempty"`
-	DimensionUnit   *string  `json:"dimension_unit,omitempty"`
-	GrossWeight     *float64 `json:"gross_weight,omitempty"`
-	NetWeight       *float64 `json:"net_weight,omitempty"`
-	WeightUnit      *string  `json:"weight_unit,omitempty"`
-	StandardCost    *float64 `json:"standard_cost,omitempty"`
-	MovingAvgCost   *float64 `json:"moving_avg_cost,omitempty"`
-	LastCost        *float64 `json:"last_cost,omitempty"`
-	AvgCost         *float64 `json:"avg_cost,omitempty"`
-	WeightKg        *float64 `json:"weight_kg,omitempty"`
-	VolumeM3        *float64 `json:"volume_m3,omitempty"`
-	ABCClassification *string `json:"abc_classification,omitempty"`
-	ValuationClass  *string  `json:"valuation_class,omitempty"`
-	HSCode          *string  `json:"hs_code,omitempty"`
-	CountryOfOrigin *string  `json:"country_of_origin,omitempty"`
-	StorageCondition *string `json:"storage_condition,omitempty"`
-	ProcurementType *string  `json:"procurement_type,omitempty"`
-	SafetyStock     *float64 `json:"safety_stock,omitempty"`
-	MaxStockQty     *float64 `json:"max_stock_qty,omitempty"`
-	ReorderPoint    *float64 `json:"reorder_point,omitempty"`
-	ReorderQty      *float64 `json:"reorder_qty,omitempty"`
-	LeadTimeDays          *int     `json:"lead_time_days,omitempty"`
-	UOMGroup              *string  `json:"uom_group,omitempty"`
-	IsSerialized          *bool    `json:"is_serialized,omitempty"`
-	IsActive              *bool    `json:"is_active,omitempty"`
-	IsBlocked             *bool    `json:"is_blocked,omitempty"`
+	TaxCategory              *string    `json:"tax_category,omitempty"`
+	TaxRate                  *float64   `json:"tax_rate,omitempty"`
+	TaxType                  *string    `json:"tax_type,omitempty"`
+	TaxExemptReason          *string    `json:"tax_exempt_reason,omitempty"`
+	DefaultTaxJurisdictionID *string    `json:"default_tax_jurisdiction_id,omitempty"`
+	CategoryID               *uuid.UUID `json:"category_id,omitempty"`
+	Barcode                  string     `json:"barcode,omitempty"`
+	Name                     string     `json:"name,omitempty"`
+	Description              string     `json:"description,omitempty"`
+	UnitOfMeasure            string     `json:"unit_of_measure,omitempty"`
+	BatchTracked             *bool      `json:"batch_tracked,omitempty"`
+	SerialTracked            *bool      `json:"serial_tracked,omitempty"`
+	ShelfLifeDays            *int       `json:"shelf_life_days,omitempty"`
+	DimensionLength          *float64   `json:"dimension_length,omitempty"`
+	DimensionWidth           *float64   `json:"dimension_width,omitempty"`
+	DimensionHeight          *float64   `json:"dimension_height,omitempty"`
+	DimensionUnit            *string    `json:"dimension_unit,omitempty"`
+	GrossWeight              *float64   `json:"gross_weight,omitempty"`
+	NetWeight                *float64   `json:"net_weight,omitempty"`
+	WeightUnit               *string    `json:"weight_unit,omitempty"`
+	StandardCost             *float64   `json:"standard_cost,omitempty"`
+	MovingAvgCost            *float64   `json:"moving_avg_cost,omitempty"`
+	LastCost                 *float64   `json:"last_cost,omitempty"`
+	AvgCost                  *float64   `json:"avg_cost,omitempty"`
+	WeightKg                 *float64   `json:"weight_kg,omitempty"`
+	VolumeM3                 *float64   `json:"volume_m3,omitempty"`
+	ABCClassification        *string    `json:"abc_classification,omitempty"`
+	ValuationClass           *string    `json:"valuation_class,omitempty"`
+	HSCode                   *string    `json:"hs_code,omitempty"`
+	CountryOfOrigin          *string    `json:"country_of_origin,omitempty"`
+	StorageCondition         *string    `json:"storage_condition,omitempty"`
+	ProcurementType          *string    `json:"procurement_type,omitempty"`
+	SafetyStock              *float64   `json:"safety_stock,omitempty"`
+	MaxStockQty              *float64   `json:"max_stock_qty,omitempty"`
+	ReorderPoint             *float64   `json:"reorder_point,omitempty"`
+	ReorderQty               *float64   `json:"reorder_qty,omitempty"`
+	LeadTimeDays             *int       `json:"lead_time_days,omitempty"`
+	UOMGroup                 *string    `json:"uom_group,omitempty"`
+	IsSerialized             *bool      `json:"is_serialized,omitempty"`
+	IsActive                 *bool      `json:"is_active,omitempty"`
+	IsBlocked                *bool      `json:"is_blocked,omitempty"`
 	// Production Tab fields
-	MRPEnabled            *bool    `json:"mrp_enabled,omitempty"`
-	PhantomAssembly       *bool    `json:"phantom_assembly,omitempty"`
-	ProductionLeadTime    *int     `json:"production_lead_time,omitempty"`
-	InHouseProductionDays *int     `json:"in_house_production_days,omitempty"`
-	MaterialType          *string  `json:"material_type,omitempty"`
+	MRPEnabled            *bool   `json:"mrp_enabled,omitempty"`
+	PhantomAssembly       *bool   `json:"phantom_assembly,omitempty"`
+	ProductionLeadTime    *int    `json:"production_lead_time,omitempty"`
+	InHouseProductionDays *int    `json:"in_house_production_days,omitempty"`
+	MaterialType          *string `json:"material_type,omitempty"`
 }
 
 // ProductPhoto (REQ-MM-001~010)
@@ -184,7 +184,7 @@ type ProductBarcode struct {
 	ID          uuid.UUID `json:"id"`
 	ProductID   uuid.UUID `json:"product_id"`
 	Barcode     string    `json:"barcode"`
-	BarcodeType string   `json:"barcode_type"`
+	BarcodeType string    `json:"barcode_type"`
 	IsPrimary   bool      `json:"is_primary"`
 	CreatedAt   time.Time `json:"created_at"`
 }
@@ -220,29 +220,29 @@ type CreateWarehouseRequest struct {
 }
 
 type UpdateWarehouseRequest struct {
-	Code           *string     `json:"code,omitempty"`
-	Name           *string     `json:"name,omitempty"`
-	Address        *string     `json:"address,omitempty"`
-	OrganizationID *uuid.UUID  `json:"organization_id,omitempty"`
-	SiteID         *uuid.UUID  `json:"site_id,omitempty"`
-	IsActive       *bool       `json:"is_active,omitempty"`
+	Code           *string    `json:"code,omitempty"`
+	Name           *string    `json:"name,omitempty"`
+	Address        *string    `json:"address,omitempty"`
+	OrganizationID *uuid.UUID `json:"organization_id,omitempty"`
+	SiteID         *uuid.UUID `json:"site_id,omitempty"`
+	IsActive       *bool      `json:"is_active,omitempty"`
 }
 
 type WarehouseZone struct {
-	ID              uuid.UUID  `json:"id"`
-	WarehouseID     uuid.UUID  `json:"warehouse_id"`
-	Code            string     `json:"code"`
-	Name            string     `json:"name"`
-	ZoneType        string     `json:"zone_type"`
-	Description     string     `json:"description,omitempty"`
+	ID               uuid.UUID `json:"id"`
+	WarehouseID      uuid.UUID `json:"warehouse_id"`
+	Code             string    `json:"code"`
+	Name             string    `json:"name"`
+	ZoneType         string    `json:"zone_type"`
+	Description      string    `json:"description,omitempty"`
 	CapacityWeightKg *float64  `json:"capacity_weight_kg,omitempty"`
 	CapacityVolumeM3 *float64  `json:"capacity_volume_m3,omitempty"`
-	TemperatureMin  *float64   `json:"temperature_min,omitempty"`
-	TemperatureMax  *float64   `json:"temperature_max,omitempty"`
-	SortOrder       int        `json:"sort_order"`
-	IsActive        bool       `json:"is_active"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	TemperatureMin   *float64  `json:"temperature_min,omitempty"`
+	TemperatureMax   *float64  `json:"temperature_max,omitempty"`
+	SortOrder        int       `json:"sort_order"`
+	IsActive         bool      `json:"is_active"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type CreateZoneRequest struct {
@@ -400,12 +400,12 @@ type UOMConversion struct {
 // ── New Request Types ──
 
 type CreateGRRequest struct {
-	ReceiptType  string            `json:"receipt_type"`
-	ReferenceNo  string            `json:"reference_no,omitempty"`
-	WarehouseID  uuid.UUID         `json:"warehouse_id" binding:"required"`
-	SupplierName string            `json:"supplier_name,omitempty"`
-	ReceiptDate  time.Time         `json:"receipt_date,omitempty"`
-	Lines        []GRLineItem      `json:"lines" binding:"required"`
+	ReceiptType  string       `json:"receipt_type"`
+	ReferenceNo  string       `json:"reference_no,omitempty"`
+	WarehouseID  uuid.UUID    `json:"warehouse_id" binding:"required"`
+	SupplierName string       `json:"supplier_name,omitempty"`
+	ReceiptDate  time.Time    `json:"receipt_date,omitempty"`
+	Lines        []GRLineItem `json:"lines" binding:"required"`
 }
 
 type GRLineItem struct {
@@ -417,22 +417,22 @@ type GRLineItem struct {
 }
 
 type GoodsReceipt struct {
-	ID          uuid.UUID         `json:"id"`
-	TenantID    uuid.UUID         `json:"tenant_id"`
-	GRNo        string            `json:"gr_no"`
-	ReceiptType string            `json:"receipt_type"`
-	ReferenceNo string            `json:"reference_no,omitempty"`
-	WarehouseID uuid.UUID         `json:"warehouse_id"`
-	WarehouseName string          `json:"warehouse_name,omitempty"`
-	SupplierName string           `json:"supplier_name,omitempty"`
-	ReceiptDate time.Time         `json:"receipt_date"`
-	Status      string            `json:"status"`
-	Notes       string            `json:"notes,omitempty"`
-	CreatedBy   uuid.UUID         `json:"created_by"`
-	CreatedAt   time.Time         `json:"created_at"`
-	PostedAt    *time.Time        `json:"posted_at,omitempty"`
-	PostedBy    *uuid.UUID        `json:"posted_by,omitempty"`
-	Lines       []GoodsReceiptLine `json:"lines,omitempty"`
+	ID            uuid.UUID          `json:"id"`
+	TenantID      uuid.UUID          `json:"tenant_id"`
+	GRNo          string             `json:"gr_no"`
+	ReceiptType   string             `json:"receipt_type"`
+	ReferenceNo   string             `json:"reference_no,omitempty"`
+	WarehouseID   uuid.UUID          `json:"warehouse_id"`
+	WarehouseName string             `json:"warehouse_name,omitempty"`
+	SupplierName  string             `json:"supplier_name,omitempty"`
+	ReceiptDate   time.Time          `json:"receipt_date"`
+	Status        string             `json:"status"`
+	Notes         string             `json:"notes,omitempty"`
+	CreatedBy     uuid.UUID          `json:"created_by"`
+	CreatedAt     time.Time          `json:"created_at"`
+	PostedAt      *time.Time         `json:"posted_at,omitempty"`
+	PostedBy      *uuid.UUID         `json:"posted_by,omitempty"`
+	Lines         []GoodsReceiptLine `json:"lines,omitempty"`
 }
 
 type GoodsReceiptLine struct {
@@ -450,47 +450,58 @@ type GoodsReceiptLine struct {
 }
 
 type CreateOutboundRequest struct {
-	OrderType    string              `json:"order_type"`
-	ReferenceNo  string              `json:"reference_no,omitempty"`
-	WarehouseID  uuid.UUID           `json:"warehouse_id" binding:"required"`
-	CustomerName string              `json:"customer_name,omitempty"`
-	Lines        []OutboundLineItem  `json:"lines" binding:"required"`
+	OrderType    string             `json:"order_type"`
+	ReferenceNo  string             `json:"reference_no,omitempty"`
+	WarehouseID  *uuid.UUID         `json:"warehouse_id,omitempty"`
+	CustomerName string             `json:"customer_name,omitempty"`
+	Lines        []OutboundLineItem `json:"lines" binding:"required"`
 }
 
 type OutboundLineItem struct {
-	ProductID  uuid.UUID `json:"product_id" binding:"required"`
-	OrderedQty float64   `json:"ordered_qty" binding:"required"`
+	ProductID   uuid.UUID  `json:"product_id" binding:"required"`
+	WarehouseID *uuid.UUID `json:"warehouse_id,omitempty"`
+	BinID       *uuid.UUID `json:"bin_id,omitempty"`
+	OrderedQty  float64    `json:"ordered_qty" binding:"required"`
 }
 
 type OutboundOrder struct {
-	ID           uuid.UUID          `json:"id"`
-	TenantID     uuid.UUID          `json:"tenant_id"`
-	OrderNo      string             `json:"order_no"`
-	OrderType    string             `json:"order_type"`
-	ReferenceNo  string             `json:"reference_no,omitempty"`
-	WarehouseID  uuid.UUID          `json:"warehouse_id"`
-	WarehouseName string            `json:"warehouse_name,omitempty"`
-	CustomerName string             `json:"customer_name,omitempty"`
-	Status       string             `json:"status"`
-	Priority     string             `json:"priority"`
-	Notes        string             `json:"notes,omitempty"`
-	CreatedBy    uuid.UUID          `json:"created_by"`
-	CreatedAt    time.Time          `json:"created_at"`
-	ShippedAt    *time.Time         `json:"shipped_at,omitempty"`
-	DeliveredAt  *time.Time         `json:"delivered_at,omitempty"`
-	Lines        []OutboundOrderLine `json:"lines,omitempty"`
+	ID            uuid.UUID           `json:"id"`
+	TenantID      uuid.UUID           `json:"tenant_id"`
+	OrderNo       string              `json:"order_no"`
+	OrderType     string              `json:"order_type"`
+	ReferenceNo   string              `json:"reference_no,omitempty"`
+	WarehouseID   uuid.UUID           `json:"warehouse_id"`
+	WarehouseName string              `json:"warehouse_name,omitempty"`
+	CustomerName  string              `json:"customer_name,omitempty"`
+	Status        string              `json:"status"`
+	Priority      string              `json:"priority"`
+	Notes         string              `json:"notes,omitempty"`
+	CreatedBy     uuid.UUID           `json:"created_by"`
+	CreatedAt     time.Time           `json:"created_at"`
+	ShippedAt     *time.Time          `json:"shipped_at,omitempty"`
+	DeliveredAt   *time.Time          `json:"delivered_at,omitempty"`
+	GLJEID        *uuid.UUID          `json:"gl_je_id,omitempty"`
+	IsReversed    bool                `json:"is_reversed"`
+	ReversedAt    *time.Time          `json:"reversed_at,omitempty"`
+	Lines         []OutboundOrderLine `json:"lines,omitempty"`
 }
 
 type OutboundOrderLine struct {
-	ID         uuid.UUID  `json:"id"`
-	OrderID    uuid.UUID  `json:"order_id"`
-	ProductID  uuid.UUID  `json:"product_id"`
-	OrderedQty float64    `json:"ordered_qty"`
-	PickedQty  float64    `json:"picked_qty"`
-	ShippedQty float64    `json:"shipped_qty"`
-	UnitCost   float64    `json:"unit_cost,omitempty"`
-	TotalCost  float64    `json:"total_cost,omitempty"`
-	BatchNo    string     `json:"batch_no,omitempty"`
+	ID            uuid.UUID  `json:"id"`
+	OrderID       uuid.UUID  `json:"order_id"`
+	ProductID     uuid.UUID  `json:"product_id"`
+	WarehouseID   *uuid.UUID `json:"warehouse_id,omitempty"`
+	WarehouseName string     `json:"warehouse_name,omitempty"`
+	BinID         *uuid.UUID `json:"bin_id,omitempty"`
+	BinCode       string     `json:"bin_code,omitempty"`
+	ProductSKU    string     `json:"product_sku,omitempty"`
+	ProductName   string     `json:"product_name,omitempty"`
+	OrderedQty    float64    `json:"ordered_qty"`
+	PickedQty     float64    `json:"picked_qty"`
+	ShippedQty    float64    `json:"shipped_qty"`
+	UnitCost      float64    `json:"unit_cost,omitempty"`
+	TotalCost     float64    `json:"total_cost,omitempty"`
+	BatchNo       string     `json:"batch_no,omitempty"`
 }
 
 type CreateCycleCountRequest struct {
@@ -523,35 +534,35 @@ type CycleCount struct {
 // ── Warehouse Task (REQ-IO-014~018) ──
 
 type WarehouseTask struct {
-	ID          uuid.UUID  `json:"id"`
-	TenantID    uuid.UUID  `json:"tenant_id"`
-	TaskType    string     `json:"task_type"`
-	ReferenceType string   `json:"reference_type,omitempty"`
-	ReferenceID *uuid.UUID `json:"reference_id,omitempty"`
-	ProductID   *uuid.UUID `json:"product_id,omitempty"`
-	ProductName string     `json:"product_name,omitempty"`
+	ID              uuid.UUID  `json:"id"`
+	TenantID        uuid.UUID  `json:"tenant_id"`
+	TaskType        string     `json:"task_type"`
+	ReferenceType   string     `json:"reference_type,omitempty"`
+	ReferenceID     *uuid.UUID `json:"reference_id,omitempty"`
+	ProductID       *uuid.UUID `json:"product_id,omitempty"`
+	ProductName     string     `json:"product_name,omitempty"`
 	FromWarehouseID *uuid.UUID `json:"from_warehouse_id,omitempty"`
-	FromBinID   *uuid.UUID `json:"from_bin_id,omitempty"`
+	FromBinID       *uuid.UUID `json:"from_bin_id,omitempty"`
 	ToWarehouseID   *uuid.UUID `json:"to_warehouse_id,omitempty"`
-	ToBinID     *uuid.UUID `json:"to_bin_id,omitempty"`
-	Quantity    float64    `json:"quantity"`
-	UOM         string     `json:"uom"`
-	BatchNo     string     `json:"batch_no,omitempty"`
-	Status      string     `json:"status"`
-	Priority    string     `json:"priority"`
-	AssignedTo  *uuid.UUID `json:"assigned_to,omitempty"`
-	Notes       string     `json:"notes,omitempty"`
-	CreatedBy   uuid.UUID  `json:"created_by"`
-	CreatedAt   time.Time  `json:"created_at"`
+	ToBinID         *uuid.UUID `json:"to_bin_id,omitempty"`
+	Quantity        float64    `json:"quantity"`
+	UOM             string     `json:"uom"`
+	BatchNo         string     `json:"batch_no,omitempty"`
+	Status          string     `json:"status"`
+	Priority        string     `json:"priority"`
+	AssignedTo      *uuid.UUID `json:"assigned_to,omitempty"`
+	Notes           string     `json:"notes,omitempty"`
+	CreatedBy       uuid.UUID  `json:"created_by"`
+	CreatedAt       time.Time  `json:"created_at"`
 }
 
 type CreateTaskRequest struct {
-	TaskType    string     `json:"task_type" binding:"required"`
-	ProductID   *uuid.UUID `json:"product_id,omitempty"`
+	TaskType        string     `json:"task_type" binding:"required"`
+	ProductID       *uuid.UUID `json:"product_id,omitempty"`
 	FromWarehouseID *uuid.UUID `json:"from_warehouse_id,omitempty"`
-	FromBinID   *uuid.UUID `json:"from_bin_id,omitempty"`
+	FromBinID       *uuid.UUID `json:"from_bin_id,omitempty"`
 	ToWarehouseID   *uuid.UUID `json:"to_warehouse_id,omitempty"`
-	ToBinID     *uuid.UUID `json:"to_bin_id,omitempty"`
-	Quantity    float64    `json:"quantity"`
-	Notes       string     `json:"notes,omitempty"`
+	ToBinID         *uuid.UUID `json:"to_bin_id,omitempty"`
+	Quantity        float64    `json:"quantity"`
+	Notes           string     `json:"notes,omitempty"`
 }

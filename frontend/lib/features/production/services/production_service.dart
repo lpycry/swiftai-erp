@@ -3,77 +3,104 @@ import 'package:http/http.dart' as http;
 
 class ProductionService {
   final String _token;
-  final String _baseUrl = 'http://localhost:8080/api/v1/production';
 
   ProductionService(this._token);
+
+  static const String _host = 'http://localhost:8080/api/v1';
+
+  String get _bomBase => '$_host/bom';
+  String get _productionBase => '$_host/production';
+  String get _routingBase => '$_productionBase/routing-templates';
+  String get _templateOperationBase => '$_productionBase/template-operations';
+  String get _ordersBase => '$_productionBase/orders';
 
   Map<String, String> get _headers => {
     'Content-Type': 'application/json',
     'Authorization': 'Bearer $_token',
   };
 
-  // ── BOM (FSD §6) — routes are at /api/v1/bom
-  String get _bomBase => 'http://localhost:8080/api/v1/bom';
+  dynamic _decode(http.Response resp) {
+    if (resp.body.isEmpty) return null;
+    return jsonDecode(resp.body);
+  }
 
-  /// Create BOM with nested items per FSD §6.1
+  Exception _apiException(http.Response resp, String fallback) {
+    try {
+      final body = _decode(resp);
+      return Exception(body?['message'] ?? fallback);
+    } catch (_) {
+      return Exception(fallback);
+    }
+  }
+
+  // ── BOM ──
+
   Future<Map<String, dynamic>> createBOM(Map<String, dynamic> data) async {
     final resp = await http.post(
-      Uri.parse('$_bomBase'),
+      Uri.parse(_bomBase),
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Create BOM failed');
+      throw _apiException(resp, 'Create BOM failed');
     }
-    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
   }
 
-  /// List BOMs (filterable by material_id, status)
   Future<List<dynamic>> listBOMs({String? materialId, String? status}) async {
     final params = <String, String>{};
+
     if (materialId != null) params['material_id'] = materialId;
     if (status != null) params['status'] = status;
+
     final uri = Uri.parse(
-      '$_bomBase',
+      _bomBase,
     ).replace(queryParameters: params.isNotEmpty ? params : null);
+
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400)
-      throw Exception('API error: ${resp.statusCode}');
-    return jsonDecode(resp.body)['data'] as List<dynamic>? ?? [];
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'List BOMs failed');
+    }
+
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
   }
 
-  /// Get BOM detail with items
   Future<Map<String, dynamic>> getBOM(String id) async {
     final resp = await http.get(Uri.parse('$_bomBase/$id'), headers: _headers);
-    if (resp.statusCode >= 400)
-      throw Exception('API error: ${resp.statusCode}');
-    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Get BOM failed');
+    }
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
   }
 
-  /// Update BOM header
   Future<void> updateBOM(String id, Map<String, dynamic> data) async {
     final resp = await http.put(
       Uri.parse('$_bomBase/$id'),
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Update failed');
+      throw _apiException(resp, 'Update BOM failed');
     }
   }
 
-  /// Soft delete BOM
   Future<void> deleteBOM(String id) async {
     final resp = await http.delete(
       Uri.parse('$_bomBase/$id'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('Delete failed');
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Delete BOM failed');
+    }
   }
 
-  /// Add item to BOM
   Future<Map<String, dynamic>> addBOMItem(
     String bomId,
     Map<String, dynamic> data,
@@ -83,36 +110,37 @@ class ProductionService {
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Add item failed');
+      throw _apiException(resp, 'Add BOM item failed');
     }
-    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
   }
 
-  /// Update BOM item
   Future<void> updateBOMItem(String itemId, Map<String, dynamic> data) async {
     final resp = await http.put(
       Uri.parse('$_bomBase/items/$itemId'),
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Update item failed');
+      throw _apiException(resp, 'Update BOM item failed');
     }
   }
 
-  /// Delete BOM item
   Future<void> deleteBOMItem(String itemId) async {
     final resp = await http.delete(
       Uri.parse('$_bomBase/items/$itemId'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('Delete item failed');
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Delete BOM item failed');
+    }
   }
 
-  /// BOM Explosion (FSD §4.2)
   Future<List<dynamic>> explodeBOM({
     required String materialId,
     String? bomVersion,
@@ -129,81 +157,120 @@ class ProductionService {
         'requirement_qty': requirementQty,
       }),
     );
-    if (resp.statusCode >= 400)
-      throw Exception('BOM explosion failed: ${resp.statusCode}');
-    return jsonDecode(resp.body)['data'] as List<dynamic>? ?? [];
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'BOM explosion failed');
+    }
+
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
   }
 
   // ── Work Centers ──
+
   Future<List<dynamic>> listWorkCenters() async {
     final resp = await http.get(
-      Uri.parse('http://localhost:8080/api/v1/production/work-centers'),
+      Uri.parse('$_productionBase/work-centers'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400)
-      throw Exception('API error: ${resp.statusCode}');
-    return jsonDecode(resp.body)['data'] as List<dynamic>? ?? [];
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'List work centers failed');
+    }
+
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
   }
 
   Future<Map<String, dynamic>> createWorkCenter(
     Map<String, dynamic> data,
   ) async {
     final resp = await http.post(
-      Uri.parse('http://localhost:8080/api/v1/production/work-centers'),
+      Uri.parse('$_productionBase/work-centers'),
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Create failed');
+      throw _apiException(resp, 'Create work center failed');
     }
-    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<Map<String, dynamic>> getWorkCenter(String id) async {
+    final resp = await http.get(
+      Uri.parse('$_productionBase/work-centers/$id'),
+      headers: _headers,
+    );
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Get work center failed');
+    }
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
   }
 
   Future<void> updateWorkCenter(String id, Map<String, dynamic> data) async {
     final resp = await http.put(
-      Uri.parse('http://localhost:8080/api/v1/production/work-centers/${id}'),
+      Uri.parse('$_productionBase/work-centers/$id'),
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Update failed');
+      throw _apiException(resp, 'Update work center failed');
     }
   }
 
   Future<void> deleteWorkCenter(String id) async {
     final resp = await http.delete(
-      Uri.parse('http://localhost:8080/api/v1/production/work-centers/${id}'),
+      Uri.parse('$_productionBase/work-centers/$id'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('Delete failed');
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Delete work center failed');
+    }
   }
 
   // ── Routing Templates ──
+
   Future<List<dynamic>> listRoutingTemplates() async {
+    final resp = await http.get(Uri.parse(_routingBase), headers: _headers);
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'List routing templates failed');
+    }
+
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<Map<String, dynamic>> getRoutingTemplate(String id) async {
     final resp = await http.get(
-      Uri.parse('http://localhost:8080/api/v1/production/routing-templates'),
+      Uri.parse('$_routingBase/$id'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400)
-      throw Exception('API error: ${resp.statusCode}');
-    return jsonDecode(resp.body)['data'] as List<dynamic>? ?? [];
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Get routing template failed');
+    }
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
   }
 
   Future<Map<String, dynamic>> createRoutingTemplate(
     Map<String, dynamic> data,
   ) async {
     final resp = await http.post(
-      Uri.parse('http://localhost:8080/api/v1/production/routing-templates'),
+      Uri.parse(_routingBase),
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Create failed');
+      throw _apiException(resp, 'Create routing template failed');
     }
-    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
   }
 
   Future<void> updateRoutingTemplate(
@@ -211,58 +278,74 @@ class ProductionService {
     Map<String, dynamic> data,
   ) async {
     final resp = await http.put(
-      Uri.parse(
-        'http://localhost:8080/api/v1/production/routing-templates/${id}',
-      ),
+      Uri.parse('$_routingBase/$id'),
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Update failed');
+      throw _apiException(resp, 'Update routing template failed');
     }
   }
 
   Future<void> deleteRoutingTemplate(String id) async {
     final resp = await http.delete(
-      Uri.parse(
-        'http://localhost:8080/api/v1/production/routing-templates/${id}',
-      ),
+      Uri.parse('$_routingBase/$id'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('Delete failed');
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Delete routing template failed');
+    }
   }
 
   // ── Template Operations ──
+  // Optional APIs. Routing Template page should mainly use updateRoutingTemplate()
+  // with operations[] instead of calling these one by one.
+
   Future<Map<String, dynamic>> createTemplateOperation(
     Map<String, dynamic> data,
   ) async {
     final resp = await http.post(
-      Uri.parse(
-        'http://localhost:8080/api/v1/production/routing-templates/${data['template_id']}/operations',
-      ),
+      Uri.parse(_templateOperationBase),
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Create failed');
+      throw _apiException(resp, 'Create template operation failed');
     }
-    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<void> updateTemplateOperation(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.put(
+      Uri.parse('$_templateOperationBase/$id'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Update template operation failed');
+    }
   }
 
   Future<void> deleteTemplateOperation(String id) async {
     final resp = await http.delete(
-      Uri.parse(
-        'http://localhost:8080/api/v1/production/template-operations/${id}',
-      ),
+      Uri.parse('$_templateOperationBase/$id'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('Delete failed');
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Delete template operation failed');
+    }
   }
 
   // ── Production Orders ──
-  String get _ordersBase => 'http://localhost:8080/api/v1/production/orders';
 
   Future<Map<String, dynamic>> createProductionOrder(
     Map<String, dynamic> data,
@@ -272,11 +355,12 @@ class ProductionService {
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Create production order failed');
+      throw _apiException(resp, 'Create production order failed');
     }
-    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
   }
 
   Future<List<dynamic>> listProductionOrders({
@@ -284,22 +368,34 @@ class ProductionService {
     String? status,
   }) async {
     final params = <String, String>{};
+
     if (materialId != null) params['material_id'] = materialId;
     if (status != null) params['status'] = status;
-    final uri = Uri.parse(_ordersBase)
-        .replace(queryParameters: params.isNotEmpty ? params : null);
+
+    final uri = Uri.parse(
+      _ordersBase,
+    ).replace(queryParameters: params.isNotEmpty ? params : null);
+
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400)
-      throw Exception('API error: ${resp.statusCode}');
-    return jsonDecode(resp.body)['data'] as List<dynamic>? ?? [];
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'List production orders failed');
+    }
+
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
   }
 
   Future<Map<String, dynamic>> getProductionOrder(String id) async {
-    final resp =
-        await http.get(Uri.parse('$_ordersBase/$id'), headers: _headers);
-    if (resp.statusCode >= 400)
-      throw Exception('API error: ${resp.statusCode}');
-    return jsonDecode(resp.body)['data'] as Map<String, dynamic>? ?? {};
+    final resp = await http.get(
+      Uri.parse('$_ordersBase/$id'),
+      headers: _headers,
+    );
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Get production order failed');
+    }
+
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
   }
 
   Future<void> updateProductionOrder(
@@ -311,9 +407,9 @@ class ProductionService {
       headers: _headers,
       body: jsonEncode(data),
     );
+
     if (resp.statusCode >= 400) {
-      final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Update failed');
+      throw _apiException(resp, 'Update production order failed');
     }
   }
 
@@ -322,7 +418,10 @@ class ProductionService {
       Uri.parse('$_ordersBase/$id'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('Delete failed');
+
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Delete production order failed');
+    }
   }
 
   Future<Map<String, dynamic>?> getProductionOrderRouting(String poId) async {
@@ -330,8 +429,59 @@ class ProductionService {
       Uri.parse('$_ordersBase/$poId/routing'),
       headers: _headers,
     );
+
     if (resp.statusCode >= 400) return null;
-    final body = jsonDecode(resp.body);
-    return (body['data'] as Map<String, dynamic>?);
+
+    return _decode(resp)?['data'] as Map<String, dynamic>?;
+  }
+
+  Future<void> syncPOMaterials(String poId) async {
+    final resp = await http.post(
+      Uri.parse('$_ordersBase/$poId/sync-materials'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Sync materials failed');
+    }
+  }
+
+  Future<void> updatePOMaterialIssueQty(
+    String materialId,
+    double issueQty,
+  ) async {
+    final resp = await http.put(
+      Uri.parse('$_ordersBase/materials/$materialId/issue-qty'),
+      headers: _headers,
+      body: jsonEncode({'issue_qty': issueQty}),
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Update issue qty failed');
+    }
+  }
+
+  Future<Map<String, dynamic>> createTimeConfirmation(
+    String productionOrderId,
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.post(
+      Uri.parse('$_ordersBase/$productionOrderId/time-confirmations'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Create time confirmation failed');
+    }
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<List<dynamic>> listTimeConfirmations(String productionOrderId) async {
+    final resp = await http.get(
+      Uri.parse('$_ordersBase/$productionOrderId/time-confirmations'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'List time confirmations failed');
+    }
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
   }
 }
