@@ -407,7 +407,7 @@ class AppLayout extends StatelessWidget {
   Widget _buildDrawer(BuildContext context) {
     return Drawer(
       width: 280,
-      child: Container(
+      child: Material(
         color: AppTheme.sidebarBg,
         child: ListView(
           padding: EdgeInsets.zero,

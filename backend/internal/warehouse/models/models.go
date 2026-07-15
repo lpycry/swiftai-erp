@@ -26,45 +26,69 @@ type Product struct {
 	MaterialType  string     `json:"material_type,omitempty"`
 	BlockReason   string     `json:"block_reason,omitempty"`
 	// Product Taxability
-	TaxCategory              string           `json:"tax_category"`
-	TaxRate                  *float64         `json:"tax_rate,omitempty"`
-	TaxType                  string           `json:"tax_type"`
-	TaxExemptReason          string           `json:"tax_exempt_reason,omitempty"`
-	DefaultTaxJurisdictionID *uuid.UUID       `json:"default_tax_jurisdiction_id,omitempty"`
-	DimensionLength          *float64         `json:"dimension_length,omitempty"`
-	DimensionWidth           *float64         `json:"dimension_width,omitempty"`
-	DimensionHeight          *float64         `json:"dimension_height,omitempty"`
-	DimensionUnit            string           `json:"dimension_unit"`
-	GrossWeight              *float64         `json:"gross_weight,omitempty"`
-	NetWeight                *float64         `json:"net_weight,omitempty"`
-	WeightUnit               string           `json:"weight_unit"`
-	VolumeM3                 *float64         `json:"volume_m3,omitempty"`
-	StandardCost             float64          `json:"standard_cost"`
-	MovingAvgCost            float64          `json:"moving_avg_cost,omitempty"`
-	LastCost                 float64          `json:"last_cost"`
-	AvgCost                  float64          `json:"avg_cost"`
-	ValuationClass           string           `json:"valuation_class,omitempty"`
-	ABCClassification        string           `json:"abc_classification,omitempty"`
-	MinStockQty              *float64         `json:"min_stock_qty,omitempty"`
-	MaxStockQty              *float64         `json:"max_stock_qty,omitempty"`
-	ReorderPoint             *float64         `json:"reorder_point,omitempty"`
-	ReorderQty               *float64         `json:"reorder_qty,omitempty"`
-	LeadTimeDays             *int             `json:"lead_time_days,omitempty"`
-	ProcurementType          string           `json:"procurement_type,omitempty"`
-	StorageCondition         string           `json:"storage_condition,omitempty"`
-	CountryOfOrigin          string           `json:"country_of_origin,omitempty"`
-	HSCode                   string           `json:"hs_code,omitempty"`
-	WeightKg                 *float64         `json:"weight_kg,omitempty"`
-	IsActive                 bool             `json:"is_active"`
-	CreatedAt                time.Time        `json:"created_at"`
-	UpdatedAt                time.Time        `json:"updated_at"`
-	Photos                   []ProductPhoto   `json:"photos,omitempty"`
-	Barcodes                 []ProductBarcode `json:"barcodes,omitempty"`
+	TaxCategory              string             `json:"tax_category"`
+	TaxRate                  *float64           `json:"tax_rate,omitempty"`
+	TaxType                  string             `json:"tax_type"`
+	TaxExemptReason          string             `json:"tax_exempt_reason,omitempty"`
+	DefaultTaxJurisdictionID *uuid.UUID         `json:"default_tax_jurisdiction_id,omitempty"`
+	DimensionLength          *float64           `json:"dimension_length,omitempty"`
+	DimensionWidth           *float64           `json:"dimension_width,omitempty"`
+	DimensionHeight          *float64           `json:"dimension_height,omitempty"`
+	DimensionUnit            string             `json:"dimension_unit"`
+	GrossWeight              *float64           `json:"gross_weight,omitempty"`
+	NetWeight                *float64           `json:"net_weight,omitempty"`
+	WeightUnit               string             `json:"weight_unit"`
+	VolumeM3                 *float64           `json:"volume_m3,omitempty"`
+	StandardCost             float64            `json:"standard_cost"`
+	MovingAvgCost            float64            `json:"moving_avg_cost,omitempty"`
+	LastCost                 float64            `json:"last_cost"`
+	AvgCost                  float64            `json:"avg_cost"`
+	ValuationClass           string             `json:"valuation_class,omitempty"`
+	ABCClassification        string             `json:"abc_classification,omitempty"`
+	MinStockQty              *float64           `json:"min_stock_qty,omitempty"`
+	MaxStockQty              *float64           `json:"max_stock_qty,omitempty"`
+	ReorderPoint             *float64           `json:"reorder_point,omitempty"`
+	ReorderQty               *float64           `json:"reorder_qty,omitempty"`
+	LeadTimeDays             *int               `json:"lead_time_days,omitempty"`
+	ProcurementType          string             `json:"procurement_type,omitempty"`
+	StorageCondition         string             `json:"storage_condition,omitempty"`
+	CountryOfOrigin          string             `json:"country_of_origin,omitempty"`
+	HSCode                   string             `json:"hs_code,omitempty"`
+	WeightKg                 *float64           `json:"weight_kg,omitempty"`
+	IsActive                 bool               `json:"is_active"`
+	CreatedAt                time.Time          `json:"created_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+	Photos                   []ProductPhoto     `json:"photos,omitempty"`
+	Barcodes                 []ProductBarcode   `json:"barcodes,omitempty"`
+	PlantData                []ProductPlantData `json:"plant_data,omitempty"`
 	// Production Tab fields
-	MRPEnabled            bool `json:"mrp_enabled"`
-	PhantomAssembly       bool `json:"phantom_assembly"`
-	ProductionLeadTime    *int `json:"production_lead_time,omitempty"`
-	InHouseProductionDays *int `json:"in_house_production_days,omitempty"`
+	MRPEnabled            bool   `json:"mrp_enabled"`
+	MRPType               string `json:"mrp_type"`
+	PhantomAssembly       bool   `json:"phantom_assembly"`
+	ProductionLeadTime    *int   `json:"production_lead_time,omitempty"`
+	InHouseProductionDays *int   `json:"in_house_production_days,omitempty"`
+}
+
+type ProductPlantData struct {
+	ID                           uuid.UUID  `json:"id"`
+	TenantID                     uuid.UUID  `json:"tenant_id"`
+	ProductID                    uuid.UUID  `json:"product_id"`
+	SiteID                       uuid.UUID  `json:"site_id"`
+	SiteCode                     string     `json:"site_code,omitempty"`
+	SiteName                     string     `json:"site_name,omitempty"`
+	MRPType                      string     `json:"mrp_type"`
+	ProcurementType              string     `json:"procurement_type"`
+	SafetyStock                  *float64   `json:"safety_stock,omitempty"`
+	ReorderPoint                 *float64   `json:"reorder_point,omitempty"`
+	ReorderQty                   *float64   `json:"reorder_qty,omitempty"`
+	LeadTimeDays                 *int       `json:"lead_time_days,omitempty"`
+	PlanningTimeFenceDays        int        `json:"planning_time_fence_days"`
+	DefaultProductionWarehouseID *uuid.UUID `json:"default_production_warehouse_id,omitempty"`
+	DefaultReceivingWarehouseID  *uuid.UUID `json:"default_receiving_warehouse_id,omitempty"`
+	StandardCost                 *float64   `json:"standard_cost,omitempty"`
+	MovingAvgCost                *float64   `json:"moving_avg_cost,omitempty"`
+	ValuationClass               string     `json:"valuation_class,omitempty"`
+	IsActive                     bool       `json:"is_active"`
 }
 
 type CreateProductRequest struct {
@@ -110,10 +134,12 @@ type CreateProductRequest struct {
 	IsSerialized             bool       `json:"is_serialized"`
 	MaterialType             string     `json:"material_type,omitempty"`
 	// Production Tab fields
-	MRPEnabled            bool `json:"mrp_enabled"`
-	PhantomAssembly       bool `json:"phantom_assembly"`
-	ProductionLeadTime    *int `json:"production_lead_time,omitempty"`
-	InHouseProductionDays *int `json:"in_house_production_days,omitempty"`
+	MRPEnabled            bool               `json:"mrp_enabled"`
+	MRPType               string             `json:"mrp_type,omitempty"`
+	PhantomAssembly       bool               `json:"phantom_assembly"`
+	ProductionLeadTime    *int               `json:"production_lead_time,omitempty"`
+	InHouseProductionDays *int               `json:"in_house_production_days,omitempty"`
+	PlantData             []ProductPlantData `json:"plant_data,omitempty"`
 }
 
 type UpdateProductRequest struct {
@@ -159,11 +185,13 @@ type UpdateProductRequest struct {
 	IsActive                 *bool      `json:"is_active,omitempty"`
 	IsBlocked                *bool      `json:"is_blocked,omitempty"`
 	// Production Tab fields
-	MRPEnabled            *bool   `json:"mrp_enabled,omitempty"`
-	PhantomAssembly       *bool   `json:"phantom_assembly,omitempty"`
-	ProductionLeadTime    *int    `json:"production_lead_time,omitempty"`
-	InHouseProductionDays *int    `json:"in_house_production_days,omitempty"`
-	MaterialType          *string `json:"material_type,omitempty"`
+	MRPEnabled            *bool              `json:"mrp_enabled,omitempty"`
+	MRPType               *string            `json:"mrp_type,omitempty"`
+	PhantomAssembly       *bool              `json:"phantom_assembly,omitempty"`
+	ProductionLeadTime    *int               `json:"production_lead_time,omitempty"`
+	InHouseProductionDays *int               `json:"in_house_production_days,omitempty"`
+	MaterialType          *string            `json:"material_type,omitempty"`
+	PlantData             []ProductPlantData `json:"plant_data,omitempty"`
 }
 
 // ProductPhoto (REQ-MM-001~010)

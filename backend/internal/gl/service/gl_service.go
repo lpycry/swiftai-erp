@@ -113,7 +113,7 @@ func (s *GLService) CreateJournalEntry(ctx context.Context, tenantID, userID uui
 
 func allowsReconciliationPosting(source string) bool {
 	switch source {
-	case "purchase", "warehouse", "production":
+	case "purchase", "warehouse", "production", "clearing":
 		return true
 	default:
 		return false
@@ -348,13 +348,14 @@ func (s *GLService) ReverseJournalEntry(ctx context.Context, tenantID, userID uu
 	// Create reversal entry via repo directly (bypasses service-level negative amount check)
 	// The original entry's accounts were already validated during posting
 	reversal, err := s.entryRepo.Create(ctx, tenantID, userID, &glmodels.CreateJournalEntryRequest{
-		PostingDate: time.Now(),
-		PeriodID:    original.PeriodID,
-		Description: "Reversal of " + original.DocumentNo + ": " + original.Description,
-		Reference:   original.DocumentNo,
-		EntryType:   "reversal",
-		Source:      "manual",
-		Lines:       revLines,
+		PostingDate:    time.Now(),
+		PeriodID:       original.PeriodID,
+		Description:    "Reversal of " + original.DocumentNo + ": " + original.Description,
+		Reference:      original.DocumentNo,
+		EntryType:      "reversal",
+		Source:         original.Source,
+		OrganizationID: original.OrganizationID,
+		Lines:          revLines,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create reversal: %w", err)
@@ -672,16 +673,96 @@ func (s *GLService) ResetDatabase(ctx context.Context) error {
 		"user_roles",
 		"sod_rules",
 	}
+	tables = resetDatabaseTables()
 	for _, t := range tables {
-		// Use IF EXISTS to tolerate tables that may not exist yet in all envs
-		_, err := s.db.Exec(ctx, "DELETE FROM "+t+" WHERE 1=1")
-		if err != nil {
-			// Soft-fail: log the error but continue clearing other tables
-			// so a missing table doesn't block the whole reset
-			fmt.Printf("WARN: ResetDatabase skip %s: %v\n", t, err)
+		var tableName *string
+		if err := s.db.QueryRow(ctx, "SELECT to_regclass($1)::text", t).Scan(&tableName); err != nil {
+			return fmt.Errorf("check reset table %s: %w", t, err)
+		}
+		if tableName == nil {
+			continue
+		}
+		if _, err := s.db.Exec(ctx, "DELETE FROM "+t); err != nil {
+			return fmt.Errorf("reset table %s: %w", t, err)
 		}
 	}
 	return nil
+}
+
+func resetDatabaseTables() []string {
+	return []string{
+		"mrp_exception_messages",
+		"mrp_planned_purchase_requisitions",
+		"mrp_runs",
+		"mps_exception_messages",
+		"mps_dependent_demands",
+		"mps_planned_orders",
+		"mps_runs",
+		"product_independent_requirements",
+
+		"work_order_receipts",
+		"production_order_time_confirmations",
+		"production_order_operations",
+		"production_order_materials",
+		"production_orders",
+
+		"sales_order_item_schedule_lines",
+		"sales_order_items",
+		"sales_orders",
+		"quotation_items",
+		"quotations",
+
+		"vendor_payment_allocations",
+		"vendor_payments",
+		"purchase_dp_refunds",
+		"purchase_dp_clearings",
+		"purchase_down_payments",
+		"down_payments",
+		"purchase_payments",
+		"invoice_items",
+		"purchase_invoice_items",
+		"purchase_invoices",
+		"po_attachments",
+		"purchase_receipts",
+		"asn_lines",
+		"asn_headers",
+		"purchase_order_items",
+		"purchase_orders",
+
+		"customer_down_payments",
+
+		"goods_receipt_lines",
+		"goods_receipts",
+		"outbound_order_lines",
+		"outbound_orders",
+		"stock_movements",
+		"warehouse_tasks",
+		"cycle_count_items",
+		"cycle_counts",
+		"serial_numbers",
+		"batches",
+		"stock_items",
+		"stock_on_hand",
+
+		"gl_account_balances",
+		"gl_entry_attachments",
+		"gl_journal_lines",
+		"gl_journal_entries",
+		"gl_document_seq",
+
+		"audit_log",
+		"sessions",
+
+		"material_prices",
+		"uom_conversions",
+		"product_barcodes",
+		"product_photos",
+		"product_plant_data",
+		"bom_items",
+		"bom_headers",
+		"routings",
+		"products",
+	}
 }
 
 // DeleteJournalEntry deletes a draft journal entry.

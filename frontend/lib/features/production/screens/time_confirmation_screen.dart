@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:swiftai_erp/core/services/auth_service.dart';
+import 'package:swiftai_erp/core/services/fmt.dart';
 import 'package:swiftai_erp/core/widgets/app_layout.dart';
 import 'package:swiftai_erp/features/production/services/production_service.dart';
 
@@ -221,7 +222,7 @@ class _ProductionTimeConfirmationScreenState
       v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
 
   String _dt(DateTime dt) {
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+    return '${Fmt.d(dt)} '
         '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
@@ -231,7 +232,7 @@ class _ProductionTimeConfirmationScreenState
     try {
       return _dt(DateTime.parse(text).toLocal());
     } catch (_) {
-      return text.length > 16 ? text.substring(0, 16) : text;
+      return Fmt.dateTimeStr(text);
     }
   }
 

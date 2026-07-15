@@ -15,6 +15,7 @@ class AccountModel {
   final bool isLeaf;
   final String? description;
   final String reconciliationType;
+  final bool openItemManaged;
   final List<AccountModel>? children;
 
   AccountModel({
@@ -29,6 +30,7 @@ class AccountModel {
     this.isLeaf = true,
     this.description,
     this.reconciliationType = 'none',
+    this.openItemManaged = false,
     this.children,
   });
 
@@ -37,7 +39,10 @@ class AccountModel {
       id: json['id']?.toString() ?? '',
       code: json['account_code']?.toString() ?? json['code']?.toString() ?? '',
       name: json['account_name']?.toString() ?? json['name']?.toString() ?? '',
-      type: json['account_type']?.toString() ?? json['type']?.toString() ?? 'ASSET',
+      type:
+          json['account_type']?.toString() ??
+          json['type']?.toString() ??
+          'ASSET',
       balance: (json['balance'] as num?)?.toDouble() ?? 0,
       parentId: json['parent_id']?.toString(),
       level: (json['level'] as int?) ?? 1,
@@ -45,6 +50,7 @@ class AccountModel {
       isLeaf: json['is_leaf'] as bool? ?? true,
       description: json['description']?.toString(),
       reconciliationType: json['reconciliation_type']?.toString() ?? 'none',
+      openItemManaged: json['open_item_managed'] as bool? ?? false,
       children: (json['children'] as List<dynamic>?)
           ?.map((e) => AccountModel.fromJson(e as Map<String, dynamic>))
           .toList(),
@@ -123,9 +129,9 @@ class GlService {
   GlService(this._token);
 
   Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_token',
-      };
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $_token',
+  };
 
   // ==================== Chart of Accounts CRUD ====================
 
@@ -135,10 +141,13 @@ class GlService {
       Uri.parse('$_baseUrl/gl/accounts/tree'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     final data = body['data'] as List<dynamic>? ?? [];
-    return data.map((e) => AccountModel.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => AccountModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// List all accounts
@@ -147,25 +156,28 @@ class GlService {
       Uri.parse('$_baseUrl/gl/accounts'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     final data = body['data'] as List<dynamic>? ?? [];
-    return data.map((e) => AccountModel.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => AccountModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// Search accounts by keyword
   Future<List<AccountModel>> searchAccounts(String query) async {
-    final uri = Uri.parse('$_baseUrl/gl/accounts/search').replace(
-      queryParameters: {'q': query},
-    );
-    final resp = await http.get(
-      uri,
-      headers: _headers,
-    );
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    final uri = Uri.parse(
+      '$_baseUrl/gl/accounts/search',
+    ).replace(queryParameters: {'q': query});
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     final data = body['data'] as List<dynamic>? ?? [];
-    return data.map((e) => AccountModel.fromJson(e as Map<String, dynamic>)).toList();
+    return data
+        .map((e) => AccountModel.fromJson(e as Map<String, dynamic>))
+        .toList();
   }
 
   /// Get single account detail
@@ -174,7 +186,8 @@ class GlService {
       Uri.parse('$_baseUrl/gl/accounts/$id'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return AccountModel.fromJson(body['data'] as Map<String, dynamic>? ?? body);
   }
@@ -195,7 +208,10 @@ class GlService {
   }
 
   /// Update an account
-  Future<AccountModel> updateAccount(String id, Map<String, dynamic> data) async {
+  Future<AccountModel> updateAccount(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     final resp = await http.put(
       Uri.parse('$_baseUrl/gl/accounts/$id'),
       headers: _headers,
@@ -237,7 +253,9 @@ class GlService {
 
   // ==================== Journal Entries ====================
 
-  Future<Map<String, dynamic>> createJournalEntry(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createJournalEntry(
+    Map<String, dynamic> data,
+  ) async {
     final resp = await http.post(
       Uri.parse('$_baseUrl/gl/journal-entries'),
       headers: _headers,
@@ -260,18 +278,19 @@ class GlService {
     String? dateTo,
     String? query,
   }) async {
-    final params = <String, String>{
-      'page': '$page',
-      'page_size': '$pageSize',
-    };
+    final params = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (status != null && status.isNotEmpty) params['status'] = status;
-    if (entryType != null && entryType.isNotEmpty) params['entry_type'] = entryType;
+    if (entryType != null && entryType.isNotEmpty)
+      params['entry_type'] = entryType;
     if (dateFrom != null && dateFrom.isNotEmpty) params['date_from'] = dateFrom;
     if (dateTo != null && dateTo.isNotEmpty) params['date_to'] = dateTo;
 
-    final uri = Uri.parse('$_baseUrl/gl/journal-entries').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/gl/journal-entries',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return body['data'] as List<dynamic>? ?? [];
   }
@@ -282,12 +301,16 @@ class GlService {
       Uri.parse('$_baseUrl/gl/journal-entries/$id'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return body['data'] as Map<String, dynamic>? ?? body;
   }
 
-  Future<Map<String, dynamic>> reverseJournalEntry(String id, {String reversalType = 'negative'}) async {
+  Future<Map<String, dynamic>> reverseJournalEntry(
+    String id, {
+    String reversalType = 'negative',
+  }) async {
     final resp = await http.post(
       Uri.parse('$_baseUrl/gl/journal-entries/$id/reverse'),
       headers: _headers,
@@ -302,7 +325,10 @@ class GlService {
   }
 
   /// Update journal entry status (draft / posted)
-  Future<Map<String, dynamic>> updateJournalEntryStatus(String id, String status) async {
+  Future<Map<String, dynamic>> updateJournalEntryStatus(
+    String id,
+    String status,
+  ) async {
     final resp = await http.patch(
       Uri.parse('$_baseUrl/gl/journal-entries/$id/status'),
       headers: _headers,
@@ -310,14 +336,19 @@ class GlService {
     );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
-      throw Exception(body['message'] ?? 'Failed to update journal entry status');
+      throw Exception(
+        body['message'] ?? 'Failed to update journal entry status',
+      );
     }
     final body = jsonDecode(resp.body);
     return body['data'] as Map<String, dynamic>? ?? body;
   }
 
   /// Update a draft journal entry (header + lines replacement)
-  Future<Map<String, dynamic>> updateJournalEntry(String id, Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> updateJournalEntry(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     final resp = await http.put(
       Uri.parse('$_baseUrl/gl/journal-entries/$id'),
       headers: _headers,
@@ -336,7 +367,9 @@ class GlService {
     final resp = await http.post(
       Uri.parse('$_baseUrl/gl/journal-entries/post'),
       headers: _headers,
-      body: jsonEncode({'entry_ids': [id]}),
+      body: jsonEncode({
+        'entry_ids': [id],
+      }),
     );
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
@@ -359,18 +392,172 @@ class GlService {
     }
   }
 
+  Future<List<dynamic>> listOpenItems(String accountId) async {
+    final uri = Uri.parse(
+      '$_baseUrl/gl/open-items',
+    ).replace(queryParameters: {'account_id': accountId});
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to load open items');
+    }
+    final body = jsonDecode(resp.body);
+    return body['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<List<dynamic>> listClearedItems(String accountId) async {
+    final uri = Uri.parse(
+      '$_baseUrl/gl/cleared-items',
+    ).replace(queryParameters: {'account_id': accountId});
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to load cleared items');
+    }
+    final body = jsonDecode(resp.body);
+    return body['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<Map<String, dynamic>> createClearing(Map<String, dynamic> data) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/gl/clearings'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      final errors = body['errors'];
+      final detail = errors is List && errors.isNotEmpty
+          ? errors
+                .map((e) => e is Map ? e['message']?.toString() : null)
+                .whereType<String>()
+                .join('; ')
+          : '';
+      throw Exception(
+        detail.isNotEmpty
+            ? '${body['message'] ?? 'Failed to create clearing'}: $detail'
+            : body['message'] ?? 'Failed to create clearing',
+      );
+    }
+    final body = jsonDecode(resp.body);
+    return body['data'] as Map<String, dynamic>? ?? body;
+  }
+
+  Future<List<dynamic>> listARCustomers({String? query}) async {
+    final params = <String, String>{};
+    if (query != null && query.trim().isNotEmpty) {
+      params['q'] = query.trim();
+    }
+    final uri = Uri.parse(
+      '$_baseUrl/gl/ar/customers',
+    ).replace(queryParameters: params.isEmpty ? null : params);
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to load AR customers');
+    }
+    final body = jsonDecode(resp.body);
+    return body['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<List<dynamic>> listAROpenInvoices(String customerId) async {
+    final uri = Uri.parse(
+      '$_baseUrl/gl/ar/open-invoices',
+    ).replace(queryParameters: {'customer_id': customerId});
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to load open invoices');
+    }
+    final body = jsonDecode(resp.body);
+    return body['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<Map<String, dynamic>> createIncomingPayment(
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/gl/ar/incoming-payments'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      final errors = body['errors'];
+      final detail = errors is List && errors.isNotEmpty
+          ? errors
+                .map((e) => e is Map ? e['message']?.toString() : null)
+                .whereType<String>()
+                .join('; ')
+          : '';
+      throw Exception(
+        detail.isNotEmpty
+            ? '${body['message'] ?? 'Failed to post incoming payment'}: $detail'
+            : body['message'] ?? 'Failed to post incoming payment',
+      );
+    }
+    final body = jsonDecode(resp.body);
+    return body['data'] as Map<String, dynamic>? ?? body;
+  }
+
+  Future<List<dynamic>> listAROpenCreditMemos(String customerId) async {
+    final uri = Uri.parse(
+      '$_baseUrl/gl/ar/credit-memos',
+    ).replace(queryParameters: {'customer_id': customerId});
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Failed to load credit memos');
+    }
+    final body = jsonDecode(resp.body);
+    return body['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<Map<String, dynamic>> createCreditMemoClearing(
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/gl/ar/credit-memo-clearings'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      final errors = body['errors'];
+      final detail = errors is List && errors.isNotEmpty
+          ? errors
+                .map((e) => e is Map ? e['message']?.toString() : null)
+                .whereType<String>()
+                .join('; ')
+          : '';
+      throw Exception(
+        detail.isNotEmpty
+            ? '${body['message'] ?? 'Failed to post credit memo'}: $detail'
+            : body['message'] ?? 'Failed to post credit memo',
+      );
+    }
+    final body = jsonDecode(resp.body);
+    return body['data'] as Map<String, dynamic>? ?? body;
+  }
+
   /// Get account ledger (running balance)
-  Future<List<dynamic>> getAccountLedger(String accountId, {String? from, String? to, int page = 1, int pageSize = 50}) async {
-    final params = <String, String>{
-      'page': '$page',
-      'page_size': '$pageSize',
-    };
+  Future<List<dynamic>> getAccountLedger(
+    String accountId, {
+    String? from,
+    String? to,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    final params = <String, String>{'page': '$page', 'page_size': '$pageSize'};
     if (from != null && from.isNotEmpty) params['from'] = from;
     if (to != null && to.isNotEmpty) params['to'] = to;
 
-    final uri = Uri.parse('$_baseUrl/gl/accounts/$accountId/ledger').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/gl/accounts/$accountId/ledger',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return body['data'] as List<dynamic>? ?? [];
   }
@@ -381,29 +568,44 @@ class GlService {
     if (year != null) params['year'] = '$year';
     if (month != null) params['month'] = '$month';
 
-    final uri = Uri.parse('$_baseUrl/gl/balances').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/gl/balances',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return body['data'] as List<dynamic>? ?? [];
   }
 
   /// Get balance sheet report
-  Future<Map<String, dynamic>> getBalanceSheet({int year = 2026, int month = 0}) async {
+  Future<Map<String, dynamic>> getBalanceSheet({
+    int year = 2026,
+    int month = 0,
+  }) async {
     final params = <String, String>{'year': '$year', 'month': '$month'};
-    final uri = Uri.parse('$_baseUrl/gl/reports/balance-sheet').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/gl/reports/balance-sheet',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return body['data'] as Map<String, dynamic>? ?? {};
   }
 
   /// Get profit & loss report
-  Future<Map<String, dynamic>> getProfitLoss({int year = 2026, int month = 0}) async {
+  Future<Map<String, dynamic>> getProfitLoss({
+    int year = 2026,
+    int month = 0,
+  }) async {
     final params = <String, String>{'year': '$year', 'month': '$month'};
-    final uri = Uri.parse('$_baseUrl/gl/reports/profit-loss').replace(queryParameters: params);
+    final uri = Uri.parse(
+      '$_baseUrl/gl/reports/profit-loss',
+    ).replace(queryParameters: params);
     final resp = await http.get(uri, headers: _headers);
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return body['data'] as Map<String, dynamic>? ?? {};
   }
@@ -414,13 +616,17 @@ class GlService {
   }
 
   /// Fetch attachment file bytes
-  Future<List<int>> downloadAttachmentBytes(String entryId, String attachmentId) async {
+  Future<List<int>> downloadAttachmentBytes(
+    String entryId,
+    String attachmentId,
+  ) async {
     final url = getAttachmentDownloadUrl(entryId, attachmentId);
     final resp = await http.get(
       Uri.parse(url),
       headers: {'Authorization': 'Bearer $_token'},
     );
-    if (resp.statusCode >= 400) throw Exception('Download failed: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('Download failed: ${resp.statusCode}');
     return resp.bodyBytes;
   }
 
@@ -430,12 +636,16 @@ class GlService {
       Uri.parse('$_baseUrl/gl/journal-entries/$entryId/attachments'),
       headers: _headers,
     );
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('API error: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return (body['data'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
   }
 
-  Future<void> uploadAttachments(String entryId, List<PlatformFile> files) async {
+  Future<void> uploadAttachments(
+    String entryId,
+    List<PlatformFile> files,
+  ) async {
     for (final file in files) {
       try {
         final request = http.MultipartRequest(
@@ -446,14 +656,18 @@ class GlService {
 
         if (file.bytes != null) {
           // Web: use bytes directly
-          request.files.add(http.MultipartFile.fromBytes(
-            'file',
-            file.bytes!,
-            filename: file.name,
-          ));
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'file',
+              file.bytes!,
+              filename: file.name,
+            ),
+          );
         } else if (file.path != null) {
           // Mobile/Desktop: use path
-          request.files.add(await http.MultipartFile.fromPath('file', file.path!));
+          request.files.add(
+            await http.MultipartFile.fromPath('file', file.path!),
+          );
         } else {
           continue; // skip if no data available
         }
@@ -474,27 +688,37 @@ class GlService {
 
   // ==================== AI Suggestion ====================
 
-  Future<Map<String, dynamic>> aiSuggest(String description, double amount) async {
+  Future<Map<String, dynamic>> aiSuggest(
+    String description,
+    double amount,
+  ) async {
     final resp = await http.post(
       Uri.parse('$_baseUrl/gl/ai/suggest'),
       headers: _headers,
       body: jsonEncode({'natural_language': description, 'amount': amount}),
     );
-    if (resp.statusCode >= 400) throw Exception('AI suggestion failed: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('AI suggestion failed: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return body['data'] as Map<String, dynamic>? ?? body;
   }
 
   /// OCR analyze an image file, returns AI suggestion for journal entry.
   /// Sends image as multipart/form-data to the OCR endpoint.
-  Future<Map<String, dynamic>> ocrAnalyze(String filePath, String fileName) async {
+  Future<Map<String, dynamic>> ocrAnalyze(
+    String filePath,
+    String fileName,
+  ) async {
     final uri = Uri.parse('$_baseUrl/gl/ai/ocr');
     final request = http.MultipartRequest('POST', uri);
     request.headers['Authorization'] = 'Bearer $_token';
-    request.files.add(await http.MultipartFile.fromPath('image', filePath, filename: fileName));
+    request.files.add(
+      await http.MultipartFile.fromPath('image', filePath, filename: fileName),
+    );
     final streamedResp = await request.send();
     final resp = await http.Response.fromStream(streamedResp);
-    if (resp.statusCode >= 400) throw Exception('OCR analysis failed: ${resp.statusCode}');
+    if (resp.statusCode >= 400)
+      throw Exception('OCR analysis failed: ${resp.statusCode}');
     final body = jsonDecode(resp.body);
     return body['data'] as Map<String, dynamic>? ?? body;
   }
@@ -528,10 +752,7 @@ class GlService {
     // Get accounts count
     final accounts = await getAccounts();
     final entries = await listJournalEntries();
-    return {
-      'total_accounts': accounts.length,
-      'total_entries': entries.length,
-    };
+    return {'total_accounts': accounts.length, 'total_entries': entries.length};
   }
 
   // ==================== Periods ====================
@@ -539,10 +760,11 @@ class GlService {
   /// Check if the period for a given date is open.
   /// Returns true if open, false if closed/locked.
   Future<bool> isPeriodOpenForDate(DateTime date) async {
-    final dateStr = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-    final uri = Uri.parse('$_baseUrl/periods').replace(queryParameters: {
-      'date': dateStr,
-    });
+    final dateStr =
+        '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+    final uri = Uri.parse(
+      '$_baseUrl/periods',
+    ).replace(queryParameters: {'date': dateStr});
     try {
       final resp = await http.get(uri, headers: _headers);
       if (resp.statusCode >= 400) return false;
@@ -553,8 +775,10 @@ class GlService {
       for (final p in data) {
         final start = DateTime.tryParse(p['start_date']?.toString() ?? '');
         final end = DateTime.tryParse(p['end_date']?.toString() ?? '');
-        if (start != null && end != null &&
-            !date.isBefore(start) && !date.isAfter(end)) {
+        if (start != null &&
+            end != null &&
+            !date.isBefore(start) &&
+            !date.isAfter(end)) {
           return p['is_open'] == true && p['is_locked'] != true;
         }
       }

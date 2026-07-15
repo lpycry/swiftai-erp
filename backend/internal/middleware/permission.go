@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
 	"github.com/swiftai-erp/backend/internal/authz/engine"
@@ -15,6 +17,11 @@ func RequirePermission(permEngine *engine.PermissionEngine, objectCode, activity
 		if userID == "" {
 			response.Unauthorized(c, "user context required")
 			c.Abort()
+			return
+		}
+
+		if hasSystemAdminRole(c) {
+			c.Next()
 			return
 		}
 
@@ -35,6 +42,24 @@ func RequirePermission(permEngine *engine.PermissionEngine, objectCode, activity
 
 		c.Next()
 	}
+}
+
+func hasSystemAdminRole(c *gin.Context) bool {
+	raw, ok := c.Get(ContextKeyRoles)
+	if !ok {
+		return false
+	}
+	roles, ok := raw.([]string)
+	if !ok {
+		return false
+	}
+	for _, role := range roles {
+		normalized := strings.ToLower(strings.TrimSpace(role))
+		if normalized == "admin" || normalized == "super_admin" || normalized == "system_admin" {
+			return true
+		}
+	}
+	return false
 }
 
 // RequireFieldPermission is a middleware for field-level permission checks.

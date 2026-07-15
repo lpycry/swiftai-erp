@@ -144,6 +144,151 @@ type ExplosionItem struct {
 }
 
 // ---------------------------------------------------------------
+// Master Production Schedule
+// ---------------------------------------------------------------
+
+type MPSRunRequest struct {
+	SiteID                   *uuid.UUID `json:"site_id,omitempty"`
+	PlanningMode             string     `json:"planning_mode,omitempty"`
+	PlanningTimeFenceEnabled bool       `json:"planning_time_fence_enabled"`
+	PlanningTimeFenceDays    int        `json:"planning_time_fence_days,omitempty"`
+	RunMRPAfterMPS           bool       `json:"run_mrp_after_mps,omitempty"`
+}
+
+type MPSRunResult struct {
+	RunID            uuid.UUID              `json:"run_id"`
+	Status           string                 `json:"status"`
+	Progress         []MPSProgressStep      `json:"progress"`
+	PlannedOrders    []MPSPlannedOrder      `json:"planned_orders"`
+	DependentDemands []MPSDependentDemand   `json:"dependent_demands"`
+	Exceptions       []MPSExceptionMessage  `json:"exceptions"`
+	MRPResult        *MRPRunResult          `json:"mrp_result,omitempty"`
+	Summary          map[string]interface{} `json:"summary"`
+}
+
+type MPSProgressStep struct {
+	Percent int    `json:"percent"`
+	Message string `json:"message"`
+}
+
+type MPSPlannedOrder struct {
+	ID                         uuid.UUID  `json:"id"`
+	SiteID                     *uuid.UUID `json:"site_id,omitempty"`
+	SiteCode                   string     `json:"site_code,omitempty"`
+	SiteName                   string     `json:"site_name,omitempty"`
+	ProductID                  uuid.UUID  `json:"product_id"`
+	ProductSKU                 string     `json:"product_sku"`
+	ProductName                string     `json:"product_name"`
+	PlannedQty                 float64    `json:"planned_qty"`
+	DueDate                    string     `json:"due_date"`
+	IsFirmed                   bool       `json:"is_firmed"`
+	ConvertedProductionOrderID *uuid.UUID `json:"converted_production_order_id,omitempty"`
+	ConvertedOrderNumber       string     `json:"converted_order_number,omitempty"`
+	ExceptionCode              string     `json:"exception_code,omitempty"`
+	ExceptionMessage           string     `json:"exception_message,omitempty"`
+}
+
+type MPSDependentDemand struct {
+	ID               uuid.UUID `json:"id"`
+	ParentProductID  uuid.UUID `json:"parent_product_id"`
+	ParentSKU        string    `json:"parent_sku"`
+	ComponentID      uuid.UUID `json:"component_id"`
+	ComponentSKU     string    `json:"component_sku"`
+	ComponentName    string    `json:"component_name"`
+	ComponentMRPType string    `json:"component_mrp_type"`
+	DemandQty        float64   `json:"demand_qty"`
+	RequirementDate  string    `json:"requirement_date"`
+	Action           string    `json:"action"`
+}
+
+type MPSExceptionMessage struct {
+	ID         uuid.UUID `json:"id"`
+	ProductID  uuid.UUID `json:"product_id,omitempty"`
+	ProductSKU string    `json:"product_sku,omitempty"`
+	Code       string    `json:"code"`
+	Severity   string    `json:"severity"`
+	Message    string    `json:"message"`
+}
+
+type MRPRunResult struct {
+	RunID                       uuid.UUID               `json:"run_id"`
+	MPSRunID                    uuid.UUID               `json:"mps_run_id"`
+	PlannedPurchaseRequisitions []MRPPlannedPurchaseReq `json:"planned_purchase_requisitions"`
+	Exceptions                  []MRPExceptionMessage   `json:"exceptions"`
+	Summary                     map[string]interface{}  `json:"summary"`
+}
+
+type MRPPlannedPurchaseReq struct {
+	ID           uuid.UUID  `json:"id"`
+	ProductID    uuid.UUID  `json:"product_id"`
+	ProductSKU   string     `json:"product_sku"`
+	ProductName  string     `json:"product_name"`
+	SiteID       *uuid.UUID `json:"site_id,omitempty"`
+	SiteCode     string     `json:"site_code,omitempty"`
+	SiteName     string     `json:"site_name,omitempty"`
+	VendorID     uuid.UUID  `json:"vendor_id"`
+	VendorCode   string     `json:"vendor_code,omitempty"`
+	VendorName   string     `json:"vendor_name,omitempty"`
+	InfoRecordID uuid.UUID  `json:"info_record_id"`
+	InfoRecord   string     `json:"info_record,omitempty"`
+	DemandQty    float64    `json:"demand_qty"`
+	NetQty       float64    `json:"net_qty"`
+	OrderQty     float64    `json:"order_qty"`
+	DueDate      string     `json:"due_date"`
+	ReleaseDate  string     `json:"release_date"`
+	PurchaseUOM  string     `json:"purchase_uom"`
+	Currency     string     `json:"currency"`
+	Price        float64    `json:"price"`
+	Status       string     `json:"status"`
+}
+
+type MRPExceptionMessage struct {
+	ID         uuid.UUID `json:"id"`
+	ProductID  uuid.UUID `json:"product_id,omitempty"`
+	ProductSKU string    `json:"product_sku,omitempty"`
+	Code       string    `json:"code"`
+	Severity   string    `json:"severity"`
+	Message    string    `json:"message"`
+}
+
+type MRPPlanningParameters struct {
+	CreatePurchaseReq int    `json:"create_purchase_req"`
+	Scheduling        int    `json:"scheduling"`
+	CreateDepReq      int    `json:"create_dep_req"`
+	Description       string `json:"description"`
+}
+
+type MaterialRequirementsList struct {
+	ProductID    uuid.UUID                     `json:"product_id"`
+	ProductSKU   string                        `json:"product_sku"`
+	ProductName  string                        `json:"product_name"`
+	MaterialType string                        `json:"material_type,omitempty"`
+	MRPType      string                        `json:"mrp_type,omitempty"`
+	BaseUOM      string                        `json:"base_uom,omitempty"`
+	SiteID       *uuid.UUID                    `json:"site_id,omitempty"`
+	SiteCode     string                        `json:"site_code,omitempty"`
+	SiteName     string                        `json:"site_name,omitempty"`
+	StockQty     float64                       `json:"stock_qty"`
+	AvailableQty float64                       `json:"available_qty"`
+	SafetyStock  float64                       `json:"safety_stock"`
+	AsOf         time.Time                     `json:"as_of"`
+	Elements     []MaterialRequirementsElement `json:"elements"`
+}
+
+type MaterialRequirementsElement struct {
+	Date           string  `json:"date"`
+	MRPElement     string  `json:"mrp_element"`
+	ElementData    string  `json:"element_data"`
+	ReceiptQty     float64 `json:"receipt_qty,omitempty"`
+	RequirementQty float64 `json:"requirement_qty,omitempty"`
+	AvailableQty   float64 `json:"available_qty"`
+	SourceType     string  `json:"source_type"`
+	SourceID       string  `json:"source_id,omitempty"`
+	Status         string  `json:"status,omitempty"`
+	Exception      string  `json:"exception,omitempty"`
+}
+
+// ---------------------------------------------------------------
 // Work Center
 // ---------------------------------------------------------------
 
@@ -275,6 +420,9 @@ type ProductionOrder struct {
 	ID                uuid.UUID                 `json:"id"`
 	TenantID          uuid.UUID                 `json:"tenant_id"`
 	OrderNumber       string                    `json:"order_number"`
+	SiteID            *uuid.UUID                `json:"site_id,omitempty"`
+	SiteCode          string                    `json:"site_code,omitempty"`
+	SiteName          string                    `json:"site_name,omitempty"`
 	MaterialID        uuid.UUID                 `json:"material_id"`
 	MaterialName      string                    `json:"material_name,omitempty"`
 	MaterialSKU       string                    `json:"material_sku,omitempty"`
@@ -303,6 +451,7 @@ type ProductionOrder struct {
 
 type CreateProductionOrderRequest struct {
 	MaterialID       uuid.UUID  `json:"material_id" binding:"required"`
+	SiteID           *uuid.UUID `json:"site_id,omitempty"`
 	OrderQty         float64    `json:"order_qty" binding:"required,min=0.0001"`
 	BOMID            *uuid.UUID `json:"bom_id,omitempty"`
 	Priority         string     `json:"priority,omitempty"`
@@ -315,6 +464,7 @@ type CreateProductionOrderRequest struct {
 
 type UpdateProductionOrderRequest struct {
 	OrderQty         *float64   `json:"order_qty,omitempty"`
+	SiteID           *uuid.UUID `json:"site_id,omitempty"`
 	BOMID            *uuid.UUID `json:"bom_id,omitempty"`
 	Status           *string    `json:"status,omitempty"`
 	Priority         *string    `json:"priority,omitempty"`

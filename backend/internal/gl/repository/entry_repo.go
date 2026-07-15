@@ -23,8 +23,44 @@ func NewEntryRepo(db *pgxpool.Pool) *EntryRepo {
 	return &EntryRepo{db: db}
 }
 
+func (r *EntryRepo) ensureOpenItemColumns(ctx context.Context) error {
+	statements := []string{
+		`ALTER TABLE gl_accounts ADD COLUMN IF NOT EXISTS open_item_managed BOOLEAN NOT NULL DEFAULT false`,
+		`ALTER TABLE gl_journal_lines ADD COLUMN IF NOT EXISTS open_item_status VARCHAR(20) NOT NULL DEFAULT 'open'`,
+		`ALTER TABLE gl_journal_lines ADD COLUMN IF NOT EXISTS clearing_doc_id UUID REFERENCES gl_journal_entries(id)`,
+		`ALTER TABLE gl_journal_lines ADD COLUMN IF NOT EXISTS clearing_date DATE`,
+		`ALTER TABLE gl_journal_lines ADD COLUMN IF NOT EXISTS cleared_at TIMESTAMPTZ`,
+		`UPDATE gl_accounts SET open_item_managed = true
+		 WHERE open_item_managed = false
+		   AND (
+		     COALESCE(reconciliation_type,'none') IN ('customer','vendor')
+		     OR account_code IN ('1125','2190')
+		     OR lower(account_name) LIKE '%clearing%'
+		     OR lower(account_name) LIKE '%gr/ir%'
+		   )`,
+		`UPDATE gl_journal_lines l
+		 SET open_item_status = 'not_managed'
+		 FROM gl_accounts a
+		 WHERE l.account_id = a.id
+		   AND a.open_item_managed = false
+		   AND COALESCE(l.open_item_status,'open') = 'open'`,
+		`CREATE INDEX IF NOT EXISTS idx_gl_lines_open_items ON gl_journal_lines (account_id, open_item_status)`,
+		`CREATE INDEX IF NOT EXISTS idx_gl_lines_clearing_doc ON gl_journal_lines (clearing_doc_id)`,
+	}
+	for _, stmt := range statements {
+		if _, err := r.db.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("ensure open item columns: %w", err)
+		}
+	}
+	return nil
+}
+
 // Create inserts a new journal entry with its lines in a transaction.
 func (r *EntryRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, req *glmodels.CreateJournalEntryRequest) (*glmodels.JournalEntry, error) {
+	if err := r.ensureOpenItemColumns(ctx); err != nil {
+		return nil, err
+	}
+
 	entry := &glmodels.JournalEntry{
 		ID:             uuid.New(),
 		TenantID:       tenantID,
@@ -78,11 +114,14 @@ func (r *EntryRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, req 
 		lineID := uuid.New()
 		_, err = tx.Exec(ctx, `
 			INSERT INTO gl_journal_lines (id, entry_id, account_id, account_code, account_name,
-			                              debit, credit, description, cost_center_id, partner_id, partner_type)
+			                              debit, credit, description, cost_center_id, partner_id, partner_type,
+			                              open_item_status)
 			VALUES ($1, $2, $3,
 			        (SELECT account_code FROM gl_accounts WHERE id = $3),
 			        (SELECT account_name FROM gl_accounts WHERE id = $3),
-			        $4, $5, $6, $7, $8, $9)
+			        $4, $5, $6, $7, $8, $9,
+			        (SELECT CASE WHEN open_item_managed THEN 'open' ELSE 'not_managed' END
+			         FROM gl_accounts WHERE id = $3))
 		`, lineID, entry.ID, l.AccountID, l.Debit, l.Credit, l.Description,
 			l.CostCenterID, l.PartnerID, l.PartnerType)
 		if err != nil {
@@ -389,9 +428,16 @@ func (r *EntryRepo) ListByStatus(ctx context.Context, tenantID uuid.UUID, status
 }
 
 func (r *EntryRepo) getLines(ctx context.Context, entryID uuid.UUID) ([]glmodels.JournalLine, error) {
+	if err := r.ensureOpenItemColumns(ctx); err != nil {
+		return nil, err
+	}
+
 	query := `
 		SELECT id, entry_id, account_id, account_code, account_name,
-		       debit, credit, description, cost_center_id, partner_id, partner_type
+		       debit, credit, COALESCE(description,''), cost_center_id, partner_id, COALESCE(partner_type,''),
+		       COALESCE(open_item_status,'open'), clearing_doc_id,
+		       COALESCE((SELECT document_no FROM gl_journal_entries ce WHERE ce.id = gl_journal_lines.clearing_doc_id),''),
+		       cleared_at, clearing_date
 		FROM gl_journal_lines WHERE entry_id = $1
 		ORDER BY id
 	`
@@ -407,6 +453,7 @@ func (r *EntryRepo) getLines(ctx context.Context, entryID uuid.UUID) ([]glmodels
 		err := rows.Scan(
 			&l.ID, &l.EntryID, &l.AccountID, &l.AccountCode, &l.AccountName,
 			&l.Debit, &l.Credit, &l.Description, &l.CostCenterID, &l.PartnerID, &l.PartnerType,
+			&l.OpenItemStatus, &l.ClearingDocID, &l.ClearingDocNo, &l.ClearedAt, &l.ClearingDate,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan line: %w", err)
@@ -528,15 +575,15 @@ func (r *EntryRepo) GetAccountBalances(ctx context.Context, tenantID uuid.UUID, 
 			balance = credit - debit
 		}
 		results = append(results, map[string]interface{}{
-			"account_id":     id,
-			"account_code":   code,
-			"account_name":   name,
-			"account_type":   at,
-			"level":          level,
-			"is_leaf":        true,
-			"total_debit":    debit,
-			"total_credit":   credit,
-			"balance":        balance,
+			"account_id":   id,
+			"account_code": code,
+			"account_name": name,
+			"account_type": at,
+			"level":        level,
+			"is_leaf":      true,
+			"total_debit":  debit,
+			"total_credit": credit,
+			"balance":      balance,
 		})
 	}
 	return results, nil
@@ -614,15 +661,15 @@ func (r *EntryRepo) GetBalanceSheet(ctx context.Context, tenantID uuid.UUID, yea
 	totalEquity += retainedEarnings
 
 	result := map[string]interface{}{
-		"assets":           assets,
-		"liabilities":      liabilities,
-		"equity":           equity,
-		"total_assets":     totalAssets,
+		"assets":            assets,
+		"liabilities":       liabilities,
+		"equity":            equity,
+		"total_assets":      totalAssets,
 		"total_liabilities": totalLiabilities,
-		"total_equity":     totalEquity,
-		"net_income":       netIncome,
-		"year":             year,
-		"month":            month,
+		"total_equity":      totalEquity,
+		"net_income":        netIncome,
+		"year":              year,
+		"month":             month,
 	}
 
 	return result, nil
@@ -666,13 +713,13 @@ func (r *EntryRepo) GetProfitLoss(ctx context.Context, tenantID uuid.UUID, year,
 	netIncome := totalRevenue - totalExpense
 
 	result := map[string]interface{}{
-		"revenues":       revenues,
-		"expenses":       expenses,
-		"total_revenue":  totalRevenue,
-		"total_expense":  totalExpense,
-		"net_income":     netIncome,
-		"year":           year,
-		"month":          month,
+		"revenues":      revenues,
+		"expenses":      expenses,
+		"total_revenue": totalRevenue,
+		"total_expense": totalExpense,
+		"net_income":    netIncome,
+		"year":          year,
+		"month":         month,
 	}
 
 	return result, nil

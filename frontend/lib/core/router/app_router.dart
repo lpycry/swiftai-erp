@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../features/admin/screens/auth_objects_screen.dart';
 import '../../features/admin/screens/roles_screen.dart';
+import '../../features/admin/screens/users_screen.dart';
 import '../../features/admin/services/admin_service.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/register_screen.dart';
@@ -33,6 +34,7 @@ class AppRouter {
   static const String dashboard = '/dashboard';
   static const String settingsRoute = '/settings';
   static const String adminAuthObjects = '/admin/auth-objects';
+  static const String adminUsers = '/admin/users';
   static const String adminRoles = '/admin/roles';
   static const String adminOrgs = '/admin/organizations';
   static const String adminPeriods = '/admin/periods';
@@ -96,6 +98,14 @@ class AppRouter {
       case adminAuthObjects:
         return MaterialPageRoute(
           builder: (_) => AuthObjectsScreen(
+            authService: _authService,
+            adminService: AdminService(_token),
+          ),
+          settings: settings,
+        );
+      case adminUsers:
+        return MaterialPageRoute(
+          builder: (_) => UsersScreen(
             authService: _authService,
             adminService: AdminService(_token),
           ),

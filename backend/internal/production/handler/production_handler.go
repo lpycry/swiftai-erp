@@ -825,3 +825,255 @@ func (h *ProductionHandler) ListTimeConfirmations(c *gin.Context) {
 	}
 	response.OK(c, list)
 }
+
+func (h *ProductionHandler) RunMPS(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	var req prodmodels.MPSRunRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	result, err := h.svc.RunMPS(c.Request.Context(), tenantID, userID, &req)
+	if err != nil {
+		log.Err(err).Msg("run MPS failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, result)
+}
+
+func (h *ProductionHandler) RunMRP(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	var req prodmodels.MPSRunRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	req.RunMRPAfterMPS = true
+	result, err := h.svc.RunMPS(c.Request.Context(), tenantID, userID, &req)
+	if err != nil {
+		log.Err(err).Msg("run MRP failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, result)
+}
+
+func (h *ProductionHandler) ListMPSPlannedOrders(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	list, err := h.svc.ListMPSPlannedOrders(c.Request.Context(), tenantID)
+	if err != nil {
+		log.Err(err).Msg("list MPS planned orders failed")
+		response.InternalError(c, "list MPS planned orders failed")
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *ProductionHandler) ListMPSDependentDemands(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	list, err := h.svc.ListMPSDependentDemands(c.Request.Context(), tenantID)
+	if err != nil {
+		log.Err(err).Msg("list MPS dependent demands failed")
+		response.InternalError(c, "list MPS dependent demands failed")
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *ProductionHandler) ListMPSExceptions(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	list, err := h.svc.ListMPSExceptions(c.Request.Context(), tenantID)
+	if err != nil {
+		log.Err(err).Msg("list MPS exceptions failed")
+		response.InternalError(c, "list MPS exceptions failed")
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *ProductionHandler) ListMRPPlannedPurchaseRequisitions(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	list, err := h.svc.ListMRPPlannedPurchaseRequisitions(c.Request.Context(), tenantID)
+	if err != nil {
+		log.Err(err).Msg("list MRP planned purchase requisitions failed")
+		response.InternalError(c, "list MRP planned purchase requisitions failed")
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *ProductionHandler) ListMRPExceptions(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	list, err := h.svc.ListMRPExceptions(c.Request.Context(), tenantID)
+	if err != nil {
+		log.Err(err).Msg("list MRP exceptions failed")
+		response.InternalError(c, "list MRP exceptions failed")
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *ProductionHandler) GetMaterialRequirementsList(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	productID, err := uuid.Parse(c.Query("product_id"))
+	if err != nil {
+		response.BadRequest(c, "product_id is required")
+		return
+	}
+	var siteID *uuid.UUID
+	if raw := c.Query("site_id"); raw != "" {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			response.BadRequest(c, "invalid site_id")
+			return
+		}
+		siteID = &id
+	}
+	list, err := h.svc.GetMaterialRequirementsList(c.Request.Context(), tenantID, productID, siteID)
+	if err != nil {
+		log.Err(err).Msg("get material requirements list failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *ProductionHandler) FirmMPSPlannedOrder(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid planned order id")
+		return
+	}
+	var req struct {
+		Firm bool `json:"firm"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request")
+		return
+	}
+	if err := h.svc.FirmMPSPlannedOrder(c.Request.Context(), tenantID, userID, id, req.Firm); err != nil {
+		log.Err(err).Msg("firm MPS planned order failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "updated"})
+}
+
+func (h *ProductionHandler) ConvertMPSPlannedOrders(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	var req struct {
+		IDs []string `json:"ids"`
+		All bool     `json:"all"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request")
+		return
+	}
+	var ids []uuid.UUID
+	for _, raw := range req.IDs {
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			response.BadRequest(c, "invalid planned order id")
+			return
+		}
+		ids = append(ids, id)
+	}
+	if !req.All && len(ids) == 0 {
+		response.BadRequest(c, "planned order ids are required")
+		return
+	}
+	orders, err := h.svc.ConvertMPSPlannedOrders(c.Request.Context(), tenantID, userID, ids, req.All)
+	if err != nil {
+		log.Err(err).Msg("convert MPS planned orders failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, orders)
+}
+
+func (h *ProductionHandler) ConvertMPSPlannedOrder(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid planned order id")
+		return
+	}
+	po, err := h.svc.ConvertMPSPlannedOrder(c.Request.Context(), tenantID, userID, id)
+	if err != nil {
+		log.Err(err).Msg("convert MPS planned order failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, po)
+}

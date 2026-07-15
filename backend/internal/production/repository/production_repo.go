@@ -1353,10 +1353,12 @@ func nullIfEmpty(s string) *string {
 //   - 2026-06-11T21:40:00.000+08:00 (with offset)
 //   - 2026-06-11T21:40:00.000       (no timezone, treated as UTC)
 //   - 2026-06-11T21:40:00Z          (no fractional seconds)
+//   - 2026-06-11                    (date only)
 func parseTimeFlexible(s string) (time.Time, error) {
 	formats := []string{
 		time.RFC3339Nano,
 		time.RFC3339,
+		"2006-01-02",
 		"2006-01-02T15:04:05.000Z07:00",
 		"2006-01-02T15:04:05.000",
 		"2006-01-02T15:04:05",
@@ -1431,6 +1433,7 @@ func (r *ProductionOrderRepo) Create(ctx context.Context, tenantID, userID uuid.
 		ID:               uuid.New(),
 		TenantID:         tenantID,
 		OrderNumber:      orderNumber,
+		SiteID:           req.SiteID,
 		MaterialID:       req.MaterialID,
 		OrderQty:         req.OrderQty,
 		BOMID:            req.BOMID,
@@ -1448,12 +1451,12 @@ func (r *ProductionOrderRepo) Create(ctx context.Context, tenantID, userID uuid.
 	}
 
 	_, err = r.db.Exec(ctx,
-		`INSERT INTO production_orders (id, tenant_id, order_number, material_id, order_qty,
+		`INSERT INTO production_orders (id, tenant_id, order_number, site_id, material_id, order_qty,
 			bom_id, status, priority, sales_order_id, so_item_id,
 			planned_start_date, planned_end_date,
 			notes, created_by, updated_by, created_at, updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),NOW())`,
-		po.ID, po.TenantID, po.OrderNumber, po.MaterialID, po.OrderQty,
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),NOW())`,
+		po.ID, po.TenantID, po.OrderNumber, nullIfEmptyUUID(po.SiteID), po.MaterialID, po.OrderQty,
 		nullIfEmptyUUID(po.BOMID), po.Status, po.Priority,
 		nullIfEmptyUUID(po.SalesOrderID), nullIfEmptyUUID(po.SOItemID),
 		po.PlannedStartDate, po.PlannedEndDate,
@@ -1470,7 +1473,7 @@ func (r *ProductionOrderRepo) Create(ctx context.Context, tenantID, userID uuid.
 func (r *ProductionOrderRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*prodmodels.ProductionOrder, error) {
 	po := &prodmodels.ProductionOrder{}
 	err := r.db.QueryRow(ctx,
-		`SELECT po.id, po.tenant_id, po.order_number, po.material_id,
+		`SELECT po.id, po.tenant_id, po.order_number, po.site_id, COALESCE(s.site_code,''), COALESCE(s.site_name,''), po.material_id,
 			COALESCE(p.name,''), COALESCE(p.sku,''),
 			po.order_qty, po.completed_qty, po.bom_id, COALESCE(bh.bom_version,''),
 			po.status, po.priority,
@@ -1482,11 +1485,12 @@ func (r *ProductionOrderRepo) GetByID(ctx context.Context, id, tenantID uuid.UUI
 			po.created_by, po.updated_by, po.created_at, po.updated_at
 		FROM production_orders po
 		LEFT JOIN products p ON p.id = po.material_id
+		LEFT JOIN sites s ON s.id = po.site_id
 		LEFT JOIN bom_headers bh ON bh.bom_id = po.bom_id
 		LEFT JOIN sales_orders so ON so.id = po.sales_order_id
 		WHERE po.id = $1 AND po.tenant_id = $2`,
 		id, tenantID).Scan(
-		&po.ID, &po.TenantID, &po.OrderNumber, &po.MaterialID,
+		&po.ID, &po.TenantID, &po.OrderNumber, &po.SiteID, &po.SiteCode, &po.SiteName, &po.MaterialID,
 		&po.MaterialName, &po.MaterialSKU,
 		&po.OrderQty, &po.CompletedQty, &po.BOMID, &po.BOMVersion,
 		&po.Status, &po.Priority,
@@ -1509,7 +1513,7 @@ func (r *ProductionOrderRepo) GetByID(ctx context.Context, id, tenantID uuid.UUI
 }
 
 func (r *ProductionOrderRepo) List(ctx context.Context, tenantID uuid.UUID, materialID *uuid.UUID, status string) ([]*prodmodels.ProductionOrder, error) {
-	query := `SELECT po.id, po.tenant_id, po.order_number, po.material_id,
+	query := `SELECT po.id, po.tenant_id, po.order_number, po.site_id, COALESCE(s.site_code,''), COALESCE(s.site_name,''), po.material_id,
 			COALESCE(p.name,''), COALESCE(p.sku,''),
 			po.order_qty, po.completed_qty, po.bom_id, COALESCE(bh.bom_version,''),
 			po.status, po.priority,
@@ -1521,6 +1525,7 @@ func (r *ProductionOrderRepo) List(ctx context.Context, tenantID uuid.UUID, mate
 			po.created_by, po.updated_by, po.created_at, po.updated_at
 		FROM production_orders po
 		LEFT JOIN products p ON p.id = po.material_id
+		LEFT JOIN sites s ON s.id = po.site_id
 		LEFT JOIN bom_headers bh ON bh.bom_id = po.bom_id
 		LEFT JOIN sales_orders so ON so.id = po.sales_order_id
 		WHERE po.tenant_id = $1`
@@ -1550,7 +1555,7 @@ func (r *ProductionOrderRepo) List(ctx context.Context, tenantID uuid.UUID, mate
 	for rows.Next() {
 		po := &prodmodels.ProductionOrder{}
 		if err := rows.Scan(
-			&po.ID, &po.TenantID, &po.OrderNumber, &po.MaterialID,
+			&po.ID, &po.TenantID, &po.OrderNumber, &po.SiteID, &po.SiteCode, &po.SiteName, &po.MaterialID,
 			&po.MaterialName, &po.MaterialSKU,
 			&po.OrderQty, &po.CompletedQty, &po.BOMID, &po.BOMVersion,
 			&po.Status, &po.Priority,
@@ -1617,20 +1622,21 @@ func (r *ProductionOrderRepo) Update(ctx context.Context, id, tenantID uuid.UUID
 	_, err := r.db.Exec(ctx,
 		`UPDATE production_orders SET
 			order_qty          = COALESCE($3, order_qty),
-			bom_id             = COALESCE($4, bom_id),
-			status             = COALESCE($5, status),
-			priority           = COALESCE($6, priority),
-			sales_order_id     = COALESCE($7, sales_order_id),
-			so_item_id         = COALESCE($8, so_item_id),
-			planned_start_date = COALESCE($9::timestamptz, planned_start_date),
-			planned_end_date   = COALESCE($10::timestamptz, planned_end_date),
-			actual_start_date  = COALESCE($11::timestamptz, actual_start_date),
-			actual_end_date    = COALESCE($12::timestamptz, actual_end_date),
-			notes              = COALESCE($13, notes),
-			updated_by         = $14,
+			site_id            = COALESCE($4, site_id),
+			bom_id             = COALESCE($5, bom_id),
+			status             = COALESCE($6, status),
+			priority           = COALESCE($7, priority),
+			sales_order_id     = COALESCE($8, sales_order_id),
+			so_item_id         = COALESCE($9, so_item_id),
+			planned_start_date = COALESCE($10::timestamptz, planned_start_date),
+			planned_end_date   = COALESCE($11::timestamptz, planned_end_date),
+			actual_start_date  = COALESCE($12::timestamptz, actual_start_date),
+			actual_end_date    = COALESCE($13::timestamptz, actual_end_date),
+			notes              = COALESCE($14, notes),
+			updated_by         = $15,
 			updated_at         = NOW()
 		WHERE id = $1 AND tenant_id = $2`,
-		id, tenantID, req.OrderQty, req.BOMID, req.Status, req.Priority,
+		id, tenantID, req.OrderQty, req.SiteID, req.BOMID, req.Status, req.Priority,
 		req.SalesOrderID, req.SOItemID,
 		plannedStart, plannedEnd, actualStart, actualEnd, req.Notes, &userID)
 	return err

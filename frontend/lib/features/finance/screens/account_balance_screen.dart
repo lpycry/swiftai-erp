@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:swiftai_erp/core/services/fmt.dart';
 import 'package:printing/printing.dart';
 import 'package:swiftai_erp/core/services/auth_service.dart';
 import 'package:swiftai_erp/core/theme/app_theme.dart';
@@ -25,11 +26,25 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   bool _loading = false;
   int _year = DateTime.now().year;
   int? _month;
-  final List<int> _years = List.generate(10, (i) => DateTime.now().year - 5 + i);
+  final List<int> _years = List.generate(
+    10,
+    (i) => DateTime.now().year - 5 + i,
+  );
 
   static const _months = [
-    'All', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    'All',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
 
   @override
@@ -41,12 +56,18 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   Future<void> _loadBalances() async {
     setState(() => _loading = true);
     try {
-      final data = await widget.glService.getAccountBalances(year: _year, month: _month);
+      final data = await widget.glService.getAccountBalances(
+        year: _year,
+        month: _month,
+      );
       setState(() => _balances = data);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load balances: $e'), backgroundColor: AppTheme.errorColor),
+          SnackBar(
+            content: Text('Failed to load balances: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     } finally {
@@ -55,7 +76,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   }
 
   /// Show ledger detail dialog for debit/credit side
-  Future<void> _showLedgerDetail(dynamic entry, {required bool showDebit}) async {
+  Future<void> _showLedgerDetail(
+    dynamic entry, {
+    required bool showDebit,
+  }) async {
     final accountId = entry['account_id']?.toString() ?? '';
     final code = entry['account_code'] ?? entry['code'] ?? '';
     final name = entry['account_name'] ?? entry['name'] ?? '';
@@ -71,21 +95,31 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
         : '$_year-12-31';
 
     try {
-      final lines = await widget.glService.getAccountLedger(accountId, from: from, to: to);
+      final lines = await widget.glService.getAccountLedger(
+        accountId,
+        from: from,
+        to: to,
+      );
       if (!mounted) return;
       _showLedgerDetailDialog(code, name, side, lines, showDebit);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load detail: $e'), backgroundColor: AppTheme.errorColor),
+          SnackBar(
+            content: Text('Failed to load detail: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     }
   }
 
   void _showLedgerDetailDialog(
-    String code, String name, String side,
-    List<dynamic> lines, bool showDebit,
+    String code,
+    String name,
+    String side,
+    List<dynamic> lines,
+    bool showDebit,
   ) {
     final filtered = lines.where((l) {
       final amt = (showDebit ? l['debit'] : l['credit']) as num? ?? 0;
@@ -93,7 +127,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     }).toList();
 
     final total = filtered.fold<double>(
-      0.0, (sum, l) => sum + ((showDebit ? l['debit'] : l['credit']) as num? ?? 0).toDouble(),
+      0.0,
+      (sum, l) =>
+          sum +
+          ((showDebit ? l['debit'] : l['credit']) as num? ?? 0).toDouble(),
     );
 
     if (!mounted) return;
@@ -112,13 +149,18 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                   Icon(
                     showDebit ? Icons.arrow_upward : Icons.arrow_downward,
                     size: 20,
-                    color: showDebit ? Colors.green.shade700 : Colors.orange.shade700,
+                    color: showDebit
+                        ? Colors.green.shade700
+                        : Colors.orange.shade700,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       '$code - $name - $side Details',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
@@ -135,16 +177,46 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
               color: Colors.grey.shade100,
               child: Row(
                 children: [
-                  const Expanded(flex: 2, child: Text('Doc No',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11))),
-                  const Expanded(flex: 2, child: Text('Date',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11))),
-                  const Expanded(flex: 4, child: Text('Description',
-                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11))),
+                  const Expanded(
+                    flex: 2,
+                    child: Text(
+                      'Doc No',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const Expanded(
+                    flex: 2,
+                    child: Text(
+                      'Date',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const Expanded(
+                    flex: 4,
+                    child: Text(
+                      'Description',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
                   Expanded(
                     flex: 2,
-                    child: Text(side, textAlign: TextAlign.right,
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11)),
+                    child: Text(
+                      side,
+                      textAlign: TextAlign.right,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -153,51 +225,88 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
               child: filtered.isEmpty
                   ? const Center(child: Text('No transactions found'))
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
                       itemCount: filtered.length,
                       itemBuilder: (context, i) {
                         final l = filtered[i];
                         final docNo = l['document_no']?.toString() ?? '';
                         final date = l['posting_date']?.toString() ?? '';
                         final desc = l['description']?.toString() ?? '';
-                        final amt = (showDebit ? l['debit'] : l['credit']) as num? ?? 0;
+                        final amt =
+                            (showDebit ? l['debit'] : l['credit']) as num? ?? 0;
                         return Container(
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           decoration: BoxDecoration(
-                            border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.3)),
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.grey.shade200,
+                                width: 0.3,
+                              ),
+                            ),
                           ),
                           child: Row(
                             children: [
-                              Expanded(flex: 2, child: GestureDetector(
-                                onTap: () {
-                                  final entryId = l['entry_id']?.toString() ?? '';
-                                  if (entryId.isNotEmpty) {
-                                    Navigator.pop(ctx);
-                                    _showFullEntry(entryId);
-                                  }
-                                },
-                                child: Text(docNo,
+                              Expanded(
+                                flex: 2,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    final entryId =
+                                        l['entry_id']?.toString() ?? '';
+                                    if (entryId.isNotEmpty) {
+                                      Navigator.pop(ctx);
+                                      _showFullEntry(entryId);
+                                    }
+                                  },
+                                  child: Text(
+                                    docNo,
                                     style: TextStyle(
-                                      fontSize: 11, fontFamily: 'monospace',
+                                      fontSize: 11,
+                                      fontFamily: 'monospace',
                                       color: AppTheme.accentBlue,
                                       decoration: TextDecoration.underline,
-                                      decorationColor: AppTheme.accentBlue.withValues(alpha: 0.4),
+                                      decorationColor: AppTheme.accentBlue
+                                          .withValues(alpha: 0.4),
                                     ),
-                                    overflow: TextOverflow.ellipsis),
-                              )),
-                              Expanded(flex: 2, child: Text(_fmtShortDate(date),
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600))),
-                              Expanded(flex: 4, child: Text(desc,
-                                  style: const TextStyle(fontSize: 11),
-                                  maxLines: 1, overflow: TextOverflow.ellipsis)),
-                              Expanded(flex: 2, child: Text(
-                                '\$${GlService.fmtAmount(amt.toDouble())}',
-                                textAlign: TextAlign.right,
-                                style: TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.w600,
-                                  color: showDebit ? Colors.green.shade700 : Colors.orange.shade700,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              )),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  _fmtShortDate(date),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 4,
+                                child: Text(
+                                  desc,
+                                  style: const TextStyle(fontSize: 11),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  '\$${GlService.fmtAmount(amt.toDouble())}',
+                                  textAlign: TextAlign.right,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: showDebit
+                                        ? Colors.green.shade700
+                                        : Colors.orange.shade700,
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         );
@@ -209,17 +318,31 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
-                  Expanded(flex: 8, child: Text('Total $side',
+                  Expanded(
+                    flex: 8,
+                    child: Text(
+                      'Total $side',
                       textAlign: TextAlign.right,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                  Expanded(flex: 2, child: Text(
-                    '\$${GlService.fmtAmount(total)}',
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 12,
-                      color: showDebit ? Colors.green.shade700 : Colors.orange.shade700,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
-                  )),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      '\$${GlService.fmtAmount(total)}',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        color: showDebit
+                            ? Colors.green.shade700
+                            : Colors.orange.shade700,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -265,37 +388,61 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       showDialog(
         context: context,
         builder: (ctx) => Dialog(
-          insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 40,
+            vertical: 24,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Title
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     Icon(
                       status == 'posted' ? Icons.check_circle : Icons.edit_note,
                       size: 20,
-                      color: status == 'posted' ? AppTheme.successColor : AppTheme.warningColor,
+                      color: status == 'posted'
+                          ? AppTheme.successColor
+                          : AppTheme.warningColor,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(docNo,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                      child: Text(
+                        docNo,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
-                        color: (status == 'posted' ? AppTheme.successColor : AppTheme.warningColor)
-                            .withValues(alpha: 0.15),
+                        color:
+                            (status == 'posted'
+                                    ? AppTheme.successColor
+                                    : AppTheme.warningColor)
+                                .withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text(status.toUpperCase(),
-                          style: TextStyle(
-                            fontSize: 10, fontWeight: FontWeight.w600,
-                            color: status == 'posted' ? AppTheme.successColor : AppTheme.warningColor,
-                          )),
+                      child: Text(
+                        status.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: status == 'posted'
+                              ? AppTheme.successColor
+                              : AppTheme.warningColor,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 4),
                     IconButton(
@@ -325,8 +472,13 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                       const SizedBox(height: 8),
                       const Divider(height: 1),
                       const SizedBox(height: 8),
-                      const Text('Line Items',
-                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                      const Text(
+                        'Line Items',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       // Lines list
                       Container(
@@ -338,78 +490,166 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                           children: [
                             // Header
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 5,
+                              ),
                               color: Colors.grey.shade100,
                               child: const Row(
                                 children: [
-                                  Expanded(flex: 3, child: Text('Account',
-                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11))),
-                                  Expanded(flex: 1, child: Text('Debit',
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      'Account',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 1,
+                                    child: Text(
+                                      'Debit',
                                       textAlign: TextAlign.right,
-                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11))),
-                                  Expanded(flex: 1, child: Text('Credit',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 1,
+                                    child: Text(
+                                      'Credit',
                                       textAlign: TextAlign.right,
-                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11))),
-                                  Expanded(flex: 3, child: Text('Description',
-                                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11))),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      'Description',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
                             // Lines
-                            ...lines.asMap().entries.map((e) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                              decoration: BoxDecoration(
-                                border: e.key < lines.length - 1
-                                    ? Border(bottom: BorderSide(color: Colors.grey.shade200))
-                                    : null,
+                            ...lines.asMap().entries.map(
+                              (e) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 5,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: e.key < lines.length - 1
+                                      ? Border(
+                                          bottom: BorderSide(
+                                            color: Colors.grey.shade200,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(
+                                        '${e.value['account_code'] ?? ''} - ${e.value['account_name'] ?? ''}',
+                                        style: const TextStyle(fontSize: 11),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        (e.value['debit'] as num? ?? 0) > 0
+                                            ? '\$${GlService.fmtAmount((e.value['debit'] as num?)?.toDouble() ?? 0)}'
+                                            : '',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.green.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        (e.value['credit'] as num? ?? 0) > 0
+                                            ? '\$${GlService.fmtAmount((e.value['credit'] as num?)?.toDouble() ?? 0)}'
+                                            : '',
+                                        textAlign: TextAlign.right,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.orange.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 3,
+                                      child: Text(
+                                        e.value['description']?.toString() ??
+                                            '',
+                                        style: const TextStyle(fontSize: 11),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  Expanded(flex: 3, child: Text(
-                                    '${e.value['account_code'] ?? ''} - ${e.value['account_name'] ?? ''}',
-                                    style: const TextStyle(fontSize: 11),
-                                    overflow: TextOverflow.ellipsis, maxLines: 1,
-                                  )),
-                                  Expanded(flex: 1, child: Text(
-                                    (e.value['debit'] as num? ?? 0) > 0
-                                        ? '\$${GlService.fmtAmount((e.value['debit'] as num?)?.toDouble() ?? 0)}'
-                                        : '',
-                                    textAlign: TextAlign.right,
-                                    style: TextStyle(fontSize: 11, color: Colors.green.shade700),
-                                  )),
-                                  Expanded(flex: 1, child: Text(
-                                    (e.value['credit'] as num? ?? 0) > 0
-                                        ? '\$${GlService.fmtAmount((e.value['credit'] as num?)?.toDouble() ?? 0)}'
-                                        : '',
-                                    textAlign: TextAlign.right,
-                                    style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
-                                  )),
-                                  Expanded(flex: 3, child: Text(
-                                    e.value['description']?.toString() ?? '',
-                                    style: const TextStyle(fontSize: 11),
-                                    overflow: TextOverflow.ellipsis, maxLines: 1,
-                                  )),
-                                ],
-                              ),
-                            )),
+                            ),
                             // Total row
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 5,
+                              ),
                               color: Colors.grey.shade50,
                               child: Row(
                                 children: [
-                                  const Expanded(flex: 3, child: Text('TOTAL',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
-                                  Expanded(flex: 1, child: Text(
-                                    '\$${GlService.fmtAmount(totalDebit)}',
-                                    textAlign: TextAlign.right,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                                  )),
-                                  Expanded(flex: 1, child: Text(
-                                    '\$${GlService.fmtAmount(totalCredit)}',
-                                    textAlign: TextAlign.right,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
-                                  )),
+                                  const Expanded(
+                                    flex: 3,
+                                    child: Text(
+                                      'TOTAL',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 1,
+                                    child: Text(
+                                      '\$${GlService.fmtAmount(totalDebit)}',
+                                      textAlign: TextAlign.right,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 1,
+                                    child: Text(
+                                      '\$${GlService.fmtAmount(totalCredit)}',
+                                      textAlign: TextAlign.right,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ),
                                   const Expanded(flex: 3, child: SizedBox()),
                                 ],
                               ),
@@ -418,17 +658,25 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                         ),
                       ),
                       // Attachments section
-                      if (attachments.isNotEmpty) ...[                        
+                      if (attachments.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         const Divider(height: 1),
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            Icon(Icons.attach_file, size: 14, color: Colors.grey.shade600),
+                            Icon(
+                              Icons.attach_file,
+                              size: 14,
+                              color: Colors.grey.shade600,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               'Attachments (${attachments.length})',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade700,
+                              ),
                             ),
                           ],
                         ),
@@ -448,48 +696,81 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                             },
                             child: Container(
                               margin: const EdgeInsets.only(bottom: 4),
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.grey.shade50,
                                 borderRadius: BorderRadius.circular(4),
                                 border: Border.all(color: Colors.grey.shade200),
                               ),
                               child: Row(
-                              children: [
-                                Icon(
-                                  ext == 'pdf' ? Icons.picture_as_pdf :
-                                  ['xls','xlsx'].contains(ext) ? Icons.table_chart :
-                                  ['doc','docx'].contains(ext) ? Icons.description :
-                                  ['jpg','jpeg','png','gif','bmp'].contains(ext) ? Icons.image :
-                                  Icons.insert_drive_file,
-                                  size: 18,
-                                  color: ext == 'pdf' ? Colors.red.shade600 :
-                                         ['xls','xlsx'].contains(ext) ? Colors.green.shade600 :
-                                         ['doc','docx'].contains(ext) ? Colors.blue.shade600 :
-                                         ['jpg','jpeg','png','gif','bmp'].contains(ext) ? Colors.purple.shade500 :
-                                         Colors.orange.shade600,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(name, style: const TextStyle(fontSize: 11),
-                                          overflow: TextOverflow.ellipsis, maxLines: 1),
-                                      if (size > 0)
-                                        Text(
-                                          size < 1024 ? '$size B' :
-                                          size < 1048576 ? '${(size/1024).toStringAsFixed(1)} KB' :
-                                          '${(size/1048576).toStringAsFixed(1)} MB',
-                                          style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
-                                        ),
-                                    ],
+                                children: [
+                                  Icon(
+                                    ext == 'pdf'
+                                        ? Icons.picture_as_pdf
+                                        : ['xls', 'xlsx'].contains(ext)
+                                        ? Icons.table_chart
+                                        : ['doc', 'docx'].contains(ext)
+                                        ? Icons.description
+                                        : [
+                                            'jpg',
+                                            'jpeg',
+                                            'png',
+                                            'gif',
+                                            'bmp',
+                                          ].contains(ext)
+                                        ? Icons.image
+                                        : Icons.insert_drive_file,
+                                    size: 18,
+                                    color: ext == 'pdf'
+                                        ? Colors.red.shade600
+                                        : ['xls', 'xlsx'].contains(ext)
+                                        ? Colors.green.shade600
+                                        : ['doc', 'docx'].contains(ext)
+                                        ? Colors.blue.shade600
+                                        : [
+                                            'jpg',
+                                            'jpeg',
+                                            'png',
+                                            'gif',
+                                            'bmp',
+                                          ].contains(ext)
+                                        ? Colors.purple.shade500
+                                        : Colors.orange.shade600,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          name,
+                                          style: const TextStyle(fontSize: 11),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                        if (size > 0)
+                                          Text(
+                                            size < 1024
+                                                ? '$size B'
+                                                : size < 1048576
+                                                ? '${(size / 1024).toStringAsFixed(1)} KB'
+                                                : '${(size / 1048576).toStringAsFixed(1)} MB',
+                                            style: TextStyle(
+                                              fontSize: 9,
+                                              color: Colors.grey.shade500,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
+                          );
                         }),
                       ],
                     ],
@@ -503,7 +784,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load entry: $e'), backgroundColor: AppTheme.errorColor),
+          SnackBar(
+            content: Text('Failed to load entry: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     }
@@ -518,19 +802,26 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
         children: [
           SizedBox(
             width: 110,
-            child: Text(label,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ),
-          Expanded(
-            child: Text(value, style: const TextStyle(fontSize: 12)),
-          ),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
         ],
       ),
     );
   }
 
   /// Download and preview an attachment
-  Future<void> _previewAttachment(String entryId, Map<String, dynamic> att) async {
+  Future<void> _previewAttachment(
+    String entryId,
+    Map<String, dynamic> att,
+  ) async {
     final fileType = att['file_type']?.toString() ?? '';
     final fileName = att['file_name']?.toString() ?? 'Unknown';
     final attId = att['id']?.toString() ?? '';
@@ -546,20 +837,25 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       barrierDismissible: false,
       builder: (_) => const AlertDialog(
         content: SizedBox(
-          width: 60, height: 60,
+          width: 60,
+          height: 60,
           child: Center(child: CircularProgressIndicator()),
         ),
       ),
     );
 
     try {
-      final rawBytes = await widget.glService.downloadAttachmentBytes(entryId, attId);
+      final rawBytes = await widget.glService.downloadAttachmentBytes(
+        entryId,
+        attId,
+      );
       final bytes = Uint8List.fromList(rawBytes);
       if (!mounted) return;
       Navigator.pop(context);
 
-      final isImage = fileType.startsWith('image/')
-          || ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].contains(ext);
+      final isImage =
+          fileType.startsWith('image/') ||
+          ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].contains(ext);
       final isPdf = fileType.contains('pdf') || ext == 'pdf';
 
       if (isImage) {
@@ -573,7 +869,10 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Preview failed: $e'), backgroundColor: AppTheme.errorColor),
+          SnackBar(
+            content: Text('Preview failed: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     }
@@ -594,8 +893,15 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                 children: [
                   const Icon(Icons.image, size: 28, color: Colors.grey),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(fileName,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),
+                  Expanded(
+                    child: Text(
+                      fileName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
                     onPressed: () => Navigator.pop(ctx),
@@ -647,12 +953,14 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
               IconButton(
                 icon: const Icon(Icons.print),
                 tooltip: 'Print',
-                onPressed: () => Printing.layoutPdf(onLayout: (_) async => bytes),
+                onPressed: () =>
+                    Printing.layoutPdf(onLayout: (_) async => bytes),
               ),
               IconButton(
                 icon: const Icon(Icons.share),
                 tooltip: 'Share',
-                onPressed: () => Printing.sharePdf(bytes: bytes, filename: fileName),
+                onPressed: () =>
+                    Printing.sharePdf(bytes: bytes, filename: fileName),
               ),
             ],
           ),
@@ -685,21 +993,36 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
               child: Row(
                 children: [
                   Icon(
-                    ext == 'pdf' ? Icons.picture_as_pdf :
-                    ['xls','xlsx'].contains(ext) ? Icons.table_chart :
-                    ['doc','docx'].contains(ext) ? Icons.description :
-                    ['jpg','jpeg','png','gif','bmp'].contains(ext) ? Icons.image :
-                    Icons.insert_drive_file,
+                    ext == 'pdf'
+                        ? Icons.picture_as_pdf
+                        : ['xls', 'xlsx'].contains(ext)
+                        ? Icons.table_chart
+                        : ['doc', 'docx'].contains(ext)
+                        ? Icons.description
+                        : ['jpg', 'jpeg', 'png', 'gif', 'bmp'].contains(ext)
+                        ? Icons.image
+                        : Icons.insert_drive_file,
                     size: 28,
-                    color: ext == 'pdf' ? Colors.red.shade600 :
-                           ['xls','xlsx'].contains(ext) ? Colors.green.shade600 :
-                           ['doc','docx'].contains(ext) ? Colors.blue.shade600 :
-                           ['jpg','jpeg','png','gif','bmp'].contains(ext) ? Colors.purple.shade500 :
-                           Colors.orange.shade600,
+                    color: ext == 'pdf'
+                        ? Colors.red.shade600
+                        : ['xls', 'xlsx'].contains(ext)
+                        ? Colors.green.shade600
+                        : ['doc', 'docx'].contains(ext)
+                        ? Colors.blue.shade600
+                        : ['jpg', 'jpeg', 'png', 'gif', 'bmp'].contains(ext)
+                        ? Colors.purple.shade500
+                        : Colors.orange.shade600,
                   ),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(fileName,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14))),
+                  Expanded(
+                    child: Text(
+                      fileName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
                     onPressed: () => Navigator.pop(ctx),
@@ -714,40 +1037,68 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    ext == 'pdf' ? Icons.picture_as_pdf :
-                    ['xls','xlsx'].contains(ext) ? Icons.table_chart :
-                    ['doc','docx'].contains(ext) ? Icons.description :
-                    ['jpg','jpeg','png','gif','bmp'].contains(ext) ? Icons.image :
-                    Icons.insert_drive_file,
+                    ext == 'pdf'
+                        ? Icons.picture_as_pdf
+                        : ['xls', 'xlsx'].contains(ext)
+                        ? Icons.table_chart
+                        : ['doc', 'docx'].contains(ext)
+                        ? Icons.description
+                        : ['jpg', 'jpeg', 'png', 'gif', 'bmp'].contains(ext)
+                        ? Icons.image
+                        : Icons.insert_drive_file,
                     size: 72,
-                    color: ext == 'pdf' ? Colors.red.shade600 :
-                           ['xls','xlsx'].contains(ext) ? Colors.green.shade600 :
-                           ['doc','docx'].contains(ext) ? Colors.blue.shade600 :
-                           ['jpg','jpeg','png','gif','bmp'].contains(ext) ? Colors.purple.shade500 :
-                           Colors.orange.shade600,
+                    color: ext == 'pdf'
+                        ? Colors.red.shade600
+                        : ['xls', 'xlsx'].contains(ext)
+                        ? Colors.green.shade600
+                        : ['doc', 'docx'].contains(ext)
+                        ? Colors.blue.shade600
+                        : ['jpg', 'jpeg', 'png', 'gif', 'bmp'].contains(ext)
+                        ? Colors.purple.shade500
+                        : Colors.orange.shade600,
                   ),
                   const SizedBox(height: 16),
-                  Text(fileName,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  Text(
+                    fileName,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Text(
-                    ext == 'pdf' ? 'PDF Document' :
-                    ['xls','xlsx'].contains(ext) ? 'Excel Spreadsheet' :
-                    ['doc','docx'].contains(ext) ? 'Word Document' :
-                    ['jpg','jpeg'].contains(ext) ? 'JPEG Image' :
-                    ext == 'png' ? 'PNG Image' :
-                    ext == 'gif' ? 'GIF Image' :
-                    ext == 'bmp' ? 'Bitmap Image' :
-                    ext == 'csv' ? 'CSV File' :
-                    ext == 'txt' ? 'Text File' : 'Unknown File',
+                    ext == 'pdf'
+                        ? 'PDF Document'
+                        : ['xls', 'xlsx'].contains(ext)
+                        ? 'Excel Spreadsheet'
+                        : ['doc', 'docx'].contains(ext)
+                        ? 'Word Document'
+                        : ['jpg', 'jpeg'].contains(ext)
+                        ? 'JPEG Image'
+                        : ext == 'png'
+                        ? 'PNG Image'
+                        : ext == 'gif'
+                        ? 'GIF Image'
+                        : ext == 'bmp'
+                        ? 'Bitmap Image'
+                        : ext == 'csv'
+                        ? 'CSV File'
+                        : ext == 'txt'
+                        ? 'Text File'
+                        : 'Unknown File',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                   ),
                   if (fileSize > 0)
                     Text(
-                      fileSize < 1024 ? '$fileSize B' :
-                      fileSize < 1048576 ? '${(fileSize/1024).toStringAsFixed(1)} KB' :
-                      '${(fileSize/1048576).toStringAsFixed(1)} MB',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      fileSize < 1024
+                          ? '$fileSize B'
+                          : fileSize < 1048576
+                          ? '${(fileSize / 1024).toStringAsFixed(1)} KB'
+                          : '${(fileSize / 1048576).toStringAsFixed(1)} MB',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                   const SizedBox(height: 16),
                   Text(
@@ -777,8 +1128,7 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   }
 
   String _fmtShortDate(String dateStr) {
-    if (dateStr.length >= 10) return dateStr.substring(0, 10);
-    return dateStr;
+    return Fmt.dateStr(dateStr);
   }
 
   @override
@@ -802,11 +1152,18 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                     initialValue: _year,
                     decoration: const InputDecoration(
                       labelText: 'Year',
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
-                    items: _years.map((y) => DropdownMenuItem(value: y, child: Text('$y'))).toList(),
+                    items: _years
+                        .map(
+                          (y) => DropdownMenuItem(value: y, child: Text('$y')),
+                        )
+                        .toList(),
                     onChanged: (v) {
                       setState(() => _year = v!);
                       _loadBalances();
@@ -821,15 +1178,21 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                     initialValue: _month,
                     decoration: const InputDecoration(
                       labelText: 'Month',
-                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
                       border: OutlineInputBorder(),
                       isDense: true,
                     ),
                     hint: const Text('All', style: TextStyle(fontSize: 13)),
-                    items: List.generate(_months.length, (i) => DropdownMenuItem(
-                      value: i == 0 ? null : i,
-                      child: Text(i == 0 ? 'All' : _months[i]),
-                    )),
+                    items: List.generate(
+                      _months.length,
+                      (i) => DropdownMenuItem(
+                        value: i == 0 ? null : i,
+                        child: Text(i == 0 ? 'All' : _months[i]),
+                      ),
+                    ),
                     onChanged: (v) {
                       setState(() => _month = v);
                       _loadBalances();
@@ -845,7 +1208,11 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
                 const Spacer(),
                 Text(
                   '$_year${_month != null ? ' ${_months[_month!]}' : ''}',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -858,16 +1225,27 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                border: const Border(bottom: BorderSide(color: Colors.grey, width: 0.5)),
+                border: const Border(
+                  bottom: BorderSide(color: Colors.grey, width: 0.5),
+                ),
               ),
               child: Row(
                 children: [
                   Expanded(flex: 2, child: _headerText('Code')),
                   Expanded(flex: 3, child: _headerText('Account Name')),
                   Expanded(flex: 2, child: _headerText('Type')),
-                  Expanded(flex: 2, child: _headerText('Total Debit', align: TextAlign.right)),
-                  Expanded(flex: 2, child: _headerText('Total Credit', align: TextAlign.right)),
-                  Expanded(flex: 2, child: _headerText('Balance', align: TextAlign.right)),
+                  Expanded(
+                    flex: 2,
+                    child: _headerText('Total Debit', align: TextAlign.right),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: _headerText('Total Credit', align: TextAlign.right),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: _headerText('Balance', align: TextAlign.right),
+                  ),
                 ],
               ),
             ),
@@ -877,25 +1255,34 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _balances.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.balance_outlined, size: 48, color: Colors.grey.shade300),
-                            const SizedBox(height: 8),
-                            Text('No balance data found', style: TextStyle(color: Colors.grey.shade500)),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.balance_outlined,
+                          size: 48,
+                          color: Colors.grey.shade300,
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(vertical: 4),
-                        itemCount: _balances.length,
-                        itemBuilder: (context, i) => _BalanceRow(
-                          entry: _balances[i],
-                          onDebitTap: () => _showLedgerDetail(_balances[i], showDebit: true),
-                          onCreditTap: () => _showLedgerDetail(_balances[i], showDebit: false),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No balance data found',
+                          style: TextStyle(color: Colors.grey.shade500),
                         ),
-                      ),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: _balances.length,
+                    itemBuilder: (context, i) => _BalanceRow(
+                      entry: _balances[i],
+                      onDebitTap: () =>
+                          _showLedgerDetail(_balances[i], showDebit: true),
+                      onCreditTap: () =>
+                          _showLedgerDetail(_balances[i], showDebit: false),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -903,8 +1290,13 @@ class _AccountBalanceScreenState extends State<AccountBalanceScreen> {
   }
 
   Widget _headerText(String text, {TextAlign align = TextAlign.left}) {
-    return Text(text,
-      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11, color: Colors.grey.shade700),
+    return Text(
+      text,
+      style: TextStyle(
+        fontWeight: FontWeight.w600,
+        fontSize: 11,
+        color: Colors.grey.shade700,
+      ),
       textAlign: align,
     );
   }
@@ -915,11 +1307,7 @@ class _BalanceRow extends StatelessWidget {
   final VoidCallback? onDebitTap;
   final VoidCallback? onCreditTap;
 
-  const _BalanceRow({
-    required this.entry,
-    this.onDebitTap,
-    this.onCreditTap,
-  });
+  const _BalanceRow({required this.entry, this.onDebitTap, this.onCreditTap});
 
   @override
   Widget build(BuildContext context) {
@@ -937,75 +1325,102 @@ class _BalanceRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(flex: 2, child: Text(
-            code,
-            style: const TextStyle(fontSize: 12, fontFamily: 'monospace', fontWeight: FontWeight.w500),
-          )),
-          Expanded(flex: 3, child: Text(
-            name,
-            style: const TextStyle(fontSize: 12),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          )),
-          Expanded(flex: 2, child: Text(
-            type,
-            style: TextStyle(fontSize: 11, color: AccountModel.typeColor(type)),
-          )),
+          Expanded(
+            flex: 2,
+            child: Text(
+              code,
+              style: const TextStyle(
+                fontSize: 12,
+                fontFamily: 'monospace',
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              name,
+              style: const TextStyle(fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              type,
+              style: TextStyle(
+                fontSize: 11,
+                color: AccountModel.typeColor(type),
+              ),
+            ),
+          ),
           // Debit amount — tappable
-          Expanded(flex: 2, child: GestureDetector(
-            onTap: debit > 0 ? onDebitTap : null,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              decoration: debit > 0
-                  ? BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(4),
-                    )
-                  : null,
-              child: Text(
-                debit > 0 ? '\$${GlService.fmtAmount(debit)}' : '-',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.green.shade700,
-                  decoration: debit > 0 ? TextDecoration.underline : null,
-                  decorationColor: Colors.green.shade300,
+          Expanded(
+            flex: 2,
+            child: GestureDetector(
+              onTap: debit > 0 ? onDebitTap : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                decoration: debit > 0
+                    ? BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                      )
+                    : null,
+                child: Text(
+                  debit > 0 ? '\$${GlService.fmtAmount(debit)}' : '-',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.green.shade700,
+                    decoration: debit > 0 ? TextDecoration.underline : null,
+                    decorationColor: Colors.green.shade300,
+                  ),
+                  textAlign: TextAlign.right,
                 ),
-                textAlign: TextAlign.right,
               ),
             ),
-          )),
+          ),
           // Credit amount — tappable
-          Expanded(flex: 2, child: GestureDetector(
-            onTap: credit > 0 ? onCreditTap : null,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              decoration: credit > 0
-                  ? BoxDecoration(
-                      color: Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(4),
-                    )
-                  : null,
-              child: Text(
-                credit > 0 ? '\$${GlService.fmtAmount(credit)}' : '-',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.orange.shade700,
-                  decoration: credit > 0 ? TextDecoration.underline : null,
-                  decorationColor: Colors.orange.shade300,
+          Expanded(
+            flex: 2,
+            child: GestureDetector(
+              onTap: credit > 0 ? onCreditTap : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                decoration: credit > 0
+                    ? BoxDecoration(
+                        color: Colors.orange.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                      )
+                    : null,
+                child: Text(
+                  credit > 0 ? '\$${GlService.fmtAmount(credit)}' : '-',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.orange.shade700,
+                    decoration: credit > 0 ? TextDecoration.underline : null,
+                    decorationColor: Colors.orange.shade300,
+                  ),
+                  textAlign: TextAlign.right,
                 ),
-                textAlign: TextAlign.right,
               ),
             ),
-          )),
-          Expanded(flex: 2, child: Text(
-            '\$${GlService.fmtAmount(balance.abs())}${balance < 0 ? ' CR' : ' DR'}',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: balance >= 0 ? Colors.green.shade800 : AppTheme.errorColor,
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              '\$${GlService.fmtAmount(balance.abs())}${balance < 0 ? ' CR' : ' DR'}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: balance >= 0
+                    ? Colors.green.shade800
+                    : AppTheme.errorColor,
+              ),
+              textAlign: TextAlign.right,
             ),
-            textAlign: TextAlign.right,
-          )),
+          ),
         ],
       ),
     );

@@ -484,4 +484,154 @@ class ProductionService {
     }
     return _decode(resp)?['data'] as List<dynamic>? ?? [];
   }
+
+  Future<Map<String, dynamic>> runMPS(Map<String, dynamic> data) async {
+    final resp = await http.post(
+      Uri.parse('$_productionBase/mps/run'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Run MPS failed');
+    }
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<Map<String, dynamic>> runMRP(Map<String, dynamic> data) async {
+    final resp = await http.post(
+      Uri.parse('$_productionBase/mrp/run'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Run MRP failed');
+    }
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<List<dynamic>> listMPSPlannedOrders() async {
+    final resp = await http.get(
+      Uri.parse('$_productionBase/mps/planned-orders'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'List MPS planned orders failed');
+    }
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<List<dynamic>> listMPSDependentDemands() async {
+    final resp = await http.get(
+      Uri.parse('$_productionBase/mps/dependent-demands'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'List MPS dependent demands failed');
+    }
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<List<dynamic>> listMPSExceptions() async {
+    final resp = await http.get(
+      Uri.parse('$_productionBase/mps/exceptions'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'List MPS exceptions failed');
+    }
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<List<dynamic>> listMRPPlannedPurchaseRequisitions() async {
+    final resp = await http.get(
+      Uri.parse('$_productionBase/mrp/planned-purchase-requisitions'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(
+        resp,
+        'List MRP planned purchase requisitions failed',
+      );
+    }
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<List<dynamic>> listMRPExceptions() async {
+    final resp = await http.get(
+      Uri.parse('$_productionBase/mrp/exceptions'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'List MRP exceptions failed');
+    }
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<Map<String, dynamic>> getMaterialRequirementsList({
+    required String productId,
+    String? siteId,
+  }) async {
+    final params = <String, String>{'product_id': productId};
+    if (siteId != null && siteId.isNotEmpty) params['site_id'] = siteId;
+    final uri = Uri.parse(
+      '$_productionBase/material-requirements',
+    ).replace(queryParameters: params);
+    final resp = await http.get(uri, headers: _headers);
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Load material requirements failed');
+    }
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<Map<String, dynamic>> convertMRPPRsToPR({
+    List<String> ids = const [],
+    bool all = false,
+  }) async {
+    final resp = await http.post(
+      Uri.parse('$_host/purchase/requisitions/import-mrp'),
+      headers: _headers,
+      body: jsonEncode({'ids': ids, 'all': all}),
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Convert MRP PR to PR failed');
+    }
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
+  }
+
+  Future<void> firmMPSPlannedOrder(String id, bool firm) async {
+    final resp = await http.put(
+      Uri.parse('$_productionBase/mps/planned-orders/$id/firm'),
+      headers: _headers,
+      body: jsonEncode({'firm': firm}),
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Firm MPS planned order failed');
+    }
+  }
+
+  Future<List<dynamic>> convertMPSPlannedOrders({
+    List<String> ids = const [],
+    bool all = false,
+  }) async {
+    final resp = await http.post(
+      Uri.parse('$_productionBase/mps/planned-orders/convert'),
+      headers: _headers,
+      body: jsonEncode({'ids': ids, 'all': all}),
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Convert MPS planned orders failed');
+    }
+    return _decode(resp)?['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<Map<String, dynamic>> convertMPSPlannedOrder(String id) async {
+    final resp = await http.post(
+      Uri.parse('$_productionBase/mps/planned-orders/$id/convert'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Convert MPS planned order failed');
+    }
+    return _decode(resp)?['data'] as Map<String, dynamic>? ?? {};
+  }
 }

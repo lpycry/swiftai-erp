@@ -118,16 +118,24 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.calendar_month_outlined, color: AppTheme.accentBlue),
+                  leading: const Icon(
+                    Icons.calendar_month_outlined,
+                    color: AppTheme.accentBlue,
+                  ),
                   title: const Text('Date Format'),
                   subtitle: const Text('Define SAP-style date display formats'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => DateFormatScreen(
-                      authService: authService,
-                      dateFormatService: DateFormatService(authService.accessToken ?? ''),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => DateFormatScreen(
+                        authService: authService,
+                        dateFormatService: DateFormatService(
+                          authService.accessToken ?? '',
+                        ),
+                      ),
                     ),
-                  )),
+                  ),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -166,6 +174,16 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
+                  leading: const Icon(Icons.manage_accounts_outlined),
+                  title: const Text('User Management'),
+                  subtitle: const Text(
+                    'Create users, reset passwords, assign roles',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.pushNamed(context, '/admin/users'),
+                ),
+                const Divider(height: 1),
+                ListTile(
                   leading: const Icon(Icons.people_outline),
                   title: const Text('Role Management'),
                   subtitle: const Text('Create and manage roles'),
@@ -185,21 +203,34 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.account_balance_rounded, color: AppTheme.accentBlue),
+                  leading: const Icon(
+                    Icons.account_balance_rounded,
+                    color: AppTheme.accentBlue,
+                  ),
                   title: const Text('Finance Settings'),
-                  subtitle: const Text('Periods, COA, Payment Terms, Incoterms'),
+                  subtitle: const Text(
+                    'Periods, COA, Payment Terms, Incoterms',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.pushNamed(context, '/settings/finance'),
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/settings/finance'),
                 ),
                 const Divider(height: 1),
                 ListTile(
-                  leading: const Icon(Icons.sell_outlined, color: Colors.orange),
+                  leading: const Icon(
+                    Icons.sell_outlined,
+                    color: Colors.orange,
+                  ),
                   title: const Text('Sales Settings'),
                   subtitle: const Text('Order type configuration matrix'),
                   trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => SalesSettingsScreen(authService: authService),
-                  )),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          SalesSettingsScreen(authService: authService),
+                    ),
+                  ),
                 ),
                 const Divider(height: 1),
                 ListTile(
@@ -307,15 +338,17 @@ class SettingsScreen extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
             SizedBox(height: 8),
-            Text('\u2022 Journal entries & lines'),
-            Text('\u2022 Account balances'),
-            Text('\u2022 Attachments'),
-            Text('\u2022 Audit logs'),
-            Text('\u2022 Sessions'),
-            Text('\u2022 User role assignments'),
+            Text('\u2022 Sales orders, quotations, ATP schedule lines'),
+            Text('\u2022 Purchase orders, receipts, invoices, payments'),
+            Text('\u2022 Goods receipts, goods issues, stock ledger'),
+            Text('\u2022 Production orders, confirmations, MPS results'),
+            Text('\u2022 Journal entries, balances, attachments'),
+            Text('\u2022 Material master records and related product data'),
+            Text('\u2022 BOM headers and BOM items'),
+            Text('\u2022 Sessions and audit logs'),
             SizedBox(height: 12),
             Text(
-              'Chart of accounts, organizations, fiscal periods, user accounts, and tenants will NOT be affected.',
+              'Customers, vendors, warehouses, plants, finance settings, user accounts, roles, and permissions will NOT be affected.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
             SizedBox(height: 12),
@@ -351,58 +384,75 @@ class SettingsScreen extends StatelessWidget {
   }
 
   void _executeReset(BuildContext buildContext) {
+    final confirmCtrl = TextEditingController();
     showDialog(
       context: buildContext,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirm Database Reset'),
-        content: const Text('Type RESET to confirm:'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              showDialog(
-                context: buildContext,
-                barrierDismissible: false,
-                builder: (_) =>
-                    const Center(child: CircularProgressIndicator()),
-              );
-              try {
-                await glService.resetDatabase();
-                if (buildContext.mounted) {
-                  Navigator.pop(buildContext);
-                  ScaffoldMessenger.of(buildContext).showSnackBar(
-                    const SnackBar(
-                      content: Text('Database reset complete.'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (buildContext.mounted) {
-                  Navigator.pop(buildContext);
-                  ScaffoldMessenger.of(buildContext).showSnackBar(
-                    SnackBar(
-                      content: Text('Reset failed: $e'),
-                      backgroundColor: AppTheme.errorColor,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text(
-              'RESET',
-              style: TextStyle(
-                color: AppTheme.errorColor,
-                fontWeight: FontWeight.bold,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final confirmed = confirmCtrl.text.trim() == 'RESET';
+          return AlertDialog(
+            title: const Text('Confirm Database Reset'),
+            content: TextField(
+              controller: confirmCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Type RESET to confirm',
+                isDense: true,
               ),
+              onChanged: (_) => setDialogState(() {}),
             ),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: confirmed
+                    ? () async {
+                        Navigator.pop(ctx);
+                        showDialog(
+                          context: buildContext,
+                          barrierDismissible: false,
+                          builder: (_) =>
+                              const Center(child: CircularProgressIndicator()),
+                        );
+                        try {
+                          await glService.resetDatabase();
+                          if (buildContext.mounted) {
+                            Navigator.pop(buildContext);
+                            ScaffoldMessenger.of(buildContext).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Transactional data reset complete.',
+                                ),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (buildContext.mounted) {
+                            Navigator.pop(buildContext);
+                            ScaffoldMessenger.of(buildContext).showSnackBar(
+                              SnackBar(
+                                content: Text('Reset failed: $e'),
+                                backgroundColor: AppTheme.errorColor,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    : null,
+                child: const Text(
+                  'RESET',
+                  style: TextStyle(
+                    color: AppTheme.errorColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
-    );
+    ).whenComplete(confirmCtrl.dispose);
   }
 }

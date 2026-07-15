@@ -65,10 +65,80 @@ func (s *PurchaseService) RecommendVendors(ctx context.Context, orgID uuid.UUID,
 	return s.repo.RecommendVendors(ctx, orgID, productID)
 }
 
+// ── Purchasing Info Records ──
+
+func (s *PurchaseService) CreateInfoRecord(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreatePurchasingInfoRecordRequest) (*purchasemodels.PurchasingInfoRecord, error) {
+	return s.repo.CreateInfoRecord(ctx, orgID, req)
+}
+
+func (s *PurchaseService) GetInfoRecord(ctx context.Context, id, orgID uuid.UUID) (*purchasemodels.PurchasingInfoRecord, error) {
+	return s.repo.GetInfoRecord(ctx, id, orgID)
+}
+
+func (s *PurchaseService) ListInfoRecords(ctx context.Context, orgID uuid.UUID, productID, vendorID, siteID *uuid.UUID, search string) ([]*purchasemodels.PurchasingInfoRecord, error) {
+	return s.repo.ListInfoRecords(ctx, orgID, productID, vendorID, siteID, search)
+}
+
+func (s *PurchaseService) UpdateInfoRecord(ctx context.Context, id, orgID uuid.UUID, req *purchasemodels.UpdatePurchasingInfoRecordRequest) error {
+	return s.repo.UpdateInfoRecord(ctx, id, orgID, req)
+}
+
+func (s *PurchaseService) DeleteInfoRecord(ctx context.Context, id, orgID uuid.UUID) error {
+	return s.repo.DeleteInfoRecord(ctx, id, orgID)
+}
+
+func (s *PurchaseService) FindPreferredInfoRecord(ctx context.Context, orgID, productID uuid.UUID, siteID *uuid.UUID) (*purchasemodels.PurchasingInfoRecord, error) {
+	return s.repo.FindPreferredInfoRecord(ctx, orgID, productID, siteID)
+}
+
 // ── Purchase Orders ──
+
+func (s *PurchaseService) CreatePR(ctx context.Context, orgID uuid.UUID, userID *uuid.UUID, req *purchasemodels.CreatePurchaseRequisitionRequest) (*purchasemodels.PurchaseRequisition, error) {
+	return s.repo.CreatePR(ctx, orgID, userID, req)
+}
+
+func (s *PurchaseService) ListPRs(ctx context.Context, orgID uuid.UUID, status, search string) ([]*purchasemodels.PurchaseRequisition, error) {
+	return s.repo.ListPRs(ctx, orgID, status, search)
+}
+
+func (s *PurchaseService) GetPR(ctx context.Context, id, orgID uuid.UUID) (*purchasemodels.PurchaseRequisition, error) {
+	return s.repo.GetPR(ctx, id, orgID)
+}
+
+func (s *PurchaseService) UpdatePR(ctx context.Context, id, orgID uuid.UUID, req *purchasemodels.UpdatePurchaseRequisitionRequest) error {
+	return s.repo.UpdatePR(ctx, id, orgID, req)
+}
+
+func (s *PurchaseService) DeletePR(ctx context.Context, id, orgID uuid.UUID) error {
+	return s.repo.DeletePR(ctx, id, orgID)
+}
+
+func (s *PurchaseService) SubmitPR(ctx context.Context, id, orgID uuid.UUID, userID *uuid.UUID) error {
+	return s.repo.SubmitPR(ctx, id, orgID, userID)
+}
+
+func (s *PurchaseService) ApprovePR(ctx context.Context, id, orgID uuid.UUID, userID *uuid.UUID) error {
+	return s.repo.ApprovePR(ctx, id, orgID, userID)
+}
+
+func (s *PurchaseService) RejectPR(ctx context.Context, id, orgID uuid.UUID, userID *uuid.UUID, reason string) error {
+	return s.repo.RejectPR(ctx, id, orgID, userID, reason)
+}
+
+func (s *PurchaseService) ConvertPRToPO(ctx context.Context, id, orgID uuid.UUID, req *purchasemodels.ConvertPRToPORequest, userID *uuid.UUID) ([]*purchasemodels.PurchaseOrder, error) {
+	return s.repo.ConvertPRToPO(ctx, id, orgID, req, userID)
+}
+
+func (s *PurchaseService) ImportMRPPRs(ctx context.Context, orgID uuid.UUID, req *purchasemodels.ImportMRPPRsRequest, userID *uuid.UUID) (*purchasemodels.PurchaseRequisition, error) {
+	return s.repo.ImportMRPPRs(ctx, orgID, req, userID)
+}
 
 func (s *PurchaseService) CreatePO(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreatePORequest, createdBy *uuid.UUID) (*purchasemodels.PurchaseOrder, error) {
 	return s.repo.CreatePO(ctx, orgID, req, createdBy)
+}
+
+func (s *PurchaseService) UpdatePO(ctx context.Context, id, orgID uuid.UUID, req *purchasemodels.UpdatePORequest) (*purchasemodels.PurchaseOrder, error) {
+	return s.repo.UpdatePO(ctx, id, orgID, req)
 }
 
 func (s *PurchaseService) GetPO(ctx context.Context, id, orgID uuid.UUID) (*purchasemodels.PurchaseOrder, error) {

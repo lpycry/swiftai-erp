@@ -1,32 +1,225 @@
 package handler
 
 import (
+	"errors"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog/log"
 	models "github.com/swiftai-erp/backend/internal/authz/models"
 	"github.com/swiftai-erp/backend/internal/authz/repository"
 	"github.com/swiftai-erp/backend/pkg/response"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type AdminHandler struct {
-	authObjRepo  *repository.AuthObjectRepo
-	roleRepo     *repository.RoleRepo
-	authValRepo  *repository.AuthValueRepo
+	authObjRepo *repository.AuthObjectRepo
+	roleRepo    *repository.RoleRepo
+	authValRepo *repository.AuthValueRepo
+	userRepo    *repository.UserRepo
 }
 
 func NewAdminHandler(
 	authObjRepo *repository.AuthObjectRepo,
 	roleRepo *repository.RoleRepo,
 	authValRepo *repository.AuthValueRepo,
+	userRepo *repository.UserRepo,
 ) *AdminHandler {
 	return &AdminHandler{
 		authObjRepo: authObjRepo,
 		roleRepo:    roleRepo,
 		authValRepo: authValRepo,
+		userRepo:    userRepo,
 	}
+}
+
+// ==================== Users ====================
+
+type createUserReq struct {
+	Email        string   `json:"email" binding:"required,email"`
+	Password     string   `json:"password" binding:"required,min=8"`
+	DisplayName  string   `json:"display_name" binding:"required"`
+	Phone        string   `json:"phone"`
+	AvatarURL    string   `json:"avatar_url"`
+	IsActive     *bool    `json:"is_active"`
+	IsMFAEnabled bool     `json:"is_mfa_enabled"`
+	RoleIDs      []string `json:"role_ids"`
+}
+
+type updateUserReq struct {
+	Email        string `json:"email" binding:"required,email"`
+	DisplayName  string `json:"display_name" binding:"required"`
+	Phone        string `json:"phone"`
+	AvatarURL    string `json:"avatar_url"`
+	IsActive     bool   `json:"is_active"`
+	IsMFAEnabled bool   `json:"is_mfa_enabled"`
+}
+
+type resetPasswordReq struct {
+	Password string `json:"password" binding:"required,min=8"`
+}
+
+func (h *AdminHandler) ListUsers(c *gin.Context) {
+	tenantID, _ := uuid.Parse(c.GetString("tenant_id"))
+	users, err := h.userRepo.List(c.Request.Context(), tenantID, c.Query("search"), c.Query("status"))
+	if err != nil {
+		log.Err(err).Msg("list users failed")
+		response.InternalError(c, "failed to list users")
+		return
+	}
+	response.OK(c, users)
+}
+
+func (h *AdminHandler) GetUser(c *gin.Context) {
+	tenantID, _ := uuid.Parse(c.GetString("tenant_id"))
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid user id")
+		return
+	}
+	user, err := h.userRepo.Get(c.Request.Context(), tenantID, userID)
+	if err != nil {
+		log.Err(err).Msg("get user failed")
+		response.InternalError(c, "failed to get user")
+		return
+	}
+	if user == nil {
+		response.NotFound(c, "user not found")
+		return
+	}
+	response.OK(c, user)
+}
+
+func (h *AdminHandler) CreateUser(c *gin.Context) {
+	tenantID, _ := uuid.Parse(c.GetString("tenant_id"))
+	adminID, _ := uuid.Parse(c.GetString("user_id"))
+
+	var req createUserReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		response.InternalError(c, "failed to hash password")
+		return
+	}
+
+	active := true
+	if req.IsActive != nil {
+		active = *req.IsActive
+	}
+	user := repository.NewAdminUser(tenantID, req.Email, req.DisplayName, req.Phone, active)
+	user.AvatarURL = req.AvatarURL
+	user.IsMFAEnabled = req.IsMFAEnabled
+
+	if err := h.userRepo.Create(c.Request.Context(), user, string(hash)); err != nil {
+		log.Err(err).Msg("create user failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	for _, rawRoleID := range req.RoleIDs {
+		roleID, err := uuid.Parse(rawRoleID)
+		if err == nil {
+			_ = h.roleRepo.AssignRole(c.Request.Context(), user.ID, roleID, &adminID)
+		}
+	}
+
+	created, _ := h.userRepo.Get(c.Request.Context(), tenantID, user.ID)
+	response.Created(c, created)
+}
+
+func (h *AdminHandler) UpdateUser(c *gin.Context) {
+	tenantID, _ := uuid.Parse(c.GetString("tenant_id"))
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid user id")
+		return
+	}
+	var req updateUserReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+
+	user := &models.AdminUser{
+		ID:           userID,
+		Email:        req.Email,
+		DisplayName:  req.DisplayName,
+		Phone:        req.Phone,
+		AvatarURL:    req.AvatarURL,
+		IsActive:     req.IsActive,
+		IsMFAEnabled: req.IsMFAEnabled,
+	}
+	if err := h.userRepo.Update(c.Request.Context(), tenantID, user); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			response.NotFound(c, "user not found")
+			return
+		}
+		log.Err(err).Msg("update user failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	updated, _ := h.userRepo.Get(c.Request.Context(), tenantID, userID)
+	response.OK(c, updated)
+}
+
+func (h *AdminHandler) SetUserActive(c *gin.Context) {
+	tenantID, _ := uuid.Parse(c.GetString("tenant_id"))
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid user id")
+		return
+	}
+	var req struct {
+		IsActive bool `json:"is_active"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request")
+		return
+	}
+	if err := h.userRepo.SetActive(c.Request.Context(), tenantID, userID, req.IsActive); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			response.NotFound(c, "user not found")
+			return
+		}
+		log.Err(err).Msg("set user active failed")
+		response.InternalError(c, "failed to update status")
+		return
+	}
+	response.OK(c, gin.H{"message": "user status updated"})
+}
+
+func (h *AdminHandler) ResetUserPassword(c *gin.Context) {
+	tenantID, _ := uuid.Parse(c.GetString("tenant_id"))
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid user id")
+		return
+	}
+	var req resetPasswordReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		response.InternalError(c, "failed to hash password")
+		return
+	}
+	if err := h.userRepo.ResetPassword(c.Request.Context(), tenantID, userID, string(hash)); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			response.NotFound(c, "user not found")
+			return
+		}
+		log.Err(err).Msg("reset password failed")
+		response.InternalError(c, "failed to reset password")
+		return
+	}
+	response.OK(c, gin.H{"message": "password reset"})
 }
 
 // ==================== Auth Objects ====================
@@ -179,6 +372,20 @@ func (h *AdminHandler) AddObjectField(c *gin.Context) {
 	response.Created(c, field)
 }
 
+func (h *AdminHandler) DeleteObjectField(c *gin.Context) {
+	fieldID, err := uuid.Parse(c.Param("fieldId"))
+	if err != nil {
+		response.BadRequest(c, "invalid field id")
+		return
+	}
+	if err := h.authObjRepo.DeleteField(c.Request.Context(), fieldID); err != nil {
+		log.Err(err).Msg("delete field failed")
+		response.InternalError(c, "failed to delete field")
+		return
+	}
+	response.OK(c, gin.H{"message": "deleted"})
+}
+
 // ==================== Roles ====================
 
 type createRoleReq struct {
@@ -268,16 +475,16 @@ func (h *AdminHandler) DeleteRole(c *gin.Context) {
 // ==================== Auth Values ====================
 
 type setAuthValueReq struct {
-	AuthObjectID     string            `json:"auth_object_id" binding:"required"`
-	ActivityCreate   bool              `json:"activity_create"`
-	ActivityRead     bool              `json:"activity_read"`
-	ActivityUpdate   bool              `json:"activity_update"`
-	ActivityDelete   bool              `json:"activity_delete"`
-	ActivityApprove  bool              `json:"activity_approve"`
-	ActivityPrint    bool              `json:"activity_print"`
-	ActivityTransfer bool              `json:"activity_transfer"`
-	ActivityClose    bool              `json:"activity_close"`
-	FieldValues      map[string]string `json:"field_values"`
+	AuthObjectID     string                       `json:"auth_object_id" binding:"required"`
+	ActivityCreate   bool                         `json:"activity_create"`
+	ActivityRead     bool                         `json:"activity_read"`
+	ActivityUpdate   bool                         `json:"activity_update"`
+	ActivityDelete   bool                         `json:"activity_delete"`
+	ActivityApprove  bool                         `json:"activity_approve"`
+	ActivityPrint    bool                         `json:"activity_print"`
+	ActivityTransfer bool                         `json:"activity_transfer"`
+	ActivityClose    bool                         `json:"activity_close"`
+	FieldValues      map[string]string            `json:"field_values"`
 	FieldRanges      map[string]models.FieldRange `json:"field_ranges"`
 }
 
@@ -436,7 +643,7 @@ func (h *AdminHandler) CheckPermissionPOST(c *gin.Context) {
 	}
 	// For now return a simple check result
 	response.OK(c, &models.PermissionCheckResult{
-		Granted: true,
+		Granted:   true,
 		MatchedBy: "admin",
 	})
 }

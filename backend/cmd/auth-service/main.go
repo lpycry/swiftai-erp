@@ -28,6 +28,7 @@ import (
 	dfRepo "github.com/swiftai-erp/backend/internal/dateformat/repository"
 
 	"github.com/swiftai-erp/backend/internal/auth"
+	authzBootstrap "github.com/swiftai-erp/backend/internal/authz/bootstrap"
 	"github.com/swiftai-erp/backend/internal/authz/engine"
 	authzHandler "github.com/swiftai-erp/backend/internal/authz/handler"
 	authzRepo "github.com/swiftai-erp/backend/internal/authz/repository"
@@ -106,7 +107,9 @@ func main() {
 	authObjRepo := authzRepo.NewAuthObjectRepo(pool)
 	roleRepo := authzRepo.NewRoleRepo(pool)
 	authValRepo := authzRepo.NewAuthValueRepo(pool)
-	adminHandler := authzHandler.NewAdminHandler(authObjRepo, roleRepo, authValRepo)
+	authzBootstrap.EnsureDefaultAuthObjects(ctx, authObjRepo)
+	userAdminRepo := authzRepo.NewUserRepo(pool)
+	adminHandler := authzHandler.NewAdminHandler(authObjRepo, roleRepo, authValRepo, userAdminRepo)
 	permEngine := engine.New(roleRepo, authValRepo, authObjRepo, rdb)
 
 	// GL
@@ -210,16 +213,24 @@ func main() {
 		protected.POST("/roles/assign", rbacHandler.AssignUserRole)
 		protected.GET("/users/:id/permissions", rbacHandler.GetUserPermissions)
 
+		// Admin User Management
+		protected.GET("/admin/users", adminHandler.ListUsers)
+		protected.POST("/admin/users", adminHandler.CreateUser)
+		protected.GET("/admin/users/:id", adminHandler.GetUser)
+		protected.PUT("/admin/users/:id", adminHandler.UpdateUser)
+		protected.PUT("/admin/users/:id/status", adminHandler.SetUserActive)
+		protected.POST("/admin/users/:id/reset-password", adminHandler.ResetUserPassword)
+
 		// Admin
 		admin := protected.Group("/admin")
-		admin.Use(middleware.RequirePermission(permEngine, "A_ROLE_MGMT", "manage"))
 		{
-			admin.POST("/auth-objects", adminHandler.CreateAuthObject)
-			admin.GET("/auth-objects", adminHandler.ListAuthObjects)
-			admin.GET("/auth-objects/:id", adminHandler.GetAuthObject)
-			admin.PUT("/auth-objects/:id", adminHandler.UpdateAuthObject)
-			admin.DELETE("/auth-objects/:id", adminHandler.DeleteAuthObject)
-			admin.POST("/auth-objects/:id/fields", adminHandler.AddObjectField)
+			admin.POST("/auth-objects", middleware.RequirePermission(permEngine, "A_ROLE_MGMT", "create"), adminHandler.CreateAuthObject)
+			admin.GET("/auth-objects", middleware.RequirePermission(permEngine, "A_ROLE_MGMT", "read"), adminHandler.ListAuthObjects)
+			admin.GET("/auth-objects/:id", middleware.RequirePermission(permEngine, "A_ROLE_MGMT", "read"), adminHandler.GetAuthObject)
+			admin.PUT("/auth-objects/:id", middleware.RequirePermission(permEngine, "A_ROLE_MGMT", "update"), adminHandler.UpdateAuthObject)
+			admin.DELETE("/auth-objects/:id", middleware.RequirePermission(permEngine, "A_ROLE_MGMT", "delete"), adminHandler.DeleteAuthObject)
+			admin.POST("/auth-objects/:id/fields", middleware.RequirePermission(permEngine, "A_ROLE_MGMT", "update"), adminHandler.AddObjectField)
+			admin.DELETE("/auth-objects/:id/fields/:fieldId", middleware.RequirePermission(permEngine, "A_ROLE_MGMT", "update"), adminHandler.DeleteObjectField)
 		}
 
 		// Role Master
@@ -259,6 +270,15 @@ func main() {
 		// ---- GL: Journal Entries ----
 		protected.POST("/gl/journal-entries", glHandler.CreateJournalEntry)
 		protected.GET("/gl/journal-entries", glHandler.ListJournalEntries)
+		protected.GET("/gl/open-items", glHandler.ListOpenItems)
+		protected.GET("/gl/cleared-items", glHandler.ListClearedItems)
+		protected.POST("/gl/clearings", glHandler.CreateClearing)
+		protected.POST("/gl/clearings/:id/cancel", glHandler.CancelClearing)
+		protected.GET("/gl/ar/customers", glHandler.ListARCustomers)
+		protected.GET("/gl/ar/open-invoices", glHandler.ListAROpenInvoices)
+		protected.POST("/gl/ar/incoming-payments", glHandler.CreateIncomingPayment)
+		protected.GET("/gl/ar/credit-memos", glHandler.ListAROpenCreditMemos)
+		protected.POST("/gl/ar/credit-memo-clearings", glHandler.CreateCreditMemoClearing)
 		protected.GET("/gl/journal-entries/:id", glHandler.GetJournalEntry)
 		protected.POST("/gl/journal-entries/post", glHandler.PostJournalEntries)
 		protected.PATCH("/gl/journal-entries/:id/status", glHandler.UpdateJournalEntryStatus)
@@ -357,10 +377,28 @@ func main() {
 		protected.PUT("/purchase/vendors/:id", purchaseHandler.UpdateVendor)
 		protected.DELETE("/purchase/vendors/:id", purchaseHandler.DeleteVendor)
 		protected.GET("/purchase/vendors/recommend", purchaseHandler.RecommendVendors)
+		protected.POST("/purchase/info-records", purchaseHandler.CreateInfoRecord)
+		protected.GET("/purchase/info-records", purchaseHandler.ListInfoRecords)
+		protected.GET("/purchase/info-records/preferred", purchaseHandler.FindPreferredInfoRecord)
+		protected.GET("/purchase/info-records/:id", purchaseHandler.GetInfoRecord)
+		protected.PUT("/purchase/info-records/:id", purchaseHandler.UpdateInfoRecord)
+		protected.DELETE("/purchase/info-records/:id", purchaseHandler.DeleteInfoRecord)
+
+		protected.POST("/purchase/requisitions/import-mrp", purchaseHandler.ImportMRPPRs)
+		protected.POST("/purchase/requisitions", purchaseHandler.CreatePR)
+		protected.GET("/purchase/requisitions", purchaseHandler.ListPRs)
+		protected.GET("/purchase/requisitions/:id", purchaseHandler.GetPR)
+		protected.PUT("/purchase/requisitions/:id", purchaseHandler.UpdatePR)
+		protected.DELETE("/purchase/requisitions/:id", purchaseHandler.DeletePR)
+		protected.POST("/purchase/requisitions/:id/submit", purchaseHandler.SubmitPR)
+		protected.POST("/purchase/requisitions/:id/approve", purchaseHandler.ApprovePR)
+		protected.POST("/purchase/requisitions/:id/reject", purchaseHandler.RejectPR)
+		protected.POST("/purchase/requisitions/:id/convert-to-po", purchaseHandler.ConvertPRToPO)
 
 		protected.POST("/purchase/orders", purchaseHandler.CreatePO)
 		protected.GET("/purchase/orders", purchaseHandler.ListPOs)
 		protected.GET("/purchase/orders/:id", purchaseHandler.GetPO)
+		protected.PUT("/purchase/orders/:id", purchaseHandler.UpdatePO)
 		protected.PUT("/purchase/orders/:id/status", purchaseHandler.UpdatePOStatus)
 		protected.POST("/purchase/orders/:id/attachments", purchaseHandler.UploadPOAttachment)
 		protected.GET("/purchase/orders/:id/attachments", purchaseHandler.ListPOAttachments)
@@ -479,6 +517,7 @@ func main() {
 		protected.POST("/sales/quotations", salesHandler.CreateQuotation)
 		protected.GET("/sales/quotations", salesHandler.ListQuotations)
 		protected.GET("/sales/quotations/:id", salesHandler.GetQuotation)
+		protected.PUT("/sales/quotations/:id", salesHandler.UpdateQuotation)
 		protected.PUT("/sales/quotations/:id/status", salesHandler.UpdateQuotationStatus)
 		protected.DELETE("/sales/quotations/:id", salesHandler.DeleteQuotation)
 
@@ -491,6 +530,21 @@ func main() {
 		protected.GET("/sales/atp-check", salesHandler.CheckATP) // ?product_id=&quantity=
 		protected.POST("/sales/calculate-price", salesHandler.CalculatePrice)
 		protected.DELETE("/sales/orders/:id", salesHandler.DeleteSalesOrder)
+
+		// ---- Sales: Delivery Notes ----
+		protected.POST("/sales/delivery-notes", salesHandler.CreateDeliveryNote)
+		protected.GET("/sales/delivery-notes", salesHandler.ListDeliveryNotes)
+		protected.GET("/sales/delivery-notes/:id", salesHandler.GetDeliveryNote)
+		protected.DELETE("/sales/delivery-notes/:id", salesHandler.DeleteDeliveryNote)
+		protected.PUT("/sales/delivery-notes/:id/picking", salesHandler.UpdateDeliveryPicking)
+		protected.POST("/sales/delivery-notes/:id/pgi", salesHandler.PostDeliveryPGI)
+
+		// ---- Sales: Invoices ----
+		protected.GET("/sales/invoices/pending-deliveries", salesHandler.ListPendingInvoiceDeliveries)
+		protected.POST("/sales/invoices", salesHandler.CreateSalesInvoice)
+		protected.GET("/sales/invoices", salesHandler.ListSalesInvoices)
+		protected.GET("/sales/invoices/:id", salesHandler.GetSalesInvoice)
+		protected.POST("/sales/invoices/:id/post", salesHandler.PostSalesInvoice)
 
 		// ---- Order Type Configs ----
 		protected.GET("/sales/order-types", salesHandler.ListOrderTypeConfigs)
@@ -596,6 +650,17 @@ func main() {
 		protected.POST("/production/orders/:id/time-confirmations", prodHandler.CreateTimeConfirmation)
 		protected.GET("/production/orders/:id/time-confirmations", prodHandler.ListTimeConfirmations)
 		protected.PUT("/production/orders/materials/:mat_id/issue-qty", prodHandler.UpdatePOMaterialIssueQty)
+		protected.POST("/production/mps/run", prodHandler.RunMPS)
+		protected.POST("/production/mrp/run", prodHandler.RunMRP)
+		protected.GET("/production/mps/planned-orders", prodHandler.ListMPSPlannedOrders)
+		protected.GET("/production/mps/dependent-demands", prodHandler.ListMPSDependentDemands)
+		protected.GET("/production/mps/exceptions", prodHandler.ListMPSExceptions)
+		protected.GET("/production/mrp/planned-purchase-requisitions", prodHandler.ListMRPPlannedPurchaseRequisitions)
+		protected.GET("/production/mrp/exceptions", prodHandler.ListMRPExceptions)
+		protected.GET("/production/material-requirements", prodHandler.GetMaterialRequirementsList)
+		protected.POST("/production/mps/planned-orders/convert", prodHandler.ConvertMPSPlannedOrders)
+		protected.PUT("/production/mps/planned-orders/:id/firm", prodHandler.FirmMPSPlannedOrder)
+		protected.POST("/production/mps/planned-orders/:id/convert", prodHandler.ConvertMPSPlannedOrder)
 
 	}
 

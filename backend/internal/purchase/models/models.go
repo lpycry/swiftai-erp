@@ -55,7 +55,165 @@ type UpdateVendorRequest struct {
 	IsActive      *bool   `json:"is_active,omitempty"`
 }
 
+// ── Purchasing Info Record ──
+
+type PurchasingInfoRecord struct {
+	ID                        uuid.UUID  `json:"id"`
+	OrgID                     uuid.UUID  `json:"org_id"`
+	VendorID                  uuid.UUID  `json:"vendor_id"`
+	VendorCode                string     `json:"vendor_code,omitempty"`
+	VendorName                string     `json:"vendor_name,omitempty"`
+	ProductID                 uuid.UUID  `json:"product_id"`
+	ProductSKU                string     `json:"product_sku,omitempty"`
+	ProductName               string     `json:"product_name,omitempty"`
+	SiteID                    *uuid.UUID `json:"site_id,omitempty"`
+	SiteCode                  string     `json:"site_code,omitempty"`
+	SiteName                  string     `json:"site_name,omitempty"`
+	PurchaseUOM               string     `json:"purchase_uom"`
+	Currency                  string     `json:"currency"`
+	Price                     float64    `json:"price"`
+	MinOrderQty               float64    `json:"min_order_qty"`
+	RoundingQty               float64    `json:"rounding_qty"`
+	LeadTimeDays              int        `json:"lead_time_days"`
+	OverdeliveryTolerancePct  float64    `json:"overdelivery_tolerance_pct"`
+	UnderdeliveryTolerancePct float64    `json:"underdelivery_tolerance_pct"`
+	Incoterm                  string     `json:"incoterm,omitempty"`
+	PaymentTerms              string     `json:"payment_terms,omitempty"`
+	ValidFrom                 time.Time  `json:"valid_from"`
+	ValidTo                   *time.Time `json:"valid_to,omitempty"`
+	IsPreferred               bool       `json:"is_preferred"`
+	IsBlocked                 bool       `json:"is_blocked"`
+	IsActive                  bool       `json:"is_active"`
+	Notes                     string     `json:"notes,omitempty"`
+	CreatedAt                 time.Time  `json:"created_at"`
+	UpdatedAt                 time.Time  `json:"updated_at"`
+}
+
+type CreatePurchasingInfoRecordRequest struct {
+	VendorID                  uuid.UUID  `json:"vendor_id" binding:"required"`
+	ProductID                 uuid.UUID  `json:"product_id" binding:"required"`
+	SiteID                    *uuid.UUID `json:"site_id,omitempty"`
+	PurchaseUOM               string     `json:"purchase_uom,omitempty"`
+	Currency                  string     `json:"currency,omitempty"`
+	Price                     float64    `json:"price,omitempty"`
+	MinOrderQty               float64    `json:"min_order_qty,omitempty"`
+	RoundingQty               float64    `json:"rounding_qty,omitempty"`
+	LeadTimeDays              int        `json:"lead_time_days,omitempty"`
+	OverdeliveryTolerancePct  float64    `json:"overdelivery_tolerance_pct,omitempty"`
+	UnderdeliveryTolerancePct float64    `json:"underdelivery_tolerance_pct,omitempty"`
+	Incoterm                  string     `json:"incoterm,omitempty"`
+	PaymentTerms              string     `json:"payment_terms,omitempty"`
+	ValidFrom                 string     `json:"valid_from,omitempty"`
+	ValidTo                   string     `json:"valid_to,omitempty"`
+	IsPreferred               bool       `json:"is_preferred,omitempty"`
+	IsBlocked                 bool       `json:"is_blocked,omitempty"`
+	Notes                     string     `json:"notes,omitempty"`
+}
+
+type UpdatePurchasingInfoRecordRequest struct {
+	SiteID                    *uuid.UUID `json:"site_id,omitempty"`
+	PurchaseUOM               *string    `json:"purchase_uom,omitempty"`
+	Currency                  *string    `json:"currency,omitempty"`
+	Price                     *float64   `json:"price,omitempty"`
+	MinOrderQty               *float64   `json:"min_order_qty,omitempty"`
+	RoundingQty               *float64   `json:"rounding_qty,omitempty"`
+	LeadTimeDays              *int       `json:"lead_time_days,omitempty"`
+	OverdeliveryTolerancePct  *float64   `json:"overdelivery_tolerance_pct,omitempty"`
+	UnderdeliveryTolerancePct *float64   `json:"underdelivery_tolerance_pct,omitempty"`
+	Incoterm                  *string    `json:"incoterm,omitempty"`
+	PaymentTerms              *string    `json:"payment_terms,omitempty"`
+	ValidFrom                 *string    `json:"valid_from,omitempty"`
+	ValidTo                   *string    `json:"valid_to,omitempty"`
+	IsPreferred               *bool      `json:"is_preferred,omitempty"`
+	IsBlocked                 *bool      `json:"is_blocked,omitempty"`
+	IsActive                  *bool      `json:"is_active,omitempty"`
+	Notes                     *string    `json:"notes,omitempty"`
+}
+
 // ── Purchase Order ──
+
+// Purchase Requisition
+
+type PurchaseRequisition struct {
+	ID              uuid.UUID                 `json:"id"`
+	OrgID           uuid.UUID                 `json:"org_id"`
+	PRNumber        string                    `json:"pr_number"`
+	RequesterID     *uuid.UUID                `json:"requester_id,omitempty"`
+	RequesterName   string                    `json:"requester_name,omitempty"`
+	Department      string                    `json:"department,omitempty"`
+	CostCenter      string                    `json:"cost_center,omitempty"`
+	RequisitionType string                    `json:"requisition_type"`
+	Status          string                    `json:"status"`
+	TotalAmount     float64                   `json:"total_amount"`
+	Currency        string                    `json:"currency"`
+	Source          string                    `json:"source"`
+	CurrentLevel    int                       `json:"current_level"`
+	ApprovalLevel   int                       `json:"approval_level"`
+	RejectionReason string                    `json:"rejection_reason,omitempty"`
+	CreatedAt       time.Time                 `json:"created_at"`
+	UpdatedAt       time.Time                 `json:"updated_at"`
+	SubmittedAt     *time.Time                `json:"submitted_at,omitempty"`
+	ApprovedAt      *time.Time                `json:"approved_at,omitempty"`
+	Items           []PurchaseRequisitionItem `json:"items,omitempty"`
+}
+
+type PurchaseRequisitionItem struct {
+	ID                uuid.UUID  `json:"id"`
+	PRID              uuid.UUID  `json:"pr_id"`
+	ItemNo            int        `json:"item_no"`
+	ProductID         uuid.UUID  `json:"product_id"`
+	SKUCode           string     `json:"sku_code"`
+	GoodsName         string     `json:"goods_name"`
+	QtyRequested      float64    `json:"qty_requested"`
+	UnitOfMeasure     string     `json:"unit_of_measure"`
+	EstimatedPrice    float64    `json:"estimated_price"`
+	Currency          string     `json:"currency"`
+	RequiredDate      time.Time  `json:"required_date"`
+	AcctAssignment    string     `json:"acct_assignment,omitempty"`
+	SuggestedVendorID *uuid.UUID `json:"suggested_vendor_id,omitempty"`
+	SuggestedVendor   string     `json:"suggested_vendor,omitempty"`
+	SourceMRPPRID     *uuid.UUID `json:"source_mrp_pr_id,omitempty"`
+	ConvertedQty      float64    `json:"converted_qty"`
+	POID              *uuid.UUID `json:"po_id,omitempty"`
+	PONumber          string     `json:"po_number,omitempty"`
+	Status            string     `json:"status"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+type CreatePurchaseRequisitionRequest struct {
+	Department      string                          `json:"department,omitempty"`
+	CostCenter      string                          `json:"cost_center,omitempty"`
+	RequisitionType string                          `json:"requisition_type,omitempty"`
+	Currency        string                          `json:"currency,omitempty"`
+	Source          string                          `json:"source,omitempty"`
+	Items           []CreatePurchaseRequisitionItem `json:"items" binding:"required,min=1"`
+}
+
+type CreatePurchaseRequisitionItem struct {
+	ProductID      uuid.UUID `json:"product_id" binding:"required"`
+	QtyRequested   float64   `json:"qty_requested" binding:"required,gt=0"`
+	EstimatedPrice float64   `json:"estimated_price,omitempty"`
+	Currency       string    `json:"currency,omitempty"`
+	RequiredDate   string    `json:"required_date" binding:"required"`
+	AcctAssignment string    `json:"acct_assignment,omitempty"`
+}
+
+type UpdatePurchaseRequisitionRequest = CreatePurchaseRequisitionRequest
+
+type RejectPurchaseRequisitionRequest struct {
+	Reason string `json:"reason" binding:"required"`
+}
+
+type ConvertPRToPORequest struct {
+	ItemIDs []uuid.UUID `json:"item_ids,omitempty"`
+	All     bool        `json:"all,omitempty"`
+}
+
+type ImportMRPPRsRequest struct {
+	IDs []uuid.UUID `json:"ids,omitempty"`
+	All bool        `json:"all,omitempty"`
+}
 
 type PurchaseOrder struct {
 	ID              uuid.UUID           `json:"id"`
@@ -85,6 +243,9 @@ type PurchaseOrderItem struct {
 	ID                   uuid.UUID  `json:"id"`
 	POID                 uuid.UUID  `json:"po_id"`
 	ItemID               uuid.UUID  `json:"item_id"`
+	SiteID               *uuid.UUID `json:"site_id,omitempty"`
+	SiteCode             string     `json:"site_code,omitempty"`
+	SiteName             string     `json:"site_name,omitempty"`
 	ItemSKU              string     `json:"item_sku,omitempty"`
 	ItemName             string     `json:"item_name,omitempty"`
 	Quantity             float64    `json:"quantity"`
@@ -110,13 +271,16 @@ type CreatePORequest struct {
 	Items           []POLineItem `json:"items" binding:"required,min=1"`
 }
 
+type UpdatePORequest = CreatePORequest
+
 type POLineItem struct {
-	ItemID               uuid.UUID `json:"item_id" binding:"required"`
-	Quantity             float64   `json:"quantity" binding:"required,gt=0"`
-	UnitPrice            float64   `json:"unit_price"`
-	UOM                  string    `json:"unit_of_measure,omitempty"`
-	ExpectedDeliveryDate string    `json:"expected_delivery_date,omitempty"`
-	DeliveryAddress      string    `json:"delivery_address,omitempty"`
+	ItemID               uuid.UUID  `json:"item_id" binding:"required"`
+	SiteID               *uuid.UUID `json:"site_id,omitempty"`
+	Quantity             float64    `json:"quantity" binding:"required,gt=0"`
+	UnitPrice            float64    `json:"unit_price"`
+	UOM                  string     `json:"unit_of_measure,omitempty"`
+	ExpectedDeliveryDate string     `json:"expected_delivery_date,omitempty"`
+	DeliveryAddress      string     `json:"delivery_address,omitempty"`
 }
 
 type UpdatePOStatusRequest struct {

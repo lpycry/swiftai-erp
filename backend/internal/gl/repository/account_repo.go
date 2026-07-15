@@ -21,17 +21,45 @@ func NewAccountRepo(db *pgxpool.Pool) *AccountRepo {
 	return &AccountRepo{db: db}
 }
 
+func (r *AccountRepo) ensureOpenItemManagedColumn(ctx context.Context) error {
+	_, err := r.db.Exec(ctx, `
+		ALTER TABLE gl_accounts
+			ADD COLUMN IF NOT EXISTS open_item_managed BOOLEAN NOT NULL DEFAULT false;
+		UPDATE gl_accounts
+		SET open_item_managed = true
+		WHERE open_item_managed = false
+		  AND (
+		    COALESCE(reconciliation_type,'none') IN ('customer','vendor')
+		    OR account_code IN ('1125','2190')
+		    OR lower(account_name) LIKE '%clearing%'
+		    OR lower(account_name) LIKE '%gr/ir%'
+		  );
+	`)
+	if err != nil {
+		return fmt.Errorf("ensure open item managed column: %w", err)
+	}
+	return nil
+}
+
 const accountSelectCols = `id, tenant_id, account_code, account_name, account_type,
 	parent_id, level, is_active, is_leaf, currency,
 	COALESCE(description,'') as description,
 	COALESCE(reconciliation_type,'none') as reconciliation_type,
+	COALESCE(open_item_managed,false) as open_item_managed,
 	created_at, updated_at`
 
 // Create inserts a new account.
 func (r *AccountRepo) Create(ctx context.Context, tenantID uuid.UUID, req *glmodels.CreateAccountRequest) (*glmodels.Account, error) {
+	if err := r.ensureOpenItemManagedColumn(ctx); err != nil {
+		return nil, err
+	}
 	recType := req.ReconciliationType
 	if recType == "" {
 		recType = "none"
+	}
+	openItemManaged := recType == "customer" || recType == "vendor"
+	if req.OpenItemManaged != nil {
+		openItemManaged = *req.OpenItemManaged
 	}
 
 	acc := &glmodels.Account{
@@ -47,6 +75,7 @@ func (r *AccountRepo) Create(ctx context.Context, tenantID uuid.UUID, req *glmod
 		Currency:           req.Currency,
 		Description:        req.Description,
 		ReconciliationType: recType,
+		OpenItemManaged:    openItemManaged,
 		CreatedAt:          time.Now(),
 		UpdatedAt:          time.Now(),
 	}
@@ -57,13 +86,13 @@ func (r *AccountRepo) Create(ctx context.Context, tenantID uuid.UUID, req *glmod
 	query := `
 		INSERT INTO gl_accounts (id, tenant_id, account_code, account_name, account_type,
 		                         parent_id, level, is_active, is_leaf, currency, description,
-		                         reconciliation_type, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		                         reconciliation_type, open_item_managed, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	`
 	_, err := r.db.Exec(ctx, query,
 		acc.ID, acc.TenantID, acc.AccountCode, acc.AccountName, acc.AccountType,
 		acc.ParentID, acc.Level, acc.IsActive, acc.IsLeaf, acc.Currency, acc.Description,
-		acc.ReconciliationType, acc.CreatedAt, acc.UpdatedAt,
+		acc.ReconciliationType, acc.OpenItemManaged, acc.CreatedAt, acc.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
@@ -73,6 +102,9 @@ func (r *AccountRepo) Create(ctx context.Context, tenantID uuid.UUID, req *glmod
 
 // GetByID retrieves a single account by ID and tenant.
 func (r *AccountRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*glmodels.Account, error) {
+	if err := r.ensureOpenItemManagedColumn(ctx); err != nil {
+		return nil, err
+	}
 	query := `
 		SELECT ` + accountSelectCols + `
 		FROM gl_accounts WHERE id = $1 AND tenant_id = $2
@@ -81,7 +113,7 @@ func (r *AccountRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*glm
 	err := r.db.QueryRow(ctx, query, id, tenantID).Scan(
 		&acc.ID, &acc.TenantID, &acc.AccountCode, &acc.AccountName, &acc.AccountType,
 		&acc.ParentID, &acc.Level, &acc.IsActive, &acc.IsLeaf, &acc.Currency,
-		&acc.Description, &acc.ReconciliationType,
+		&acc.Description, &acc.ReconciliationType, &acc.OpenItemManaged,
 		&acc.CreatedAt, &acc.UpdatedAt,
 	)
 	if err != nil {
@@ -95,6 +127,9 @@ func (r *AccountRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*glm
 
 // ListByTenant retrieves all accounts for a tenant, ordered by account_code.
 func (r *AccountRepo) ListByTenant(ctx context.Context, tenantID uuid.UUID) ([]*glmodels.Account, error) {
+	if err := r.ensureOpenItemManagedColumn(ctx); err != nil {
+		return nil, err
+	}
 	query := `
 		SELECT ` + accountSelectCols + `
 		FROM gl_accounts WHERE tenant_id = $1
@@ -111,6 +146,9 @@ func (r *AccountRepo) ListByTenant(ctx context.Context, tenantID uuid.UUID) ([]*
 
 // ListByType retrieves accounts filtered by account type.
 func (r *AccountRepo) ListByType(ctx context.Context, tenantID uuid.UUID, accountType string) ([]*glmodels.Account, error) {
+	if err := r.ensureOpenItemManagedColumn(ctx); err != nil {
+		return nil, err
+	}
 	query := `
 		SELECT ` + accountSelectCols + `
 		FROM gl_accounts WHERE tenant_id = $1 AND account_type = $2
@@ -127,6 +165,9 @@ func (r *AccountRepo) ListByType(ctx context.Context, tenantID uuid.UUID, accoun
 
 // ListLeafAccounts retrieves only leaf (postable) accounts for a tenant.
 func (r *AccountRepo) ListLeafAccounts(ctx context.Context, tenantID uuid.UUID) ([]*glmodels.Account, error) {
+	if err := r.ensureOpenItemManagedColumn(ctx); err != nil {
+		return nil, err
+	}
 	query := `
 		SELECT ` + accountSelectCols + `
 		FROM gl_accounts WHERE tenant_id = $1 AND is_leaf = true AND is_active = true
@@ -143,6 +184,9 @@ func (r *AccountRepo) ListLeafAccounts(ctx context.Context, tenantID uuid.UUID) 
 
 // Update modifies an existing account.
 func (r *AccountRepo) Update(ctx context.Context, id, tenantID uuid.UUID, req *glmodels.UpdateAccountRequest) (*glmodels.Account, error) {
+	if err := r.ensureOpenItemManagedColumn(ctx); err != nil {
+		return nil, err
+	}
 	// Build dynamic update
 	setClauses := make([]string, 0, 9)
 	args := []interface{}{}
@@ -188,6 +232,11 @@ func (r *AccountRepo) Update(ctx context.Context, id, tenantID uuid.UUID, req *g
 		args = append(args, req.ReconciliationType)
 		argIdx++
 	}
+	if req.OpenItemManaged != nil {
+		setClauses = append(setClauses, fmt.Sprintf("open_item_managed = $%d", argIdx))
+		args = append(args, *req.OpenItemManaged)
+		argIdx++
+	}
 
 	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIdx))
 	args = append(args, time.Now())
@@ -217,7 +266,7 @@ func (r *AccountRepo) Update(ctx context.Context, id, tenantID uuid.UUID, req *g
 	err := r.db.QueryRow(ctx, query, args...).Scan(
 		&acc.ID, &acc.TenantID, &acc.AccountCode, &acc.AccountName, &acc.AccountType,
 		&acc.ParentID, &acc.Level, &acc.IsActive, &acc.IsLeaf, &acc.Currency,
-		&acc.Description, &acc.ReconciliationType,
+		&acc.Description, &acc.ReconciliationType, &acc.OpenItemManaged,
 		&acc.CreatedAt, &acc.UpdatedAt,
 	)
 	if err != nil {
@@ -329,6 +378,9 @@ func (r *AccountRepo) GetTree(ctx context.Context, tenantID uuid.UUID) ([]*glmod
 
 // Search searches accounts by code or name.
 func (r *AccountRepo) Search(ctx context.Context, tenantID uuid.UUID, query string) ([]*glmodels.Account, error) {
+	if err := r.ensureOpenItemManagedColumn(ctx); err != nil {
+		return nil, err
+	}
 	sqlQuery := `
 		SELECT ` + accountSelectCols + `
 		FROM gl_accounts
@@ -354,7 +406,7 @@ func scanAccounts(rows pgx.Rows) ([]*glmodels.Account, error) {
 		err := rows.Scan(
 			&acc.ID, &acc.TenantID, &acc.AccountCode, &acc.AccountName, &acc.AccountType,
 			&acc.ParentID, &acc.Level, &acc.IsActive, &acc.IsLeaf, &acc.Currency,
-			&acc.Description, &acc.ReconciliationType,
+			&acc.Description, &acc.ReconciliationType, &acc.OpenItemManaged,
 			&acc.CreatedAt, &acc.UpdatedAt,
 		)
 		if err != nil {

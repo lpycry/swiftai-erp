@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:swiftai_erp/core/services/fmt.dart';
 import 'package:http/http.dart' as http;
 import 'package:swiftai_erp/core/services/auth_service.dart';
 import 'package:swiftai_erp/core/widgets/app_layout.dart';
@@ -322,7 +323,7 @@ class _POReceiveTabState extends State<_POReceiveTab> {
       final dt = DateTime.parse(d);
       return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
     } catch (_) {
-      return d.length > 10 ? d.substring(0, 10) : d;
+      return Fmt.dateStr(d);
     }
   }
 
@@ -1120,7 +1121,11 @@ class _WorkOrderReceiveTabState extends State<_WorkOrderReceiveTab> {
               'ORDER SUMMARY',
               Colors.indigo,
               children: [
-                _row('Work Order', order['order_number']?.toString() ?? '-', true),
+                _row(
+                  'Work Order',
+                  order['order_number']?.toString() ?? '-',
+                  true,
+                ),
                 _row(
                   'Material',
                   '${order['material_sku'] ?? ''}  ${order['material_name'] ?? ''}',
@@ -1399,14 +1404,11 @@ class _ReceiptHistoryTabState extends State<_ReceiptHistoryTab> {
     if (raw.isEmpty) return '-';
     try {
       final dt = DateTime.parse(raw).toLocal();
-      final y = dt.year.toString().padLeft(4, '0');
-      final m = dt.month.toString().padLeft(2, '0');
-      final d = dt.day.toString().padLeft(2, '0');
       final h = dt.hour.toString().padLeft(2, '0');
       final min = dt.minute.toString().padLeft(2, '0');
-      return '$y-$m-$d $h:$min';
+      return '${Fmt.d(dt)} $h:$min';
     } catch (_) {
-      return raw.length > 16 ? raw.substring(0, 16) : raw;
+      return Fmt.dateTimeStr(raw);
     }
   }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:swiftai_erp/core/services/fmt.dart';
 import 'package:swiftai_erp/core/theme/app_theme.dart';
 import 'package:swiftai_erp/core/widgets/app_layout.dart';
 import 'package:swiftai_erp/core/services/auth_service.dart';
@@ -67,10 +68,12 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
 
   void _msg(String m, {bool isError = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(m),
-      backgroundColor: isError ? AppTheme.errorColor : Colors.green,
-    ));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(m),
+        backgroundColor: isError ? AppTheme.errorColor : Colors.green,
+      ),
+    );
   }
 
   // ═══════════════════════════════════════
@@ -121,7 +124,10 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
         },
         onSave: (data) async {
           try {
-            await widget.departmentService.updateOrgUnit(item['id'].toString(), data);
+            await widget.departmentService.updateOrgUnit(
+              item['id'].toString(),
+              data,
+            );
             _load();
             _msg('Department updated');
           } catch (e) {
@@ -142,10 +148,15 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Department'),
-        content: Text('Delete "${item['unit_code']} — ${item['unit_name']}"?\n\n'
-            'Only units with no child units can be deleted.'),
+        content: Text(
+          'Delete "${item['unit_code']} — ${item['unit_name']}"?\n\n'
+          'Only units with no child units can be deleted.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppTheme.errorColor),
             onPressed: () => Navigator.pop(ctx, true),
@@ -171,8 +182,7 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
 
   String _cleanDate(String? d) {
     if (d == null || d.isEmpty || d == '0001-01-01') return '';
-    if (d.length >= 10) return d.substring(0, 10);
-    return d;
+    return Fmt.dateStr(d);
   }
 
   @override
@@ -194,8 +204,15 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
                     controller: _searchCtrl,
                     decoration: InputDecoration(
                       hintText: 'Search by code or name...',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                      prefixIcon: Icon(Icons.search, size: 20, color: Colors.grey.shade500),
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 13,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        size: 20,
+                        color: Colors.grey.shade500,
+                      ),
                       suffixIcon: _q.isNotEmpty
                           ? IconButton(
                               icon: const Icon(Icons.clear, size: 18),
@@ -214,7 +231,9 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.primaryColor),
+                        borderSide: const BorderSide(
+                          color: AppTheme.primaryColor,
+                        ),
                       ),
                     ),
                     style: const TextStyle(fontSize: 14),
@@ -236,17 +255,24 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             child: Row(
               children: [
-                Text(_treeMode ? 'Org Chart' : 'Departments',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                Text(
+                  _treeMode ? 'Org Chart' : 'Departments',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                ),
                 if (_q.isNotEmpty) ...[
                   const Spacer(),
-                  Text('${_items.length} result(s)',
-                      style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                  Text(
+                    '${_items.length} result(s)',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
                   const SizedBox(width: 8),
                 ],
                 const Spacer(),
                 IconButton(
-                  icon: const Icon(Icons.add_circle_outline, color: AppTheme.primaryColor),
+                  icon: const Icon(
+                    Icons.add_circle_outline,
+                    color: AppTheme.primaryColor,
+                  ),
                   onPressed: () => _showCreateDialog(),
                   tooltip: 'Add Department',
                 ),
@@ -259,28 +285,31 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _items.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.account_tree_outlined, size: 48,
-                                color: Colors.grey.shade300),
-                            const SizedBox(height: 8),
-                            Text(
-                              _q.isNotEmpty
-                                  ? 'No departments match "$_q"'
-                                  : 'No departments defined',
-                              style: TextStyle(color: Colors.grey.shade500),
-                            ),
-                          ],
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.account_tree_outlined,
+                          size: 48,
+                          color: Colors.grey.shade300,
                         ),
-                      )
-                    : ListView(
-                        padding: const EdgeInsets.all(8),
-                        children: _treeMode && _q.isEmpty
-                            ? _items.map((r) => _buildTreeNode(r, 0)).toList()
-                            : _items.map((item) => _buildListItem(item)).toList(),
-                      ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _q.isNotEmpty
+                              ? 'No departments match "$_q"'
+                              : 'No departments defined',
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.all(8),
+                    children: _treeMode && _q.isEmpty
+                        ? _items.map((r) => _buildTreeNode(r, 0)).toList()
+                        : _items.map((item) => _buildListItem(item)).toList(),
+                  ),
           ),
         ],
       ),
@@ -313,16 +342,17 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: (isExpired ? Colors.grey : Colors.indigo)
-                      .withValues(alpha: 0.1),
+                  color: (isExpired ? Colors.grey : Colors.indigo).withValues(
+                    alpha: 0.1,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   depth == 0
                       ? Icons.business
                       : (depth == 1
-                          ? Icons.group_work_outlined
-                          : Icons.group_outlined),
+                            ? Icons.group_work_outlined
+                            : Icons.group_outlined),
                   size: 18,
                   color: isExpired ? Colors.grey : Colors.indigo,
                 ),
@@ -342,60 +372,88 @@ class _DepartmentScreenState extends State<DepartmentScreen> {
                   Text(
                     node['unit_name'] ?? '',
                     style: TextStyle(
-                        fontSize: 13,
-                        color: isExpired ? Colors.grey.shade500 : null),
+                      fontSize: 13,
+                      color: isExpired ? Colors.grey.shade500 : null,
+                    ),
                   ),
                 ],
               ),
               subtitle: ccId != ''
-                  ? Row(children: [
-                      Icon(Icons.monetization_on,
-                          size: 10, color: Colors.green.shade500),
-                      const SizedBox(width: 3),
-                      Text('CC: $ccId',
+                  ? Row(
+                      children: [
+                        Icon(
+                          Icons.monetization_on,
+                          size: 10,
+                          color: Colors.green.shade500,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          'CC: $ccId',
                           style: TextStyle(
-                              fontSize: 10,
-                              color: Colors.green.shade600,
-                              fontFamily: 'monospace')),
-                      if (node['valid_to'] != null &&
-                          _cleanDate(node['valid_to']).isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        Text('until ${_cleanDate(node['valid_to'])}',
+                            fontSize: 10,
+                            color: Colors.green.shade600,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                        if (node['valid_to'] != null &&
+                            _cleanDate(node['valid_to']).isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(
+                            'until ${_cleanDate(node['valid_to'])}',
                             style: TextStyle(
-                                fontSize: 9, color: Colors.grey.shade400)),
+                              fontSize: 9,
+                              color: Colors.grey.shade400,
+                            ),
+                          ),
+                        ],
                       ],
-                    ])
+                    )
                   : null,
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    icon: Icon(Icons.add_circle_outline,
-                        size: 16, color: Colors.blue.shade400),
+                    icon: Icon(
+                      Icons.add_circle_outline,
+                      size: 16,
+                      color: Colors.blue.shade400,
+                    ),
                     onPressed: () => _showCreateDialog(parentUnit: node),
                     tooltip: 'Add Sub-Unit',
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.edit_outlined,
-                        size: 16, color: Colors.blue.shade400),
+                    icon: Icon(
+                      Icons.edit_outlined,
+                      size: 16,
+                      color: Colors.blue.shade400,
+                    ),
                     onPressed: () => _showEditDialog(node),
                     tooltip: 'Edit',
                     padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 28, minHeight: 28),
+                    constraints: const BoxConstraints(
+                      minWidth: 28,
+                      minHeight: 28,
+                    ),
                   ),
                   if (children.isEmpty)
                     IconButton(
-                      icon: Icon(Icons.delete_outline,
-                          size: 16, color: Colors.red.shade400),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        size: 16,
+                        color: Colors.red.shade400,
+                      ),
                       onPressed: () => _confirmDelete(node),
                       tooltip: 'Delete',
                       padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints(minWidth: 28, minHeight: 28),
+                      constraints: const BoxConstraints(
+                        minWidth: 28,
+                        minHeight: 28,
+                      ),
                     ),
                 ],
               ),
@@ -482,7 +540,8 @@ class _DepartmentFormDialogState extends State<_DepartmentFormDialog> {
   }
 
   void _submit() async {
-    if (!widget.isEdit && (_codeCtrl.text.isEmpty || _nameCtrl.text.isEmpty)) return;
+    if (!widget.isEdit && (_codeCtrl.text.isEmpty || _nameCtrl.text.isEmpty))
+      return;
     if (widget.isEdit && _nameCtrl.text.isEmpty) return;
 
     setState(() => _saving = true);
@@ -513,104 +572,129 @@ class _DepartmentFormDialogState extends State<_DepartmentFormDialog> {
       content: SizedBox(
         width: 450,
         child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            if (!widget.isEdit)
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!widget.isEdit)
+                TextField(
+                  controller: _codeCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Unit Code *',
+                    hintText: 'e.g. D-2001',
+                  ),
+                  style: const TextStyle(fontFamily: 'monospace'),
+                ),
+              if (!widget.isEdit) const SizedBox(height: 10),
               TextField(
-                controller: _codeCtrl,
+                controller: _nameCtrl,
                 decoration: const InputDecoration(
-                    labelText: 'Unit Code *', hintText: 'e.g. D-2001'),
-                style: const TextStyle(fontFamily: 'monospace'),
+                  labelText: 'Unit Name *',
+                  hintText: 'e.g. Sales Department',
+                ),
               ),
-            if (!widget.isEdit) const SizedBox(height: 10),
-            TextField(
-              controller: _nameCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'Unit Name *', hintText: 'e.g. Sales Department'),
-            ),
-            const SizedBox(height: 10),
+              const SizedBox(height: 10),
 
-            // ── Cost Center Dropdown ──
-            _ccLoading
-                ? const SizedBox(
-                    height: 40,
-                    child: Center(
+              // ── Cost Center Dropdown ──
+              _ccLoading
+                  ? const SizedBox(
+                      height: 40,
+                      child: Center(
                         child: SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2))))
-                : DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(
-                      labelText: 'Cost Center',
-                      isDense: true,
-                      prefixIcon: Icon(Icons.monetization_on, size: 18),
-                    ),
-                    isExpanded: true,
-                    initialValue: _selectedCcId,
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('(None)',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey)),
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       ),
-                      ..._ccList.map((cc) => DropdownMenuItem(
+                    )
+                  : DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(
+                        labelText: 'Cost Center',
+                        isDense: true,
+                        prefixIcon: Icon(Icons.monetization_on, size: 18),
+                      ),
+                      isExpanded: true,
+                      initialValue: _selectedCcId,
+                      items: [
+                        const DropdownMenuItem(
+                          value: null,
+                          child: Text(
+                            '(None)',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ),
+                        ..._ccList.map(
+                          (cc) => DropdownMenuItem(
                             value: cc['cost_center_id'] as String? ?? '',
                             child: Text(
                               '${cc['cost_center_id']} — ${cc['description'] ?? ''}',
                               style: const TextStyle(fontSize: 12),
                             ),
-                          )),
-                    ],
-                    onChanged: (v) => setState(() => _selectedCcId = v),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) => setState(() => _selectedCcId = v),
+                    ),
+              const SizedBox(height: 10),
+
+              // Manager
+              TextField(
+                controller: _managerCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Manager ID (optional)',
+                ),
+                style: const TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+
+              // Dates
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _fromCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Valid From',
+                        hintText: 'YYYY-MM-DD',
+                      ),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
                   ),
-            const SizedBox(height: 10),
-
-            // Manager
-            TextField(
-              controller: _managerCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'Manager ID (optional)'),
-              style: const TextStyle(fontSize: 13),
-            ),
-            const SizedBox(height: 10),
-
-            // Dates
-            Row(children: [
-              Expanded(
-                child: TextField(
-                  controller: _fromCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Valid From', hintText: 'YYYY-MM-DD'),
-                  style:
-                      const TextStyle(fontSize: 13, fontFamily: 'monospace'),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _toCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Valid To (opt)',
+                        hintText: 'YYYY-MM-DD',
+                      ),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextField(
-                  controller: _toCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Valid To (opt)', hintText: 'YYYY-MM-DD'),
-                  style:
-                      const TextStyle(fontSize: 13, fontFamily: 'monospace'),
-                ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                value: _isActive,
+                onChanged: (v) => setState(() => _isActive = v ?? true),
+                title: const Text('Active', style: TextStyle(fontSize: 13)),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
               ),
-            ]),
-            const SizedBox(height: 8),
-            CheckboxListTile(
-              value: _isActive,
-              onChanged: (v) => setState(() => _isActive = v ?? true),
-              title: const Text('Active', style: TextStyle(fontSize: 13)),
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-            ),
-          ]),
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(
-            onPressed: _saving ? null : () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: _saving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: _saving ? null : _submit,
           child: _saving
@@ -618,7 +702,10 @@ class _DepartmentFormDialogState extends State<_DepartmentFormDialog> {
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
               : Text(widget.isEdit ? 'Save' : 'Create'),
         ),
       ],
@@ -669,11 +756,12 @@ class _ToggleBtn extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  const _ToggleBtn(
-      {required this.icon,
-      required this.label,
-      required this.selected,
-      required this.onTap});
+  const _ToggleBtn({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -691,17 +779,19 @@ class _ToggleBtn extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 14,
-                color:
-                    selected ? AppTheme.primaryColor : Colors.grey.shade500),
+            Icon(
+              icon,
+              size: 14,
+              color: selected ? AppTheme.primaryColor : Colors.grey.shade500,
+            ),
             const SizedBox(width: 3),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 11,
-                    color: selected
-                        ? AppTheme.primaryColor
-                        : Colors.grey.shade500)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: selected ? AppTheme.primaryColor : Colors.grey.shade500,
+              ),
+            ),
           ],
         ),
       ),
@@ -714,14 +804,18 @@ class _UnitCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
-  const _UnitCard(
-      {required this.item, required this.onTap, required this.onDelete});
+  const _UnitCard({
+    required this.item,
+    required this.onTap,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isActive = item['is_active'] as bool? ?? true;
     final validTo = item['valid_to']?.toString() ?? '';
-    final isExpired = !isActive ||
+    final isExpired =
+        !isActive ||
         (validTo.isNotEmpty &&
             validTo != '0001-01-01' &&
             DateTime.tryParse(validTo) != null &&
@@ -737,13 +831,17 @@ class _UnitCard extends StatelessWidget {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: (isExpired ? Colors.grey : Colors.indigo)
-                .withValues(alpha: 0.1),
+            color: (isExpired ? Colors.grey : Colors.indigo).withValues(
+              alpha: 0.1,
+            ),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Center(
-            child: Icon(Icons.group_outlined,
-                color: isExpired ? Colors.grey : Colors.indigo, size: 22),
+            child: Icon(
+              Icons.group_outlined,
+              color: isExpired ? Colors.grey : Colors.indigo,
+              size: 22,
+            ),
           ),
         ),
         title: Row(
@@ -760,29 +858,33 @@ class _UnitCard extends StatelessWidget {
             const SizedBox(width: 8),
             if (parentId.isNotEmpty)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(3),
                 ),
-                child: Icon(Icons.subdirectory_arrow_right,
-                    size: 12, color: Colors.grey.shade400),
+                child: Icon(
+                  Icons.subdirectory_arrow_right,
+                  size: 12,
+                  color: Colors.grey.shade400,
+                ),
               ),
             if (ccId.isNotEmpty) ...[
               const SizedBox(width: 6),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
                   color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(3),
                 ),
-                child: Text(ccId,
-                    style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.green.shade700,
-                        fontFamily: 'monospace')),
+                child: Text(
+                  ccId,
+                  style: TextStyle(
+                    fontSize: 9,
+                    color: Colors.green.shade700,
+                    fontFamily: 'monospace',
+                  ),
+                ),
               ),
             ],
           ],
@@ -797,52 +899,68 @@ class _UnitCard extends StatelessWidget {
             const SizedBox(height: 2),
             Row(
               children: [
-                Icon(Icons.date_range,
-                    size: 10, color: Colors.grey.shade400),
+                Icon(Icons.date_range, size: 10, color: Colors.grey.shade400),
                 const SizedBox(width: 3),
                 Text(
                   _fmt(item['valid_from']),
                   style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey.shade500,
-                      fontFamily: 'monospace'),
+                    fontSize: 10,
+                    color: Colors.grey.shade500,
+                    fontFamily: 'monospace',
+                  ),
                 ),
                 if (validTo.isNotEmpty && validTo != '0001-01-01') ...[
                   const SizedBox(width: 4),
-                  Icon(Icons.arrow_forward,
-                      size: 10, color: Colors.grey.shade400),
+                  Icon(
+                    Icons.arrow_forward,
+                    size: 10,
+                    color: Colors.grey.shade400,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     _fmt(validTo),
                     style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade500,
-                        fontFamily: 'monospace'),
+                      fontSize: 10,
+                      color: Colors.grey.shade500,
+                      fontFamily: 'monospace',
+                    ),
                   ),
                 ],
                 if (!isExpired && isActive) ...[
                   const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 1),
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
-                        color: Colors.green.shade50,
-                        borderRadius: BorderRadius.circular(3)),
-                    child: Text('Active',
-                        style: TextStyle(
-                            fontSize: 9, color: Colors.green.shade700)),
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      'Active',
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.green.shade700,
+                      ),
+                    ),
                   ),
                 ],
                 if (isExpired || !isActive) ...[
                   const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 1),
+                      horizontal: 4,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(3)),
-                    child: Text('Inactive',
-                        style: TextStyle(fontSize: 9, color: Colors.grey)),
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Text(
+                      'Inactive',
+                      style: TextStyle(fontSize: 9, color: Colors.grey),
+                    ),
                   ),
                 ],
               ],
@@ -853,22 +971,26 @@ class _UnitCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: Icon(Icons.edit_outlined,
-                  size: 18, color: Colors.blue.shade400),
+              icon: Icon(
+                Icons.edit_outlined,
+                size: 18,
+                color: Colors.blue.shade400,
+              ),
               onPressed: onTap,
               tooltip: 'Edit',
               padding: EdgeInsets.zero,
-              constraints:
-                  const BoxConstraints(minWidth: 28, minHeight: 28),
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
             ),
             IconButton(
-              icon: Icon(Icons.delete_outline,
-                  size: 18, color: Colors.red.shade400),
+              icon: Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: Colors.red.shade400,
+              ),
               onPressed: onDelete,
               tooltip: 'Delete',
               padding: EdgeInsets.zero,
-              constraints:
-                  const BoxConstraints(minWidth: 28, minHeight: 28),
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
             ),
           ],
         ),
@@ -878,6 +1000,6 @@ class _UnitCard extends StatelessWidget {
 
   String _fmt(String? d) {
     if (d == null || d.isEmpty || d == '0001-01-01') return '';
-    return d.length >= 10 ? d.substring(0, 10) : d;
+    return Fmt.dateStr(d);
   }
 }

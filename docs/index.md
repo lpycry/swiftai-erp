@@ -5,6 +5,9 @@ SwiftAI ERP is a next-generation AI-first ERP system for SMBs, built on Go micro
 
 ## Contents
 
+### User Guide
+- [SwiftAI ERP User Manual](SwiftAI_ERP_User_Manual.md)
+
 ### Architecture
 - [System Architecture](architecture/system-architecture.md)
 - [Multi-Tenancy Model](architecture/multi-tenancy.md)

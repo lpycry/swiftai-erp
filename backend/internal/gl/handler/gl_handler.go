@@ -372,6 +372,201 @@ func (h *GLHandler) ListJournalEntries(c *gin.Context) {
 	})
 }
 
+func (h *GLHandler) ListOpenItems(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	accountID, err := uuid.Parse(c.Query("account_id"))
+	if err != nil {
+		response.BadRequest(c, "account_id is required")
+		return
+	}
+	items, err := h.glSvc.ListOpenItems(c.Request.Context(), tenantID, accountID)
+	if err != nil {
+		log.Err(err).Msg("list open items failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, items)
+}
+
+func (h *GLHandler) ListClearedItems(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	accountID, err := uuid.Parse(c.Query("account_id"))
+	if err != nil {
+		response.BadRequest(c, "account_id is required")
+		return
+	}
+	items, err := h.glSvc.ListClearedItems(c.Request.Context(), tenantID, accountID)
+	if err != nil {
+		log.Err(err).Msg("list cleared items failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, items)
+}
+
+func (h *GLHandler) CreateClearing(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	var req glmodels.CreateClearingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	result, err := h.glSvc.CreateClearing(c.Request.Context(), tenantID, userID, &req)
+	if err != nil {
+		log.Err(err).Msg("create clearing failed")
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Created(c, result)
+}
+
+func (h *GLHandler) ListARCustomers(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	customers, err := h.glSvc.ListARCustomers(c.Request.Context(), tenantID, c.Query("q"))
+	if err != nil {
+		log.Err(err).Msg("list AR customers failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, customers)
+}
+
+func (h *GLHandler) ListAROpenInvoices(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	customerID, err := uuid.Parse(c.Query("customer_id"))
+	if err != nil {
+		response.BadRequest(c, "customer_id is required")
+		return
+	}
+	invoices, err := h.glSvc.ListAROpenInvoices(c.Request.Context(), tenantID, customerID)
+	if err != nil {
+		log.Err(err).Msg("list AR open invoices failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, invoices)
+}
+
+func (h *GLHandler) CreateIncomingPayment(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	var req glmodels.CreateIncomingPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	result, err := h.glSvc.CreateIncomingPayment(c.Request.Context(), tenantID, userID, &req)
+	if err != nil {
+		log.Err(err).Msg("create incoming payment failed")
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Created(c, result)
+}
+
+func (h *GLHandler) ListAROpenCreditMemos(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	customerID, err := uuid.Parse(c.Query("customer_id"))
+	if err != nil {
+		response.BadRequest(c, "customer_id is required")
+		return
+	}
+	memos, err := h.glSvc.ListAROpenCreditMemos(c.Request.Context(), tenantID, customerID)
+	if err != nil {
+		log.Err(err).Msg("list AR open credit memos failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, memos)
+}
+
+func (h *GLHandler) CreateCreditMemoClearing(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	var req glmodels.CreateCreditMemoClearingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	result, err := h.glSvc.CreateCreditMemoClearing(c.Request.Context(), tenantID, userID, &req)
+	if err != nil {
+		log.Err(err).Msg("create credit memo clearing failed")
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.Created(c, result)
+}
+
+func (h *GLHandler) CancelClearing(c *gin.Context) {
+	tenantID, err := getTenantID(c)
+	if err != nil {
+		response.BadRequest(c, "missing tenant context")
+		return
+	}
+	userID, err := getUserID(c)
+	if err != nil {
+		response.BadRequest(c, "missing user context")
+		return
+	}
+	clearingID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid clearing id")
+		return
+	}
+	result, err := h.glSvc.CancelClearing(c.Request.Context(), tenantID, userID, clearingID)
+	if err != nil {
+		log.Err(err).Msg("cancel clearing failed")
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.OK(c, result)
+}
+
 // PostJournalEntries handles POST /api/v1/gl/journal-entries/post
 func (h *GLHandler) PostJournalEntries(c *gin.Context) {
 	tenantID, err := getTenantID(c)
@@ -397,10 +592,17 @@ func (h *GLHandler) PostJournalEntries(c *gin.Context) {
 
 	result, err := h.glSvc.PostJournalEntries(c.Request.Context(), tenantID, userID, &req)
 	if err != nil {
-		log.Err(err).Msg("post journal entries failed")
+		log.Err(err).Interface("failures", result).Msg("post journal entries failed")
 		// Partial success is still returned
 		if result != nil && result.SuccessCount > 0 {
 			response.OK(c, result)
+			return
+		}
+		if result != nil {
+			response.BadRequest(c, err.Error(), response.ErrorDetail{
+				Field:   "entries",
+				Message: fmt.Sprintf("%+v", result.Failures),
+			})
 			return
 		}
 		response.InternalError(c, err.Error())
@@ -536,6 +738,7 @@ func (h *GLHandler) UpdateDraftEntry(c *gin.Context) {
 
 	response.OK(c, entry)
 }
+
 // UnpostEntry handles POST /api/v1/gl/journal-entries/:id/unpost
 func (h *GLHandler) UnpostEntry(c *gin.Context) {
 	tenantID, err := getTenantID(c)
@@ -563,6 +766,7 @@ func (h *GLHandler) UnpostEntry(c *gin.Context) {
 
 	response.OK(c, entry)
 }
+
 // ReverseJournalEntry handles POST /api/v1/gl/journal-entries/:id/reverse
 // Body: {"reversal_type":"normal"|"negative"} (default: "negative")
 func (h *GLHandler) ReverseJournalEntry(c *gin.Context) {
@@ -938,6 +1142,7 @@ func (h *GLHandler) InitializeCoA(c *gin.Context) {
 	}
 	response.OK(c, gin.H{"message": msg})
 }
+
 // ResetDatabase handles POST /api/v1/gl/reset-database
 func (h *GLHandler) ResetDatabase(c *gin.Context) {
 	if err := h.glSvc.ResetDatabase(c.Request.Context()); err != nil {
@@ -948,6 +1153,7 @@ func (h *GLHandler) ResetDatabase(c *gin.Context) {
 
 	response.OK(c, gin.H{"message": "All data cleared successfully"})
 }
+
 // ── Helpers ──
 
 // getTenantID extracts tenant ID from the Gin context (set by auth middleware).

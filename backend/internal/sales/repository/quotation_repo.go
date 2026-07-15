@@ -35,7 +35,9 @@ func (r *SalesRepo) ListQuotations(ctx context.Context, tenantID uuid.UUID, stat
 	sql += " ORDER BY q.created_at DESC"
 
 	rows, err := r.db.Query(ctx, sql, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var list []*salesmodels.Quotation
 	for rows.Next() {
@@ -48,7 +50,9 @@ func (r *SalesRepo) ListQuotations(ctx context.Context, tenantID uuid.UUID, stat
 			&q.EmployeeID,
 			&q.CreatedBy, &q.CreatedAt, &q.UpdatedAt,
 			&q.CustomerCode, &q.CustomerName,
-			&q.EmployeeCode, &q.EmployeeName); err != nil { return nil, err }
+			&q.EmployeeCode, &q.EmployeeName); err != nil {
+			return nil, err
+		}
 		list = append(list, q)
 	}
 	return list, nil
@@ -78,23 +82,33 @@ func (r *SalesRepo) GetQuotation(ctx context.Context, id, tenantID uuid.UUID) (*
 		&q.CreatedBy, &q.CreatedAt, &q.UpdatedAt,
 		&q.CustomerCode, &q.CustomerName,
 		&q.EmployeeCode, &q.EmployeeName)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	// Load items
 	itemPtrs, err := r.ListQuotationItems(ctx, id)
-	if err != nil { return nil, err }
-	for _, it := range itemPtrs { q.Items = append(q.Items, *it) }
+	if err != nil {
+		return nil, err
+	}
+	for _, it := range itemPtrs {
+		q.Items = append(q.Items, *it)
+	}
 	return q, nil
 }
 
 func (r *SalesRepo) CreateQuotation(ctx context.Context, q *salesmodels.Quotation, items []*salesmodels.QuotationItem) error {
 	tx, err := r.db.Begin(ctx)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer tx.Rollback(ctx)
 
 	// employee_id param: convert *uuid.UUID to interface{} nil for pgx
 	var empIDParam interface{} = nil
-	if q.EmployeeID != nil { empIDParam = *q.EmployeeID }
+	if q.EmployeeID != nil {
+		empIDParam = *q.EmployeeID
+	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO quotations(id, tenant_id, customer_id, quotation_no, quotation_type, status,
 			valid_from, valid_to, currency, payment_terms, incoterm, delivery_date,
@@ -106,7 +120,9 @@ func (r *SalesRepo) CreateQuotation(ctx context.Context, q *salesmodels.Quotatio
 		q.ValidFrom, q.ValidTo, q.Currency, q.PaymentTerms, q.Incoterm, q.DeliveryDate,
 		q.TotalAmount, q.DiscountPct, q.DiscountAmount, q.NetAmount, q.TaxAmount, q.TaxCalcSource, q.TaxCalcDetail, q.TaxCalcRate, q.GrandTotal,
 		q.Notes, q.InternalNotes, q.ReferenceInquiry, empIDParam, q.CreatedBy, q.CreatedAt, q.UpdatedAt)
-	if err != nil { return fmt.Errorf("insert quotation: %w", err) }
+	if err != nil {
+		return fmt.Errorf("insert quotation: %w", err)
+	}
 
 	for _, item := range items {
 		_, err = tx.Exec(ctx, `
@@ -114,7 +130,58 @@ func (r *SalesRepo) CreateQuotation(ctx context.Context, q *salesmodels.Quotatio
 			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
 		`, item.ID, item.QuotationID, item.LineNo, item.ProductID, item.Description,
 			item.Quantity, item.UnitOfMeasure, item.UnitPrice, item.DiscountPct, item.LineTotal, item.DeliveryDate, item.CreatedAt)
-		if err != nil { return fmt.Errorf("insert item %d: %w", item.LineNo, err) }
+		if err != nil {
+			return fmt.Errorf("insert item %d: %w", item.LineNo, err)
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *SalesRepo) UpdateQuotation(ctx context.Context, q *salesmodels.Quotation, items []*salesmodels.QuotationItem) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var empIDParam interface{} = nil
+	if q.EmployeeID != nil {
+		empIDParam = *q.EmployeeID
+	}
+	tag, err := tx.Exec(ctx, `
+		UPDATE quotations SET
+			customer_id = $3, quotation_type = $4, valid_from = $5, valid_to = $6,
+			currency = $7, payment_terms = $8, incoterm = $9, delivery_date = $10,
+			total_amount = $11, discount_pct = $12, discount_amount = $13,
+			net_amount = $14, tax_amount = $15, tax_calc_source = $16,
+			tax_calc_detail = $17, tax_calc_rate = $18, grand_total = $19,
+			notes = $20, internal_notes = $21, reference_inquiry = $22,
+			employee_id = $23, updated_at = NOW()
+		WHERE id = $1 AND tenant_id = $2
+	`, q.ID, q.TenantID, q.CustomerID, q.QuotationType, q.ValidFrom, q.ValidTo,
+		q.Currency, q.PaymentTerms, q.Incoterm, q.DeliveryDate,
+		q.TotalAmount, q.DiscountPct, q.DiscountAmount, q.NetAmount, q.TaxAmount,
+		q.TaxCalcSource, q.TaxCalcDetail, q.TaxCalcRate, q.GrandTotal,
+		q.Notes, q.InternalNotes, q.ReferenceInquiry, empIDParam)
+	if err != nil {
+		return fmt.Errorf("update quotation: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("quotation not found")
+	}
+
+	if _, err := tx.Exec(ctx, "DELETE FROM quotation_items WHERE quotation_id = $1", q.ID); err != nil {
+		return fmt.Errorf("delete quotation items: %w", err)
+	}
+	for _, item := range items {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO quotation_items(id, quotation_id, line_no, product_id, description, quantity, unit_of_measure, unit_price, discount_pct, line_total, delivery_date, created_at)
+			VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		`, item.ID, item.QuotationID, item.LineNo, item.ProductID, item.Description,
+			item.Quantity, item.UnitOfMeasure, item.UnitPrice, item.DiscountPct, item.LineTotal, item.DeliveryDate, item.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("insert item %d: %w", item.LineNo, err)
+		}
 	}
 	return tx.Commit(ctx)
 }
@@ -137,7 +204,9 @@ func (r *SalesRepo) ListQuotationItems(ctx context.Context, quotationID uuid.UUI
 		FROM quotation_items qi
 		LEFT JOIN products p ON p.id = qi.product_id
 		WHERE qi.quotation_id = $1 ORDER BY qi.line_no`, quotationID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 	var list []*salesmodels.QuotationItem
 	for rows.Next() {
@@ -145,7 +214,9 @@ func (r *SalesRepo) ListQuotationItems(ctx context.Context, quotationID uuid.UUI
 		if err := rows.Scan(&it.ID, &it.QuotationID, &it.LineNo, &it.ProductID,
 			&it.Description, &it.Quantity, &it.UnitOfMeasure, &it.UnitPrice, &it.DiscountPct, &it.LineTotal,
 			&it.DeliveryDate, &it.CreatedAt,
-			&it.ProductSKU, &it.ProductName); err != nil { return nil, err }
+			&it.ProductSKU, &it.ProductName); err != nil {
+			return nil, err
+		}
 		list = append(list, it)
 	}
 	return list, nil
@@ -165,5 +236,3 @@ func (r *SalesRepo) GetNextQuotationNo(ctx context.Context, tenantID uuid.UUID) 
 	}
 	return fmt.Sprintf("Q-%05d", seq), nil
 }
-
-

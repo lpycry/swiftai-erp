@@ -152,6 +152,349 @@ func (h *PurchaseHandler) RecommendVendors(c *gin.Context) {
 //  PURCHASE ORDERS
 // ══════════════════════════════════════════
 
+// Purchasing Info Records
+
+func parseOptionalUUIDQuery(c *gin.Context, name string) (*uuid.UUID, error) {
+	value := c.Query(name)
+	if value == "" {
+		return nil, nil
+	}
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
+}
+
+func (h *PurchaseHandler) CreateInfoRecord(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	var req purchasemodels.CreatePurchasingInfoRecordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	rec, err := h.svc.CreateInfoRecord(c.Request.Context(), orgID, &req)
+	if err != nil {
+		log.Err(err).Msg("create purchasing info record failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, rec)
+}
+
+func (h *PurchaseHandler) ListInfoRecords(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	productID, err := parseOptionalUUIDQuery(c, "product_id")
+	if err != nil {
+		response.BadRequest(c, "invalid product_id")
+		return
+	}
+	vendorID, err := parseOptionalUUIDQuery(c, "vendor_id")
+	if err != nil {
+		response.BadRequest(c, "invalid vendor_id")
+		return
+	}
+	siteID, err := parseOptionalUUIDQuery(c, "site_id")
+	if err != nil {
+		response.BadRequest(c, "invalid site_id")
+		return
+	}
+	list, err := h.svc.ListInfoRecords(c.Request.Context(), orgID, productID, vendorID, siteID, c.Query("q"))
+	if err != nil {
+		log.Err(err).Msg("list purchasing info records failed")
+		response.InternalError(c, "list purchasing info records failed")
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *PurchaseHandler) GetInfoRecord(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid info record id")
+		return
+	}
+	rec, err := h.svc.GetInfoRecord(c.Request.Context(), id, orgID)
+	if err != nil {
+		log.Err(err).Msg("get purchasing info record failed")
+		response.NotFound(c, "info record not found")
+		return
+	}
+	response.OK(c, rec)
+}
+
+func (h *PurchaseHandler) UpdateInfoRecord(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid info record id")
+		return
+	}
+	var req purchasemodels.UpdatePurchasingInfoRecordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request")
+		return
+	}
+	if err := h.svc.UpdateInfoRecord(c.Request.Context(), id, orgID, &req); err != nil {
+		log.Err(err).Msg("update purchasing info record failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "updated"})
+}
+
+func (h *PurchaseHandler) DeleteInfoRecord(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid info record id")
+		return
+	}
+	if err := h.svc.DeleteInfoRecord(c.Request.Context(), id, orgID); err != nil {
+		log.Err(err).Msg("delete purchasing info record failed")
+		response.InternalError(c, "delete info record failed")
+		return
+	}
+	response.OK(c, map[string]string{"status": "deleted"})
+}
+
+func (h *PurchaseHandler) FindPreferredInfoRecord(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	productID, err := uuid.Parse(c.Query("product_id"))
+	if err != nil {
+		response.BadRequest(c, "invalid product_id")
+		return
+	}
+	siteID, err := parseOptionalUUIDQuery(c, "site_id")
+	if err != nil {
+		response.BadRequest(c, "invalid site_id")
+		return
+	}
+	rec, err := h.svc.FindPreferredInfoRecord(c.Request.Context(), orgID, productID, siteID)
+	if err != nil {
+		log.Err(err).Msg("find preferred info record failed")
+		response.NotFound(c, "preferred info record not found")
+		return
+	}
+	response.OK(c, rec)
+}
+
+func (h *PurchaseHandler) CreatePR(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	var req purchasemodels.CreatePurchaseRequisitionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	pr, err := h.svc.CreatePR(c.Request.Context(), orgID, getUserIDPtr(c), &req)
+	if err != nil {
+		log.Err(err).Msg("create PR failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, pr)
+}
+
+func (h *PurchaseHandler) ListPRs(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	list, err := h.svc.ListPRs(c.Request.Context(), orgID, c.Query("status"), c.Query("q"))
+	if err != nil {
+		log.Err(err).Msg("list PRs failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, list)
+}
+
+func (h *PurchaseHandler) GetPR(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid PR id")
+		return
+	}
+	pr, err := h.svc.GetPR(c.Request.Context(), id, orgID)
+	if err != nil {
+		response.NotFound(c, "PR not found")
+		return
+	}
+	response.OK(c, pr)
+}
+
+func (h *PurchaseHandler) UpdatePR(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid PR id")
+		return
+	}
+	var req purchasemodels.UpdatePurchaseRequisitionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request")
+		return
+	}
+	if err := h.svc.UpdatePR(c.Request.Context(), id, orgID, &req); err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "updated"})
+}
+
+func (h *PurchaseHandler) DeletePR(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid PR id")
+		return
+	}
+	if err := h.svc.DeletePR(c.Request.Context(), id, orgID); err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "deleted"})
+}
+
+func (h *PurchaseHandler) SubmitPR(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid PR id")
+		return
+	}
+	if err := h.svc.SubmitPR(c.Request.Context(), id, orgID, getUserIDPtr(c)); err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "submitted"})
+}
+
+func (h *PurchaseHandler) ApprovePR(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid PR id")
+		return
+	}
+	if err := h.svc.ApprovePR(c.Request.Context(), id, orgID, getUserIDPtr(c)); err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "approved"})
+}
+
+func (h *PurchaseHandler) RejectPR(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid PR id")
+		return
+	}
+	var req purchasemodels.RejectPurchaseRequisitionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request")
+		return
+	}
+	if err := h.svc.RejectPR(c.Request.Context(), id, orgID, getUserIDPtr(c), req.Reason); err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, map[string]string{"status": "rejected"})
+}
+
+func (h *PurchaseHandler) ConvertPRToPO(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid PR id")
+		return
+	}
+	var req purchasemodels.ConvertPRToPORequest
+	_ = c.ShouldBindJSON(&req)
+	pos, err := h.svc.ConvertPRToPO(c.Request.Context(), id, orgID, &req, getUserIDPtr(c))
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, pos)
+}
+
+func (h *PurchaseHandler) ImportMRPPRs(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	var req purchasemodels.ImportMRPPRsRequest
+	_ = c.ShouldBindJSON(&req)
+	pr, err := h.svc.ImportMRPPRs(c.Request.Context(), orgID, &req, getUserIDPtr(c))
+	if err != nil {
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.Created(c, pr)
+}
+
 func (h *PurchaseHandler) CreatePO(c *gin.Context) {
 	orgID, err := getOrgID(c)
 	if err != nil {
@@ -171,6 +514,31 @@ func (h *PurchaseHandler) CreatePO(c *gin.Context) {
 		return
 	}
 	response.Created(c, po)
+}
+
+func (h *PurchaseHandler) UpdatePO(c *gin.Context) {
+	orgID, err := getOrgID(c)
+	if err != nil {
+		response.BadRequest(c, "missing org context")
+		return
+	}
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		response.BadRequest(c, "invalid PO id")
+		return
+	}
+	var req purchasemodels.UpdatePORequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "invalid request", response.ErrorDetail{Field: "body", Message: err.Error()})
+		return
+	}
+	po, err := h.svc.UpdatePO(c.Request.Context(), id, orgID, &req)
+	if err != nil {
+		log.Err(err).Msg("update po failed")
+		response.InternalError(c, err.Error())
+		return
+	}
+	response.OK(c, po)
 }
 
 func (h *PurchaseHandler) ListPOs(c *gin.Context) {

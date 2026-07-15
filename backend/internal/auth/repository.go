@@ -63,7 +63,7 @@ func (r *Repository) CreateUser(ctx context.Context, user *models.User) error {
 
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	query := `
-		SELECT id, tenant_id, email, password_hash, display_name, phone, avatar_url,
+		SELECT id, tenant_id, email, password_hash, display_name, COALESCE(phone,''), COALESCE(avatar_url,''),
 		       is_active, is_mfa_enabled, last_login_at, created_at, updated_at
 		FROM users WHERE email = $1
 	`
@@ -85,7 +85,7 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*models.
 
 func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	query := `
-		SELECT id, tenant_id, email, password_hash, display_name, phone, avatar_url,
+		SELECT id, tenant_id, email, password_hash, display_name, COALESCE(phone,''), COALESCE(avatar_url,''),
 		       is_active, is_mfa_enabled, last_login_at, created_at, updated_at
 		FROM users WHERE id = $1
 	`
@@ -128,6 +128,39 @@ func (r *Repository) GetUserRoles(ctx context.Context, userID uuid.UUID) ([]stri
 		roles = append(roles, role)
 	}
 	return roles, nil
+}
+
+func (r *Repository) AssignRoleByName(ctx context.Context, userID, tenantID uuid.UUID, roleName string) error {
+	var roleID uuid.UUID
+	err := r.db.QueryRow(ctx,
+		"SELECT id FROM roles WHERE tenant_id = $1 AND name = $2",
+		tenantID, roleName,
+	).Scan(&roleID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return fmt.Errorf("role %s not found", roleName)
+		}
+		return fmt.Errorf("find role %s: %w", roleName, err)
+	}
+	_, err = r.db.Exec(ctx,
+		"INSERT INTO user_roles (user_id, role_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+		userID, roleID)
+	return err
+}
+
+func (r *Repository) IsFirstTenantUser(ctx context.Context, userID, tenantID uuid.UUID) (bool, error) {
+	var firstID uuid.UUID
+	err := r.db.QueryRow(ctx,
+		`SELECT id FROM users
+		 WHERE tenant_id = $1
+		 ORDER BY created_at ASC, id ASC
+		 LIMIT 1`,
+		tenantID,
+	).Scan(&firstID)
+	if err != nil {
+		return false, fmt.Errorf("find first tenant user: %w", err)
+	}
+	return firstID == userID, nil
 }
 
 func (r *Repository) StoreRefreshToken(ctx context.Context, userID string, tokenID string) error {

@@ -30,6 +30,10 @@ func (r *ProductRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, re
 	if req.Barcode != "" {
 		barcodePtr = &req.Barcode
 	}
+	mrpType, err := normalizeMRPType(req.MRPType)
+	if err != nil {
+		return nil, err
+	}
 
 	p := &whmodels.Product{
 		ID:                    uuid.New(),
@@ -73,6 +77,7 @@ func (r *ProductRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, re
 		IsActive:              true,
 		MaterialType:          req.MaterialType,
 		MRPEnabled:            req.MRPEnabled,
+		MRPType:               mrpType,
 		PhantomAssembly:       req.PhantomAssembly,
 		ProductionLeadTime:    req.ProductionLeadTime,
 		InHouseProductionDays: req.InHouseProductionDays,
@@ -106,7 +111,7 @@ func (r *ProductRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, re
 		uomGroup = p.UnitOfMeasure
 	}
 
-	_, err := r.db.Exec(ctx, `
+	_, err = r.db.Exec(ctx, `
 		INSERT INTO products (
 			id, tenant_id, category_id, sku, barcode, name, description,
 			unit_of_measure, uom_group, batch_tracked, serial_tracked, shelf_life_days,
@@ -119,11 +124,11 @@ func (r *ProductRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, re
 			min_stock_qty, max_stock_qty, reorder_point, reorder_qty, lead_time_days,
 			is_serialized, is_active, material_type,
 			tax_category, tax_rate, tax_type, tax_exempt_reason, default_tax_jurisdiction_id,
-			mrp_enabled, phantom_assembly, production_lead_time, in_house_production_days,
+			mrp_enabled, mrp_type, phantom_assembly, production_lead_time, in_house_production_days,
 			created_at, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
 			$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,
-			$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50)
+			$40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$50,$51)
 	`, p.ID, p.TenantID, p.CategoryID, p.SKU, p.Barcode, p.Name, p.Description,
 		p.UnitOfMeasure, uomGroup, p.BatchTracked, p.SerialTracked, p.ShelfLifeDays,
 		p.DimensionLength, p.DimensionWidth, p.DimensionHeight, p.DimensionUnit,
@@ -135,11 +140,15 @@ func (r *ProductRepo) Create(ctx context.Context, tenantID, userID uuid.UUID, re
 		p.MinStockQty, p.MaxStockQty, p.ReorderPoint, p.ReorderQty, p.LeadTimeDays,
 		p.IsSerialized, p.IsActive, p.MaterialType,
 		p.TaxCategory, p.TaxRate, p.TaxType, p.TaxExemptReason, p.DefaultTaxJurisdictionID,
-		p.MRPEnabled, p.PhantomAssembly, p.ProductionLeadTime, p.InHouseProductionDays,
+		p.MRPEnabled, p.MRPType, p.PhantomAssembly, p.ProductionLeadTime, p.InHouseProductionDays,
 		p.CreatedAt, p.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert product: %w", err)
 	}
+	if err := r.syncProductPlantData(ctx, p.ID, tenantID, alignProductPlantData(req.PlantData, mrpType, p.ProcurementType)); err != nil {
+		return nil, err
+	}
+	p.PlantData, _ = r.loadProductPlantData(ctx, tenantID, p.ID)
 	return p, nil
 }
 
@@ -159,7 +168,7 @@ func (r *ProductRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*whm
 		       p.min_stock_qty, p.max_stock_qty, p.reorder_point, p.reorder_qty, p.lead_time_days,
 		       p.is_serialized, p.is_active,
 		       p.tax_category, p.tax_rate, p.tax_type, COALESCE(p.tax_exempt_reason,''), p.default_tax_jurisdiction_id,
-		       p.mrp_enabled, p.phantom_assembly, p.production_lead_time, p.in_house_production_days,
+		       p.mrp_enabled, COALESCE(p.mrp_type,'MPS'), p.phantom_assembly, p.production_lead_time, p.in_house_production_days,
 		       COALESCE(p.material_type,''),
 		       p.created_at, p.updated_at
 		FROM products p
@@ -179,13 +188,14 @@ func (r *ProductRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*whm
 		&p.MinStockQty, &p.MaxStockQty, &p.ReorderPoint, &p.ReorderQty, &p.LeadTimeDays,
 		&p.IsSerialized, &p.IsActive,
 		&p.TaxCategory, &p.TaxRate, &p.TaxType, &p.TaxExemptReason, &p.DefaultTaxJurisdictionID,
-		&p.MRPEnabled, &p.PhantomAssembly, &p.ProductionLeadTime, &p.InHouseProductionDays,
+		&p.MRPEnabled, &p.MRPType, &p.PhantomAssembly, &p.ProductionLeadTime, &p.InHouseProductionDays,
 		&p.MaterialType,
 		&p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get product: %w", err)
 	}
+	p.PlantData, _ = r.loadProductPlantData(ctx, tenantID, p.ID)
 	return p, nil
 }
 
@@ -204,7 +214,7 @@ func (r *ProductRepo) List(ctx context.Context, tenantID uuid.UUID, search strin
 		       p.min_stock_qty, p.max_stock_qty, p.reorder_point, p.reorder_qty, p.lead_time_days,
 		       p.is_serialized, p.is_active,
 		       p.tax_category, p.tax_rate, p.tax_type, COALESCE(p.tax_exempt_reason,''), p.default_tax_jurisdiction_id,
-		       p.mrp_enabled, p.phantom_assembly, p.production_lead_time, p.in_house_production_days,
+		       p.mrp_enabled, COALESCE(p.mrp_type,'MPS'), p.phantom_assembly, p.production_lead_time, p.in_house_production_days,
 		       COALESCE(p.material_type,''),
 		       p.created_at, p.updated_at
 		FROM products p
@@ -244,7 +254,7 @@ func (r *ProductRepo) List(ctx context.Context, tenantID uuid.UUID, search strin
 			&p.MinStockQty, &p.MaxStockQty, &p.ReorderPoint, &p.ReorderQty, &p.LeadTimeDays,
 			&p.IsSerialized, &p.IsActive,
 			&p.TaxCategory, &p.TaxRate, &p.TaxType, &p.TaxExemptReason, &p.DefaultTaxJurisdictionID,
-			&p.MRPEnabled, &p.PhantomAssembly, &p.ProductionLeadTime, &p.InHouseProductionDays,
+			&p.MRPEnabled, &p.MRPType, &p.PhantomAssembly, &p.ProductionLeadTime, &p.InHouseProductionDays,
 			&p.MaterialType,
 			&p.CreatedAt, &p.UpdatedAt,
 		)
@@ -252,6 +262,9 @@ func (r *ProductRepo) List(ctx context.Context, tenantID uuid.UUID, search strin
 			return nil, fmt.Errorf("scan product: %w", err)
 		}
 		products = append(products, p)
+	}
+	for _, p := range products {
+		p.PlantData, _ = r.loadProductPlantData(ctx, tenantID, p.ID)
 	}
 	return products, nil
 }
@@ -348,7 +361,10 @@ func (r *WarehouseRepo) UpdateWarehouse(ctx context.Context, id, tenantID uuid.U
 			updated_at      = NOW()
 		WHERE id = $1 AND tenant_id = $2
 	`, id, tenantID, req.Code, req.Name, req.Address, req.OrganizationID, req.SiteID, req.IsActive)
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *WarehouseRepo) DeleteWarehouse(ctx context.Context, id, tenantID uuid.UUID) error {
@@ -364,7 +380,10 @@ func (r *WarehouseRepo) DeleteWarehouse(ctx context.Context, id, tenantID uuid.U
 		return fmt.Errorf("warehouse has %d stock item(s); remove stock first", stockCount)
 	}
 	_, err = r.db.Exec(ctx, `DELETE FROM warehouses WHERE id = $1 AND tenant_id = $2`, id, tenantID)
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // ── Helpers ──
@@ -375,6 +394,21 @@ func (r *ProductRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) error 
 }
 
 func (r *ProductRepo) Update(ctx context.Context, id, tenantID uuid.UUID, req *whmodels.UpdateProductRequest) error {
+	var mrpType *string
+	if req.MRPType != nil {
+		normalized, err := normalizeMRPType(*req.MRPType)
+		if err != nil {
+			return err
+		}
+		mrpType = &normalized
+	} else if len(req.PlantData) > 0 {
+		normalized, err := normalizeMRPType(req.PlantData[0].MRPType)
+		if err != nil {
+			return err
+		}
+		mrpType = &normalized
+	}
+
 	_, err := r.db.Exec(ctx, `
 		UPDATE products SET
 			category_id      = COALESCE($3, category_id),
@@ -418,9 +452,10 @@ func (r *ProductRepo) Update(ctx context.Context, id, tenantID uuid.UUID, req *w
 			default_tax_jurisdiction_id   = COALESCE($41, default_tax_jurisdiction_id),
 			material_type                 = COALESCE($42, material_type),
 			mrp_enabled                   = COALESCE($43, mrp_enabled),
-			phantom_assembly              = COALESCE($44, phantom_assembly),
-			production_lead_time          = COALESCE($45, production_lead_time),
-			in_house_production_days      = COALESCE($46, in_house_production_days),
+			mrp_type                      = COALESCE($44, mrp_type),
+			phantom_assembly              = COALESCE($45, phantom_assembly),
+			production_lead_time          = COALESCE($46, production_lead_time),
+			in_house_production_days      = COALESCE($47, in_house_production_days),
 			updated_at                    = NOW()
 		WHERE id = $1 AND tenant_id = $2
 	`, id, tenantID,
@@ -465,10 +500,25 @@ func (r *ProductRepo) Update(ctx context.Context, id, tenantID uuid.UUID, req *w
 		req.DefaultTaxJurisdictionID,
 		req.MaterialType,
 		req.MRPEnabled,
+		mrpType,
 		req.PhantomAssembly,
 		req.ProductionLeadTime,
 		req.InHouseProductionDays)
-	return err
+	if err != nil {
+		return err
+	}
+	if req.PlantData != nil {
+		effectiveMRPType := ""
+		if mrpType != nil {
+			effectiveMRPType = *mrpType
+		}
+		procurementType := ""
+		if req.ProcurementType != nil {
+			procurementType = *req.ProcurementType
+		}
+		return r.syncProductPlantData(ctx, id, tenantID, alignProductPlantData(req.PlantData, effectiveMRPType, procurementType))
+	}
+	return nil
 }
 
 // ── Stock Movements ──
@@ -509,12 +559,12 @@ func (r *ProductRepo) ListMovements(ctx context.Context, tenantID uuid.UUID, lim
 		argIdx++
 	}
 	if dateFrom != "" {
-		baseQuery += fmt.Sprintf(" AND sm.created_at >= $%d::timestamptz", argIdx)
+		baseQuery += fmt.Sprintf(" AND sm.created_at >= $%d::date", argIdx)
 		args = append(args, dateFrom)
 		argIdx++
 	}
 	if dateTo != "" {
-		baseQuery += fmt.Sprintf(" AND sm.created_at <= $%d::timestamptz", argIdx)
+		baseQuery += fmt.Sprintf(" AND sm.created_at < ($%d::date + INTERVAL '1 day')", argIdx)
 		args = append(args, dateTo)
 		argIdx++
 	}
@@ -1679,6 +1729,125 @@ func nullIfEmpty(s string) *string {
 		return nil
 	}
 	return &s
+}
+
+func normalizeMRPType(value string) (string, error) {
+	normalized := strings.ToUpper(strings.TrimSpace(value))
+	if normalized == "" {
+		return "MPS", nil
+	}
+	switch normalized {
+	case "MPS", "MRP", "NO":
+		return normalized, nil
+	default:
+		return "", fmt.Errorf("invalid mrp_type %q; expected MPS, MRP, or NO", value)
+	}
+}
+
+func normalizeProcurementType(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	switch normalized {
+	case "purchase", "mixed":
+		return normalized
+	default:
+		return "in-house"
+	}
+}
+
+func alignProductPlantData(rows []whmodels.ProductPlantData, mrpType, procurementType string) []whmodels.ProductPlantData {
+	if rows == nil {
+		return nil
+	}
+	normalizedMRPType, err := normalizeMRPType(mrpType)
+	if err != nil {
+		normalizedMRPType = "MPS"
+	}
+	normalizedProcurementType := normalizeProcurementType(procurementType)
+	aligned := make([]whmodels.ProductPlantData, len(rows))
+	for i, row := range rows {
+		row.MRPType = normalizedMRPType
+		if strings.TrimSpace(row.ProcurementType) == "" {
+			row.ProcurementType = normalizedProcurementType
+		}
+		aligned[i] = row
+	}
+	return aligned
+}
+
+func (r *ProductRepo) loadProductPlantData(ctx context.Context, tenantID, productID uuid.UUID) ([]whmodels.ProductPlantData, error) {
+	rows, err := r.db.Query(ctx, `SELECT ppd.id, ppd.tenant_id, ppd.product_id, ppd.site_id,
+			COALESCE(s.site_code,''), COALESCE(s.site_name,''),
+			ppd.mrp_type, ppd.procurement_type, ppd.safety_stock, ppd.reorder_point, ppd.reorder_qty,
+			ppd.lead_time_days, ppd.planning_time_fence_days,
+			ppd.default_production_warehouse_id, ppd.default_receiving_warehouse_id,
+			ppd.standard_cost, ppd.moving_avg_cost, COALESCE(ppd.valuation_class,''), ppd.is_active
+		FROM product_plant_data ppd
+		LEFT JOIN sites s ON s.id = ppd.site_id
+		WHERE ppd.tenant_id = $1 AND ppd.product_id = $2
+		ORDER BY s.site_code`, tenantID, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []whmodels.ProductPlantData
+	for rows.Next() {
+		var row whmodels.ProductPlantData
+		if err := rows.Scan(&row.ID, &row.TenantID, &row.ProductID, &row.SiteID,
+			&row.SiteCode, &row.SiteName, &row.MRPType, &row.ProcurementType,
+			&row.SafetyStock, &row.ReorderPoint, &row.ReorderQty, &row.LeadTimeDays,
+			&row.PlanningTimeFenceDays, &row.DefaultProductionWarehouseID, &row.DefaultReceivingWarehouseID,
+			&row.StandardCost, &row.MovingAvgCost, &row.ValuationClass, &row.IsActive); err != nil {
+			return nil, err
+		}
+		list = append(list, row)
+	}
+	return list, nil
+}
+
+func (r *ProductRepo) syncProductPlantData(ctx context.Context, productID, tenantID uuid.UUID, rows []whmodels.ProductPlantData) error {
+	for _, row := range rows {
+		if row.SiteID == uuid.Nil {
+			continue
+		}
+		mrpType, err := normalizeMRPType(row.MRPType)
+		if err != nil {
+			return err
+		}
+		procurementType := normalizeProcurementType(row.ProcurementType)
+		fenceDays := row.PlanningTimeFenceDays
+		if fenceDays <= 0 {
+			fenceDays = 5
+		}
+		_, err = r.db.Exec(ctx, `INSERT INTO product_plant_data
+			(id, tenant_id, product_id, site_id, mrp_type, procurement_type, safety_stock,
+			 reorder_point, reorder_qty, lead_time_days, planning_time_fence_days,
+			 default_production_warehouse_id, default_receiving_warehouse_id,
+			 standard_cost, moving_avg_cost, valuation_class, is_active, updated_at)
+			VALUES (gen_random_uuid(), $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
+			ON CONFLICT (tenant_id, product_id, site_id) DO UPDATE SET
+				mrp_type = EXCLUDED.mrp_type,
+				procurement_type = EXCLUDED.procurement_type,
+				safety_stock = EXCLUDED.safety_stock,
+				reorder_point = EXCLUDED.reorder_point,
+				reorder_qty = EXCLUDED.reorder_qty,
+				lead_time_days = EXCLUDED.lead_time_days,
+				planning_time_fence_days = EXCLUDED.planning_time_fence_days,
+				default_production_warehouse_id = EXCLUDED.default_production_warehouse_id,
+				default_receiving_warehouse_id = EXCLUDED.default_receiving_warehouse_id,
+				standard_cost = EXCLUDED.standard_cost,
+				moving_avg_cost = EXCLUDED.moving_avg_cost,
+				valuation_class = EXCLUDED.valuation_class,
+				is_active = EXCLUDED.is_active,
+				updated_at = NOW()`,
+			tenantID, productID, row.SiteID, mrpType, procurementType, row.SafetyStock,
+			row.ReorderPoint, row.ReorderQty, row.LeadTimeDays, fenceDays,
+			row.DefaultProductionWarehouseID, row.DefaultReceivingWarehouseID,
+			row.StandardCost, row.MovingAvgCost, nullIfEmpty(row.ValuationClass), row.IsActive)
+		if err != nil {
+			return fmt.Errorf("sync product plant data: %w", err)
+		}
+	}
+	return nil
 }
 
 func nullIfEmptyP(s *string) *string {

@@ -21,11 +21,13 @@ class AppDateFormatter {
     _token = token;
     _cachedPattern = null;
     _lastFetch = null;
+    _refreshIfNeeded();
   }
 
   /// Fetch the active date format from the backend (cached 5 minutes)
   Future<void> _refreshIfNeeded() async {
-    if (_cachedPattern != null && _lastFetch != null &&
+    if (_cachedPattern != null &&
+        _lastFetch != null &&
         DateTime.now().difference(_lastFetch!).inMinutes < 5) {
       return;
     }
@@ -37,7 +39,8 @@ class AppDateFormatter {
         headers: {'Authorization': 'Bearer $_token'},
       );
       if (resp.statusCode >= 400) return;
-      final data = (jsonDecode(resp.body)['data'] as Map<String, dynamic>?) ?? {};
+      final data =
+          (jsonDecode(resp.body)['data'] as Map<String, dynamic>?) ?? {};
       _cachedPattern = data['date_pattern'] as String?;
       _lastFetch = DateTime.now();
       // Sync with fast helper
@@ -51,13 +54,7 @@ class AppDateFormatter {
   /// SAP: dd.MM.yyyy, MM/dd/yyyy, yyyy-MM-dd, dd/MM/yyyy, yyyyMMdd
   /// Dart: dd.MM.yyyy, MM/dd/yyyy, yyyy-MM-dd (mostly compatible)
   String get _effectivePattern {
-    var p = _cachedPattern ?? _defaultPattern;
-    // Ensure consistent: replace M (month without zero) with MM, d with dd
-    // but only if not already double
-    p = p.replaceAll(RegExp(r'(?<![M])M(?!M)'), 'MM');
-    p = p.replaceAll(RegExp(r'(?<![d])d(?!d)'), 'dd');
-    p = p.replaceAll(RegExp(r'(?<![y])y(?!y)'), 'yyyy'); // single y -> yyyy (approximate)
-    return p;
+    return Fmt.normalizePattern(_cachedPattern ?? _defaultPattern);
   }
 
   /// Format a DateTime to the active date format string
@@ -91,7 +88,7 @@ class AppDateFormatter {
   String formatSync(DateTime? date) {
     if (date == null) return '';
     try {
-      return DateFormat(_cachedPattern ?? _defaultPattern).format(date);
+      return DateFormat(_effectivePattern).format(date);
     } catch (_) {
       return DateFormat(_defaultPattern).format(date);
     }
@@ -101,7 +98,8 @@ class AppDateFormatter {
     if (dateStr == null || dateStr.isEmpty) return '';
     DateTime? dt;
     try {
-      if (dateStr.length >= 10) dt = DateTime.tryParse(dateStr.substring(0, 10));
+      if (dateStr.length >= 10)
+        dt = DateTime.tryParse(dateStr.substring(0, 10));
       if (dt == null) dt = DateTime.tryParse(dateStr);
     } catch (_) {}
     if (dt == null) return dateStr;

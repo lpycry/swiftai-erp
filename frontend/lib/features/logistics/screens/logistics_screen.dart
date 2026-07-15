@@ -10,9 +10,13 @@ import 'package:swiftai_erp/features/logistics/screens/warehouse_setup_screen.da
 import 'package:swiftai_erp/features/logistics/screens/gr_screen.dart';
 import 'package:swiftai_erp/features/logistics/screens/outbound_screen.dart';
 import 'package:swiftai_erp/features/logistics/screens/cycle_count_screen.dart';
+import 'package:swiftai_erp/features/logistics/screens/mrp_console_screen.dart';
 import 'package:swiftai_erp/features/purchase/services/purchase_service.dart';
 import 'package:swiftai_erp/features/purchase/screens/vendor_list_screen.dart';
 import 'package:swiftai_erp/features/purchase/screens/po_list_screen.dart';
+import 'package:swiftai_erp/features/purchase/screens/info_record_screen.dart';
+import 'package:swiftai_erp/features/purchase/screens/purchase_requisition_screen.dart';
+import 'package:swiftai_erp/features/production/services/production_service.dart';
 
 class LogisticsScreen extends StatelessWidget {
   final AuthService authService;
@@ -205,6 +209,72 @@ class LogisticsScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 28),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0F766E), Color(0xFF14B8A6)],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.schema_rounded,
+                        size: 28,
+                        color: Colors.white.withValues(alpha: 0.9),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Material Requirements Planning',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Run MRP, review MD04 supply/demand, planned PRs and exceptions',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.8),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [
+                _LogisticsCard(
+                  icon: Icons.play_circle_outline_rounded,
+                  title: 'MRP',
+                  subtitle:
+                      'Global MRP run console, MD04 stock/requirements list, PR proposals',
+                  color: Colors.teal,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MRPConsoleScreen(
+                        authService: authService,
+                        productionService: ProductionService(
+                          authService.accessToken ?? '',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 28),
             // ── Procurement Section ──
             Container(
               padding: const EdgeInsets.all(20),
@@ -269,6 +339,23 @@ class LogisticsScreen extends StatelessWidget {
                   ),
                 ),
                 _LogisticsCard(
+                  icon: Icons.request_quote_outlined,
+                  title: 'Purchase Requisitions',
+                  subtitle: 'Create, approve, source, and convert PRs to PO',
+                  color: Colors.teal,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PurchaseRequisitionScreen(
+                        authService: authService,
+                        purchaseService: PurchaseService(
+                          authService.accessToken ?? '',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                _LogisticsCard(
                   icon: Icons.description,
                   title: 'Purchase Orders',
                   subtitle: 'Create, manage & track PO lifecycle',
@@ -277,6 +364,23 @@ class LogisticsScreen extends StatelessWidget {
                     context,
                     MaterialPageRoute(
                       builder: (_) => POListScreen(
+                        authService: authService,
+                        purchaseService: PurchaseService(
+                          authService.accessToken ?? '',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                _LogisticsCard(
+                  icon: Icons.handshake_outlined,
+                  title: 'Info Records',
+                  subtitle: 'Vendor-material-plant purchasing defaults for MRP',
+                  color: Colors.purple,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PurchasingInfoRecordScreen(
                         authService: authService,
                         purchaseService: PurchaseService(
                           authService.accessToken ?? '',

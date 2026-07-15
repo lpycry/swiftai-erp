@@ -87,9 +87,9 @@ func (s *Service) Register(ctx context.Context, req models.RegisterRequest) (*mo
 		return nil, fmt.Errorf("create user: %w", err)
 	}
 
-	// Assign admin role
-	if err := s.repo.AssignDefaultRole(ctx, user.ID, tenant.ID); err != nil {
-		log.Warn().Err(err).Msg("failed to assign default role")
+	// Assign admin role to the first tenant user.
+	if err := s.repo.AssignRoleByName(ctx, user.ID, tenant.ID, "admin"); err != nil {
+		log.Warn().Err(err).Msg("failed to assign admin role")
 	}
 
 	// Get roles for token
@@ -143,6 +143,15 @@ func (s *Service) Login(ctx context.Context, req models.LoginRequest) (*models.L
 	if err != nil {
 		log.Warn().Err(err).Msg("failed to get user roles")
 		roles = []string{}
+	}
+	if len(roles) == 0 {
+		if isFirst, err := s.repo.IsFirstTenantUser(ctx, user.ID, user.TenantID); err == nil && isFirst {
+			if err := s.repo.AssignRoleByName(ctx, user.ID, user.TenantID, "admin"); err != nil {
+				log.Warn().Err(err).Msg("failed to repair missing admin role")
+			} else if repaired, err := s.repo.GetUserRoles(ctx, user.ID); err == nil {
+				roles = repaired
+			}
+		}
 	}
 
 	// Generate tokens

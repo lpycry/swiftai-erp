@@ -642,7 +642,7 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen>
                                 flex: 1,
                                 child: Text(
                                   ((e.value['debit'] as num?)?.toDouble() ??
-                                              0) >
+                                              0) !=
                                           0
                                       ? '\$${GlService.fmtAmount(e.value['debit'] as num?)}'
                                       : '',
@@ -654,7 +654,7 @@ class _JournalEntryListScreenState extends State<JournalEntryListScreen>
                                 flex: 1,
                                 child: Text(
                                   ((e.value['credit'] as num?)?.toDouble() ??
-                                              0) >
+                                              0) !=
                                           0
                                       ? '\$${GlService.fmtAmount(e.value['credit'] as num?)}'
                                       : '',

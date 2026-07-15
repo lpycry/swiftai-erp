@@ -404,6 +404,15 @@ class PurchaseService {
   //  VENDORS
   // ══════════════════════════════════════════
 
+  Exception _apiException(http.Response resp, String fallback) {
+    try {
+      final body = jsonDecode(resp.body);
+      return Exception(body['message'] ?? fallback);
+    } catch (_) {
+      return Exception(fallback);
+    }
+  }
+
   Future<List<VendorModel>> listVendors({String? query}) async {
     final params = <String, String>{};
     if (query != null && query.isNotEmpty) params['q'] = query;
@@ -504,6 +513,170 @@ class PurchaseService {
   //  PURCHASE ORDERS
   // ══════════════════════════════════════════
 
+  Future<List<Map<String, dynamic>>> listInfoRecords({
+    String? query,
+    String? productId,
+    String? vendorId,
+    String? siteId,
+  }) async {
+    final params = <String, String>{};
+    if (query != null && query.isNotEmpty) params['q'] = query;
+    if (productId != null && productId.isNotEmpty) {
+      params['product_id'] = productId;
+    }
+    if (vendorId != null && vendorId.isNotEmpty) params['vendor_id'] = vendorId;
+    if (siteId != null && siteId.isNotEmpty) params['site_id'] = siteId;
+    final resp = await http.get(
+      Uri.parse(
+        '$_baseUrl/purchase/info-records',
+      ).replace(queryParameters: params.isEmpty ? null : params),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw Exception('API error: ${resp.statusCode}');
+    }
+    final data = jsonDecode(resp.body)['data'] as List<dynamic>? ?? [];
+    return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> createInfoRecord(
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/info-records'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Create info record failed');
+    }
+    return Map<String, dynamic>.from(jsonDecode(resp.body)['data'] as Map);
+  }
+
+  Future<void> updateInfoRecord(String id, Map<String, dynamic> data) async {
+    final resp = await http.put(
+      Uri.parse('$_baseUrl/purchase/info-records/$id'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Update info record failed');
+    }
+  }
+
+  Future<void> deleteInfoRecord(String id) async {
+    final resp = await http.delete(
+      Uri.parse('$_baseUrl/purchase/info-records/$id'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Delete info record failed');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> listPRs({
+    String? status,
+    String? query,
+  }) async {
+    final params = <String, String>{};
+    if (status != null && status.isNotEmpty) params['status'] = status;
+    if (query != null && query.isNotEmpty) params['q'] = query;
+    final resp = await http.get(
+      Uri.parse(
+        '$_baseUrl/purchase/requisitions',
+      ).replace(queryParameters: params.isEmpty ? null : params),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw _apiException(resp, 'List PRs failed');
+    final data = jsonDecode(resp.body)['data'] as List<dynamic>? ?? [];
+    return data.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> getPR(String id) async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/purchase/requisitions/$id'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw _apiException(resp, 'Get PR failed');
+    return Map<String, dynamic>.from(jsonDecode(resp.body)['data'] as Map);
+  }
+
+  Future<Map<String, dynamic>> createPR(Map<String, dynamic> data) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/requisitions'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) throw _apiException(resp, 'Create PR failed');
+    return Map<String, dynamic>.from(jsonDecode(resp.body)['data'] as Map);
+  }
+
+  Future<void> updatePR(String id, Map<String, dynamic> data) async {
+    final resp = await http.put(
+      Uri.parse('$_baseUrl/purchase/requisitions/$id'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) throw _apiException(resp, 'Update PR failed');
+  }
+
+  Future<void> deletePR(String id) async {
+    final resp = await http.delete(
+      Uri.parse('$_baseUrl/purchase/requisitions/$id'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw _apiException(resp, 'Delete PR failed');
+  }
+
+  Future<void> submitPR(String id) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/requisitions/$id/submit'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw _apiException(resp, 'Submit PR failed');
+  }
+
+  Future<void> approvePR(String id) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/requisitions/$id/approve'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw _apiException(resp, 'Approve PR failed');
+  }
+
+  Future<void> rejectPR(String id, String reason) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/requisitions/$id/reject'),
+      headers: _headers,
+      body: jsonEncode({'reason': reason}),
+    );
+    if (resp.statusCode >= 400) throw _apiException(resp, 'Reject PR failed');
+  }
+
+  Future<List<dynamic>> convertPRToPO(String id, {bool all = true}) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/requisitions/$id/convert-to-po'),
+      headers: _headers,
+      body: jsonEncode({'all': all}),
+    );
+    if (resp.statusCode >= 400) throw _apiException(resp, 'Convert PR failed');
+    return jsonDecode(resp.body)['data'] as List<dynamic>? ?? [];
+  }
+
+  Future<Map<String, dynamic>> importMRPPRs() async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/purchase/requisitions/import-mrp'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) {
+      throw _apiException(resp, 'Import MRP PR failed');
+    }
+    return Map<String, dynamic>.from(jsonDecode(resp.body)['data'] as Map);
+  }
+
   Future<PurchaseOrderModel> createPO(Map<String, dynamic> data) async {
     final resp = await http.post(
       Uri.parse('$_baseUrl/purchase/orders'),
@@ -513,6 +686,25 @@ class PurchaseService {
     if (resp.statusCode >= 400) {
       final body = jsonDecode(resp.body);
       throw Exception(body['message'] ?? 'Create PO failed');
+    }
+    final body = jsonDecode(resp.body);
+    return PurchaseOrderModel.fromJson(
+      body['data'] as Map<String, dynamic>? ?? {},
+    );
+  }
+
+  Future<PurchaseOrderModel> updatePO(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.put(
+      Uri.parse('$_baseUrl/purchase/orders/$id'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    if (resp.statusCode >= 400) {
+      final body = jsonDecode(resp.body);
+      throw Exception(body['message'] ?? 'Update PO failed');
     }
     final body = jsonDecode(resp.body);
     return PurchaseOrderModel.fromJson(

@@ -241,7 +241,7 @@ class _ProductMasterScreenState extends State<ProductMasterScreen> {
                     padding: const EdgeInsets.symmetric(vertical: 2),
                     itemCount: _products.length,
                     itemBuilder: (_, i) => _ProductRow(
-                      entry: _products[i],
+                      entry: Map<String, dynamic>.from(_products[i] as Map),
                       onTap: () => _openDetail(entry: _products[i]),
                       onDelete: () => _delete(_products[i]['id'].toString()),
                     ),
@@ -319,6 +319,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
   String? _storageCondition;
   String? _valuationClass;
   bool _mrpEnabled = true;
+  String _mrpType = 'MPS';
   bool _phantomAssembly = false;
   String? _productionProcurementType = 'in-house';
   String? _taxCategory;
@@ -337,6 +338,10 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
   bool _loadingJurisdictions = true;
   List<Map<String, dynamic>> _taxCategoryOptions = [];
   bool _loadingCategories = true;
+  List<Map<String, dynamic>> _sites = [];
+  List<Map<String, dynamic>> _plantData = [];
+  bool _loadingSites = true;
+  String? _selectedPlantSiteId;
 
   @override
   void initState() {
@@ -349,6 +354,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
     }
     _loadTaxJurisdictions();
     _loadTaxCategories();
+    _loadSites();
   }
 
   @override
@@ -421,6 +427,8 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
     _leadTimeCtrl.text = e['lead_time_days']?.toString() ?? '';
     // Production Tab
     _mrpEnabled = e['mrp_enabled'] ?? true;
+    final mrpType = e['mrp_type']?.toString().toUpperCase() ?? '';
+    _mrpType = ['MPS', 'MRP', 'NO'].contains(mrpType) ? mrpType : 'MPS';
     _phantomAssembly = e['phantom_assembly'] ?? false;
     final pt = e['procurement_type']?.toString() ?? '';
     _productionProcurementType = ['in-house', 'purchase', 'mixed'].contains(pt)
@@ -428,6 +436,19 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
         : 'in-house';
     _prodLeadTimeCtrl.text = e['production_lead_time']?.toString() ?? '';
     _inHouseProdDaysCtrl.text = e['in_house_production_days']?.toString() ?? '';
+    _plantData = ((e['plant_data'] as List?) ?? [])
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+    if (_plantData.isNotEmpty) {
+      final plantMRP = _plantData.first['mrp_type']?.toString().toUpperCase();
+      if (['MPS', 'MRP', 'NO'].contains(plantMRP)) {
+        _mrpType = plantMRP!;
+      }
+      final plantProcurement = _plantData.first['procurement_type']?.toString();
+      if (['in-house', 'purchase', 'mixed'].contains(plantProcurement)) {
+        _productionProcurementType = plantProcurement;
+      }
+    }
   }
 
   Future<void> _loadTaxJurisdictions() async {
@@ -463,6 +484,39 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
     if (mounted) setState(() => _loadingCategories = false);
   }
 
+  Future<void> _loadSites() async {
+    try {
+      final token = widget.authService.accessToken ?? '';
+      final resp = await http.get(
+        Uri.parse('http://localhost:8080/api/v1/sites'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (resp.statusCode < 400) {
+        final raw = jsonDecode(resp.body)['data'];
+        final list = ((raw is Map ? raw['items'] : raw) as List? ?? [])
+            .map((row) => Map<String, dynamic>.from(row as Map))
+            .where(
+              (row) => row['site_type']?.toString().toLowerCase() == 'plant',
+            )
+            .toList();
+        if (mounted) {
+          setState(() {
+            _sites = list;
+            if (_isEdit && _plantData.isNotEmpty) {
+              _selectedPlantSiteId = _plantData.first['site_id']?.toString();
+            } else if (!_isEdit && _sites.length == 1) {
+              _selectedPlantSiteId = _sites.first['id']?.toString();
+              _ensurePlantView(_sites.first);
+            }
+          });
+        }
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingSites = false);
+    }
+  }
+
   Future<void> _loadBarcodes() async {
     if (_productId == null) return;
     try {
@@ -488,9 +542,14 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
       _msg('Material Type is required');
       return null;
     }
+    if (_selectedPlantSiteId == null || _selectedPlantSiteId!.isEmpty) {
+      _msg('Plant is required');
+      return null;
+    }
     if (_saving) return null;
     setState(() => _saving = true);
     String? newId;
+    _syncSelectedPlantViewWithProductionSettings();
     final data = {
       'sku': _skuCtrl.text.trim(),
       'name': _nameCtrl.text.trim(),
@@ -527,11 +586,13 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
       // Production Tab
       'material_type': _materialType ?? '',
       'mrp_enabled': _mrpEnabled,
+      'mrp_type': _mrpType,
       'phantom_assembly': _phantomAssembly,
       'procurement_type':
           _productionProcurementType ?? 'in-house', // nullable-safe
       'production_lead_time': int.tryParse(_prodLeadTimeCtrl.text),
       'in_house_production_days': int.tryParse(_inHouseProdDaysCtrl.text),
+      'plant_data': _plantData,
     };
     if (_taxCategory != null) {
       data['tax_category'] = _taxCategory;
@@ -671,7 +732,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
               children: [
                 _buildBasicTab(),
                 _buildDimTab(),
-                _buildProductionTab(),
+                _buildProductionTabSafe(),
                 _buildCostTab(),
                 _buildBarcodeTab(),
                 _buildPhotoTab(),
@@ -689,7 +750,10 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _buildPrimaryPlantSelector(),
+          const SizedBox(height: 20),
           _label('Basic Information'),
           const SizedBox(height: 8),
           Row(
@@ -1095,9 +1159,79 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _label('Production Planning'),
           const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                flex: 1,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _mrpType,
+                  decoration: const InputDecoration(
+                    labelText: 'MRP TYPE *',
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'MPS',
+                      child: Text('MPS', style: TextStyle(fontSize: 12)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'MRP',
+                      child: Text('MRP', style: TextStyle(fontSize: 12)),
+                    ),
+                    DropdownMenuItem(
+                      value: 'NO',
+                      child: Text('NO', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _mrpType = v ?? 'MPS';
+                    _syncSelectedPlantViewWithProductionSettings();
+                  }),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 140,
+                child: DropdownButtonFormField<String?>(
+                  initialValue: _productionProcurementType,
+                  decoration: const InputDecoration(
+                    labelText: 'Procurement Type',
+                    isDense: true,
+                  ),
+                  hint: const Text('Select', style: TextStyle(fontSize: 12)),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'in-house',
+                      child: Text(
+                        '1. In House',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'purchase',
+                      child: Text(
+                        '2. Purchase',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    DropdownMenuItem(
+                      value: 'mixed',
+                      child: Text('3. Mixed', style: TextStyle(fontSize: 12)),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _productionProcurementType = v;
+                    _syncSelectedPlantViewWithProductionSettings();
+                  }),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -1140,39 +1274,6 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
                   ],
                 ),
               ),
-              const SizedBox(width: 24),
-              Expanded(
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _productionProcurementType,
-                  decoration: const InputDecoration(
-                    labelText: 'Procurement Type',
-                    isDense: true,
-                  ),
-                  hint: const Text('Select', style: TextStyle(fontSize: 12)),
-                  items: [
-                    DropdownMenuItem(
-                      value: 'in-house',
-                      child: Text(
-                        '1. In House',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'purchase',
-                      child: Text(
-                        '2. Purchase',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
-                    DropdownMenuItem(
-                      value: 'mixed',
-                      child: Text('3. Mixed', style: TextStyle(fontSize: 12)),
-                    ),
-                  ],
-                  onChanged: (v) =>
-                      setState(() => _productionProcurementType = v),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -1208,6 +1309,520 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  // ── Plant Primary Selector ──
+  Widget _buildProductionTabSafe() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: constraints.maxWidth),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _label('Production Planning'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: 220,
+                      child: DropdownButtonFormField<String>(
+                        key: const ValueKey('production-mrp-type'),
+                        isExpanded: true,
+                        initialValue: _mrpType,
+                        decoration: const InputDecoration(
+                          labelText: 'MRP TYPE *',
+                          isDense: true,
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'MPS',
+                            child: Text('MPS', style: TextStyle(fontSize: 12)),
+                          ),
+                          DropdownMenuItem(
+                            value: 'MRP',
+                            child: Text('MRP', style: TextStyle(fontSize: 12)),
+                          ),
+                          DropdownMenuItem(
+                            value: 'NO',
+                            child: Text('NO', style: TextStyle(fontSize: 12)),
+                          ),
+                        ],
+                        onChanged: (v) => setState(() {
+                          _mrpType = v ?? 'MPS';
+                          _syncSelectedPlantViewWithProductionSettings();
+                        }),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 260,
+                      child: DropdownButtonFormField<String>(
+                        key: const ValueKey('production-procurement-type'),
+                        isExpanded: true,
+                        initialValue:
+                            [
+                              'in-house',
+                              'purchase',
+                              'mixed',
+                            ].contains(_productionProcurementType)
+                            ? _productionProcurementType
+                            : 'in-house',
+                        decoration: const InputDecoration(
+                          labelText: 'Procurement Type',
+                          isDense: true,
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'in-house',
+                            child: Text(
+                              '1. In House',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 'purchase',
+                            child: Text(
+                              '2. Purchase',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          DropdownMenuItem(
+                            value: 'mixed',
+                            child: Text(
+                              '3. Mixed',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                        onChanged: (v) => setState(() {
+                          _productionProcurementType = v ?? 'in-house';
+                          _syncSelectedPlantViewWithProductionSettings();
+                        }),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 24,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: 140,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 48,
+                            height: 24,
+                            child: Switch(
+                              value: _mrpEnabled,
+                              onChanged: (v) => setState(() => _mrpEnabled = v),
+                              activeColor: AppTheme.accentBlue,
+                            ),
+                          ),
+                          const Text('MRP', style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      width: 220,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 48,
+                            height: 24,
+                            child: Switch(
+                              value: _phantomAssembly,
+                              onChanged: (v) =>
+                                  setState(() => _phantomAssembly = v),
+                              activeColor: AppTheme.accentBlue,
+                            ),
+                          ),
+                          const Text(
+                            'Phantom Assembly',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _label('Lead Time'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    SizedBox(
+                      width: 260,
+                      child: TextField(
+                        controller: _prodLeadTimeCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Production Lead Time (hours)',
+                          isDense: true,
+                          hintText: '0',
+                        ),
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    SizedBox(
+                      width: 260,
+                      child: TextField(
+                        controller: _inHouseProdDaysCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'In House Production Days',
+                          isDense: true,
+                          hintText: '0',
+                        ),
+                        keyboardType: TextInputType.number,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPrimaryPlantSelector() {
+    final selectedValid =
+        _selectedPlantSiteId != null &&
+        _sites.any((site) => site['id']?.toString() == _selectedPlantSiteId);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label('Plant'),
+        const SizedBox(height: 8),
+        if (_loadingSites)
+          const LinearProgressIndicator(minHeight: 2)
+        else if (_sites.isEmpty)
+          Text(
+            'No plant found. Please create a Plant in organization settings first.',
+            style: TextStyle(fontSize: 12, color: AppTheme.errorColor),
+          )
+        else
+          SizedBox(
+            width: 360,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey('primary-plant-${_selectedPlantSiteId ?? 'none'}'),
+              isExpanded: true,
+              initialValue: selectedValid ? _selectedPlantSiteId : null,
+              decoration: const InputDecoration(
+                labelText: 'Plant *',
+                isDense: true,
+              ),
+              items: _sites
+                  .map(
+                    (site) => DropdownMenuItem<String>(
+                      value: site['id']?.toString(),
+                      child: Text(
+                        '${site['site_code'] ?? ''} ${site['site_name'] ?? ''}',
+                        style: const TextStyle(fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                final site = _sites.firstWhere(
+                  (s) => s['id']?.toString() == v,
+                  orElse: () => <String, dynamic>{},
+                );
+                setState(() {
+                  _selectedPlantSiteId = v;
+                  if (site.isNotEmpty) _ensurePlantView(site);
+                });
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _ensurePlantView(Map<String, dynamic> site) {
+    final siteID = site['id']?.toString();
+    if (siteID == null || siteID.isEmpty) return;
+    if (_plantData.any((row) => row['site_id']?.toString() == siteID)) return;
+    _plantData.add({
+      'site_id': siteID,
+      'site_code': site['site_code'] ?? '',
+      'site_name': site['site_name'] ?? '',
+      'mrp_type': _mrpType,
+      'procurement_type': _productionProcurementType ?? 'in-house',
+      'safety_stock': double.tryParse(_safetyStockCtrl.text) ?? 0,
+      'reorder_point': double.tryParse(_reorderPointCtrl.text) ?? 0,
+      'reorder_qty': double.tryParse(_reorderQtyCtrl.text) ?? 0,
+      'lead_time_days': int.tryParse(_leadTimeCtrl.text) ?? 0,
+      'planning_time_fence_days': 5,
+      'standard_cost': double.tryParse(_stdCostCtrl.text) ?? 0,
+      'moving_avg_cost': double.tryParse(_movAvgCtrl.text) ?? 0,
+      'valuation_class': _valuationClass ?? '',
+      'is_active': true,
+    });
+  }
+
+  void _syncSelectedPlantViewWithProductionSettings() {
+    final siteID = _selectedPlantSiteId;
+    if (siteID == null || siteID.isEmpty) return;
+    final site = _sites.firstWhere(
+      (s) => s['id']?.toString() == siteID,
+      orElse: () => <String, dynamic>{},
+    );
+    var index = _plantData.indexWhere(
+      (row) => row['site_id']?.toString() == siteID,
+    );
+    if (index < 0) {
+      _ensurePlantView(site);
+      index = _plantData.indexWhere(
+        (row) => row['site_id']?.toString() == siteID,
+      );
+    }
+    if (index < 0) return;
+    final row = _plantData[index];
+    row['site_id'] = siteID;
+    row['site_code'] = site['site_code'] ?? row['site_code'] ?? '';
+    row['site_name'] = site['site_name'] ?? row['site_name'] ?? '';
+    row['mrp_type'] = _mrpType;
+    row['procurement_type'] = _productionProcurementType ?? 'in-house';
+    row['safety_stock'] = double.tryParse(_safetyStockCtrl.text) ?? 0;
+    row['reorder_point'] = double.tryParse(_reorderPointCtrl.text) ?? 0;
+    row['reorder_qty'] = double.tryParse(_reorderQtyCtrl.text) ?? 0;
+    row['lead_time_days'] = int.tryParse(_leadTimeCtrl.text) ?? 0;
+    row['standard_cost'] = double.tryParse(_stdCostCtrl.text) ?? 0;
+    row['moving_avg_cost'] = double.tryParse(_movAvgCtrl.text) ?? 0;
+    row['valuation_class'] = _valuationClass ?? '';
+    row['is_active'] = true;
+  }
+
+  Widget _buildPlantViewsSection() {
+    final availablePlants = _sites
+        .where(
+          (site) => !_plantData.any(
+            (row) => row['site_id']?.toString() == site['id']?.toString(),
+          ),
+        )
+        .toList();
+    final addPlantValue =
+        availablePlants.any(
+          (site) => site['id']?.toString() == _selectedPlantSiteId,
+        )
+        ? _selectedPlantSiteId
+        : null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label('Plant-Specific Material Views'),
+        const SizedBox(height: 8),
+        if (_sites.isEmpty)
+          const SizedBox()
+        else if (availablePlants.isEmpty)
+          Text(
+            'All available plants already have a material view.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          )
+        else ...[
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  initialValue: addPlantValue,
+                  decoration: const InputDecoration(
+                    labelText: 'Add Plant',
+                    isDense: true,
+                  ),
+                  items: availablePlants
+                      .map(
+                        (site) => DropdownMenuItem<String>(
+                          value: site['id']?.toString(),
+                          child: Text(
+                            '${site['site_code'] ?? ''} ${site['site_name'] ?? ''}',
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _loadingSites
+                      ? null
+                      : (v) => setState(() => _selectedPlantSiteId = v),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.add_business, size: 18),
+                label: const Text(
+                  'Add Plant View',
+                  style: TextStyle(fontSize: 12),
+                ),
+                onPressed: addPlantValue == null
+                    ? null
+                    : () {
+                        final site = _sites.firstWhere(
+                          (s) => s['id']?.toString() == _selectedPlantSiteId,
+                          orElse: () => <String, dynamic>{},
+                        );
+                        setState(() {
+                          _ensurePlantView(site);
+                        });
+                      },
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 8),
+        if (_plantData.isEmpty)
+          Text(
+            _loadingSites ? 'Loading plants...' : 'No plant-specific views',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+          )
+        else
+          ..._plantData.asMap().entries.map(
+            (entry) => _buildPlantViewRow(entry.key, entry.value),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPlantViewRow(int index, Map<String, dynamic> row) {
+    final rowMRP = row['mrp_type']?.toString().toUpperCase();
+    final mrpValue = ['MPS', 'MRP', 'NO'].contains(rowMRP) ? rowMRP : 'MPS';
+    final rowProcurement = row['procurement_type']?.toString();
+    final procurementValue =
+        ['in-house', 'purchase', 'mixed'].contains(rowProcurement)
+        ? rowProcurement
+        : 'in-house';
+    final siteLabel = [
+      row['site_code']?.toString() ?? '',
+      row['site_name']?.toString() ?? '',
+    ].where((v) => v.isNotEmpty).join(' - ');
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  siteLabel.isEmpty ? 'Plant ${index + 1}' : siteLabel,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Switch(
+                value: row['is_active'] != false,
+                onChanged: (v) => setState(() => row['is_active'] = v),
+                activeColor: AppTheme.accentBlue,
+              ),
+              IconButton(
+                tooltip: 'Remove',
+                icon: const Icon(Icons.delete_outline, size: 18),
+                onPressed: () => setState(() => _plantData.removeAt(index)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              SizedBox(
+                width: 130,
+                child: DropdownButtonFormField<String>(
+                  initialValue: mrpValue,
+                  decoration: const InputDecoration(
+                    labelText: 'MRP TYPE',
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'MPS', child: Text('MPS')),
+                    DropdownMenuItem(value: 'MRP', child: Text('MRP')),
+                    DropdownMenuItem(value: 'NO', child: Text('NO')),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => row['mrp_type'] = v ?? 'MPS'),
+                ),
+              ),
+              SizedBox(
+                width: 160,
+                child: DropdownButtonFormField<String>(
+                  initialValue: procurementValue,
+                  decoration: const InputDecoration(
+                    labelText: 'Procurement',
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'in-house',
+                      child: Text('In House'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'purchase',
+                      child: Text('Purchase'),
+                    ),
+                    DropdownMenuItem(value: 'mixed', child: Text('Mixed')),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => row['procurement_type'] = v ?? 'in-house'),
+                ),
+              ),
+              _plantNumberField(row, 'safety_stock', 'Safety Stock'),
+              _plantNumberField(row, 'reorder_point', 'Reorder Point'),
+              _plantNumberField(row, 'reorder_qty', 'Reorder Qty'),
+              _plantNumberField(
+                row,
+                'lead_time_days',
+                'Lead Time Days',
+                isInt: true,
+              ),
+              _plantNumberField(
+                row,
+                'planning_time_fence_days',
+                'PTF Days',
+                isInt: true,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _plantNumberField(
+    Map<String, dynamic> row,
+    String key,
+    String label, {
+    bool isInt = false,
+  }) {
+    return SizedBox(
+      width: 130,
+      child: TextFormField(
+        initialValue: row[key]?.toString() ?? '',
+        decoration: InputDecoration(labelText: label, isDense: true),
+        keyboardType: TextInputType.number,
+        style: const TextStyle(fontSize: 12),
+        onChanged: (v) =>
+            row[key] = isInt ? int.tryParse(v) ?? 0 : double.tryParse(v) ?? 0,
       ),
     );
   }
@@ -1326,14 +1941,18 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
               : ListView.builder(
                   padding: const EdgeInsets.all(8),
                   itemCount: _barcodes.length,
-                  itemBuilder: (_, i) => _buildBarcodeRow(_barcodes[i]),
+                  itemBuilder: (_, i) => _buildBarcodeRow(
+                    _BarcodeItem(
+                      Map<String, dynamic>.from(_barcodes[i] as Map),
+                    ),
+                  ),
                 ),
         ),
       ],
     );
   }
 
-  Widget _buildBarcodeRow(dynamic b) {
+  Widget _buildBarcodeRow(_BarcodeItem b) {
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1351,7 +1970,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  b['barcode'] ?? '',
+                  b.barcode,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -1359,13 +1978,13 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
                   ),
                 ),
                 Text(
-                  b['barcode_type'] ?? '',
+                  b.barcodeType,
                   style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
                 ),
               ],
             ),
           ),
-          if (b['is_primary'] == true)
+          if (b.isPrimary)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               decoration: BoxDecoration(
@@ -1386,11 +2005,12 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 28),
             onPressed: () async {
-              final bid = b['id']?.toString();
-              if (bid == null) return;
+              final bid = b.id;
+              if (bid.isEmpty || _productId == null) return;
               try {
                 await widget.warehouseService.deleteBarcode(_productId!, bid);
-                _loadBarcodes();
+                if (!mounted) return;
+                await _loadBarcodes();
               } catch (e) {
                 _msg('$e', isError: true);
               }
@@ -1405,6 +2025,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
     // If creating new product, save it first
     if (_productId == null) {
       final saved = await _save(returnProductId: true);
+      if (!mounted) return;
       if (saved == null) {
         _msg('Please save the product first', isError: true);
         return;
@@ -1416,7 +2037,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
     }
     final codeCtrl = TextEditingController();
     String type = 'EAN-13';
-    await showDialog<bool>(
+    final added = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setD) => AlertDialog(
@@ -1468,7 +2089,6 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
                     'barcode_type': type,
                   });
                   if (ctx.mounted) Navigator.pop(ctx, true);
-                  _loadBarcodes();
                 } catch (e) {
                   if (ctx.mounted)
                     ScaffoldMessenger.of(ctx).showSnackBar(
@@ -1485,6 +2105,10 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
         ),
       ),
     );
+    codeCtrl.dispose();
+    if (added == true && mounted) {
+      await _loadBarcodes();
+    }
   }
 
   // ── Tab 5: Photos ──
@@ -1547,15 +2171,19 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
                     childAspectRatio: 1,
                   ),
                   itemCount: _photos.length,
-                  itemBuilder: (_, i) => _buildPhotoCard(_photos[i]),
+                  itemBuilder: (_, i) => _buildPhotoCard(
+                    _ProductPhotoItem(
+                      Map<String, dynamic>.from(_photos[i] as Map),
+                    ),
+                  ),
                 ),
         ),
       ],
     );
   }
 
-  Widget _buildPhotoCard(dynamic p) {
-    final filePath = p['file_path']?.toString() ?? '';
+  Widget _buildPhotoCard(_ProductPhotoItem p) {
+    final filePath = p.filePath;
     final hasImage = filePath.isNotEmpty;
     final imgUrl = hasImage ? 'http://localhost:8080/$filePath' : null;
     return Stack(
@@ -1580,7 +2208,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
                       Icon(Icons.image, size: 28, color: Colors.grey.shade400),
                       const SizedBox(height: 4),
                       Text(
-                        p['file_name'] ?? '',
+                        p.fileName,
                         style: TextStyle(
                           fontSize: 8,
                           color: Colors.grey.shade500,
@@ -1599,11 +2227,12 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
             right: 2,
             child: GestureDetector(
               onTap: () async {
-                final delId = p['id']?.toString();
-                if (delId == null) return;
+                final delId = p.id;
+                if (delId.isEmpty || _productId == null) return;
                 try {
                   await widget.warehouseService.deletePhoto(_productId!, delId);
-                  _loadPhotos();
+                  if (!mounted) return;
+                  await _loadPhotos();
                 } catch (e) {
                   _msg('$e', isError: true);
                 }
@@ -1619,14 +2248,14 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
             ),
           ),
         // Primary badge
-        if (p['is_primary'] == true)
+        if (p.isPrimary)
           Positioned(
             bottom: 2,
             left: 2,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.8),
+                color: Colors.green.withOpacity(0.8),
                 borderRadius: BorderRadius.circular(3),
               ),
               child: const Text(
@@ -1647,6 +2276,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
     // If creating new product, save it first
     if (_productId == null) {
       final saved = await _save(returnProductId: true);
+      if (!mounted) return;
       if (saved == null) return;
       // _productId will be available after save sets the entry
     }
@@ -1660,6 +2290,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
         allowMultiple: false,
       );
       if (result == null || result.files.isEmpty) return;
+      if (!mounted) return;
       final file = result.files.first;
       // Use try-catch for file.path (throws on web)
       String? filePath;
@@ -1694,13 +2325,14 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
         );
         final streamedResp = await request.send();
         final resp = await http.Response.fromStream(streamedResp);
+        if (!mounted) return;
         if (resp.statusCode >= 400) {
           final body = jsonDecode(resp.body);
           throw Exception(body['message'] ?? 'Upload failed');
         }
       }
       _msg('Photo uploaded');
-      _loadPhotos();
+      await _loadPhotos();
     } catch (e) {
       _msg('Upload failed: $e', isError: true);
     }
@@ -1710,6 +2342,13 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
   //  Tab 6: Taxability
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   Widget _buildTaxTab() {
+    final isExempt = _taxCategory == 'EXEMPT' || _taxCategory == 'EXP';
+    final jurisdictionValid =
+        _defaultTaxJurisdictionId != null &&
+        _defaultTaxJurisdictionId!.isNotEmpty &&
+        _taxJurisdictions.any(
+          (j) => j['id']?.toString() == _defaultTaxJurisdictionId,
+        );
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -1718,7 +2357,8 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
           _label('Tax Classification'),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            value: _taxCategoryOptions.any((c) => c['code'] == _taxCategory)
+            initialValue:
+                _taxCategoryOptions.any((c) => c['code'] == _taxCategory)
                 ? _taxCategory
                 : null,
             decoration: const InputDecoration(
@@ -1765,7 +2405,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
           ),
           const SizedBox(height: 16),
 
-          if (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP') ...[
+          if (isExempt) ...[
             const SizedBox(height: 8),
             _label('Tax Exemption Details'),
             const SizedBox(height: 8),
@@ -1785,7 +2425,7 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
             _label('Default Tax Jurisdiction'),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _defaultTaxJurisdictionId,
+              initialValue: jurisdictionValid ? _defaultTaxJurisdictionId : '',
               decoration: const InputDecoration(
                 labelText: 'Jurisdiction',
                 isDense: true,
@@ -1813,7 +2453,11 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
                   );
                 }),
               ],
-              onChanged: (v) => setState(() => _defaultTaxJurisdictionId = v),
+              onChanged: (v) => setState(
+                () => _defaultTaxJurisdictionId = (v == null || v.isEmpty)
+                    ? null
+                    : v,
+              ),
             ),
           ],
           const SizedBox(height: 16),
@@ -1822,30 +2466,26 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP')
-                  ? Colors.green.withValues(alpha: 0.06)
-                  : Colors.blue.withValues(alpha: 0.06),
+                  ? Colors.green.withOpacity(0.06)
+                  : Colors.blue.withOpacity(0.06),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
                 color: (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP')
-                    ? Colors.green.withValues(alpha: 0.2)
-                    : Colors.blue.withValues(alpha: 0.15),
+                    ? Colors.green.withOpacity(0.2)
+                    : Colors.blue.withOpacity(0.15),
               ),
             ),
             child: Row(
               children: [
                 Icon(
-                  (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP')
-                      ? Icons.check_circle
-                      : Icons.info_outline,
+                  isExempt ? Icons.check_circle : Icons.info_outline,
                   size: 18,
-                  color: (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP')
-                      ? Colors.green
-                      : Colors.blue,
+                  color: isExempt ? Colors.green : Colors.blue,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    (_taxCategory == 'EXEMPT' || _taxCategory == 'EXP')
+                    isExempt
                         ? 'This product is marked as tax-exempt. Sales to customers will not include tax when this item is sold.'
                         : 'Tax will be calculated based on the customer\'s tax jurisdiction and product category.',
                     style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
@@ -1873,19 +2513,55 @@ class _ProductDetailScreenState extends State<_ProductDetailScreen>
 //  Product Row (List View)
 // ════════════════════════════════════════════════════════════
 
+class _ProductEntry {
+  final Map<String, dynamic> raw;
+
+  const _ProductEntry(this.raw);
+
+  String get id => raw['id']?.toString() ?? '';
+  String get sku => raw['sku']?.toString() ?? '';
+  String get name => raw['name']?.toString() ?? '';
+  String get uom => raw['unit_of_measure']?.toString() ?? 'EA';
+  String get abc => raw['abc_classification']?.toString() ?? '';
+  Object get qty => raw['total_stock_qty'] ?? raw['stock_qty'] ?? '-';
+}
+
+class _BarcodeItem {
+  final Map<String, dynamic> raw;
+
+  const _BarcodeItem(this.raw);
+
+  String get id => raw['id']?.toString() ?? '';
+  String get barcode => raw['barcode']?.toString() ?? '';
+  String get barcodeType => raw['barcode_type']?.toString() ?? '';
+  bool get isPrimary => raw['is_primary'] == true;
+}
+
+class _ProductPhotoItem {
+  final Map<String, dynamic> raw;
+
+  const _ProductPhotoItem(this.raw);
+
+  String get id => raw['id']?.toString() ?? '';
+  String get filePath => raw['file_path']?.toString() ?? '';
+  String get fileName => raw['file_name']?.toString() ?? '';
+  bool get isPrimary => raw['is_primary'] == true;
+}
+
 class _ProductRow extends StatelessWidget {
-  final dynamic entry;
+  final _ProductEntry entry;
   final VoidCallback? onTap;
   final VoidCallback? onDelete;
-  const _ProductRow({required this.entry, this.onTap, this.onDelete});
+  _ProductRow({required Map<String, dynamic> entry, this.onTap, this.onDelete})
+    : entry = _ProductEntry(entry);
 
   @override
   Widget build(BuildContext context) {
-    final sku = entry['sku'] ?? '';
-    final name = entry['name'] ?? '';
-    final uom = entry['unit_of_measure'] ?? 'EA';
-    final abc = entry['abc_classification'] ?? '';
-    final qty = entry['total_stock_qty'] ?? entry['stock_qty'] ?? '-';
+    final sku = entry.sku;
+    final name = entry.name;
+    final uom = entry.uom;
+    final abc = entry.abc;
+    final qty = entry.qty;
     return InkWell(
       onTap: onTap,
       child: Container(

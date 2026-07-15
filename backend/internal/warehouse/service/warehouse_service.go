@@ -273,12 +273,12 @@ func (s *WarehouseService) ListStock(ctx context.Context, tenantID, productID, w
 		argIdx++
 	}
 	if dateFrom != "" {
-		wheres = append(wheres, fmt.Sprintf("si.last_movement_at >= $%d::timestamptz", argIdx))
+		wheres = append(wheres, fmt.Sprintf("si.last_movement_at >= $%d::date", argIdx))
 		args = append(args, dateFrom)
 		argIdx++
 	}
 	if dateTo != "" {
-		wheres = append(wheres, fmt.Sprintf("si.last_movement_at <= $%d::timestamptz", argIdx))
+		wheres = append(wheres, fmt.Sprintf("si.last_movement_at < ($%d::date + INTERVAL '1 day')", argIdx))
 		args = append(args, dateTo)
 		argIdx++
 	}
@@ -455,6 +455,30 @@ func (s *WarehouseService) ShipOutbound(ctx context.Context, id, tenantID, userI
 }
 
 func (s *WarehouseService) ReverseOutbound(ctx context.Context, id, tenantID, userID uuid.UUID) error {
+	if s.glSvc != nil {
+		ob, err := s.warehouseRepo.GetOutboundByID(ctx, id, tenantID)
+		if err != nil {
+			return err
+		}
+		if ob.GLJEID == nil || *ob.GLJEID == uuid.Nil {
+			if _, err := s.GetOutboundJournalEntry(ctx, id, tenantID, userID); err != nil {
+				return fmt.Errorf("ensure goods issue journal entry before reverse: %w", err)
+			}
+			ob, err = s.warehouseRepo.GetOutboundByID(ctx, id, tenantID)
+			if err != nil {
+				return err
+			}
+		}
+		if ob.GLJEID != nil && *ob.GLJEID != uuid.Nil {
+			je, err := s.glSvc.GetJournalEntry(ctx, *ob.GLJEID, tenantID)
+			if err != nil {
+				return err
+			}
+			if len(je.Lines) == 0 {
+				return fmt.Errorf("goods issue journal entry %s has no line items; cannot create reversal journal entry", je.DocumentNo)
+			}
+		}
+	}
 	jeID, err := s.warehouseRepo.ReverseOutbound(ctx, id, tenantID, userID)
 	if err != nil {
 		return err
@@ -533,7 +557,13 @@ loadJournalEntry:
 	if err != nil {
 		return nil, err
 	}
-	return map[string]interface{}{"journal_entry": je}, nil
+	entries := []*glmodels.JournalEntry{je}
+	reversals, err := s.findOutboundReversalJournalEntries(ctx, tenantID, je.DocumentNo)
+	if err != nil {
+		return nil, err
+	}
+	entries = append(entries, reversals...)
+	return map[string]interface{}{"journal_entry": je, "journal_entries": entries}, nil
 }
 
 func (s *WarehouseService) createOutboundJournalEntry(ctx context.Context, tenantID, userID uuid.UUID, ob *whmodels.OutboundOrder) error {
@@ -667,6 +697,39 @@ func (s *WarehouseService) repairOutboundIssueCosts(ctx context.Context, tenantI
 		}
 	}
 	return nil
+}
+
+func (s *WarehouseService) findOutboundReversalJournalEntries(ctx context.Context, tenantID uuid.UUID, originalDocumentNo string) ([]*glmodels.JournalEntry, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT id
+		FROM gl_journal_entries
+		WHERE tenant_id = $1
+		  AND reference = $2
+		  AND entry_type = 'reversal'
+		  AND status = 'posted'
+		ORDER BY created_at
+	`, tenantID, originalDocumentNo)
+	if err != nil {
+		return nil, fmt.Errorf("find goods issue reversal journal entries: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []*glmodels.JournalEntry
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan goods issue reversal journal entry: %w", err)
+		}
+		entry, err := s.glSvc.GetJournalEntry(ctx, id, tenantID)
+		if err != nil {
+			return nil, err
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan goods issue reversal journal entries: %w", err)
+	}
+	return entries, nil
 }
 
 func warehouseInventoryAccountTypeForMaterialType(materialType string) string {

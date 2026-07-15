@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:swiftai_erp/core/services/auth_service.dart';
+import 'package:swiftai_erp/core/services/fmt.dart';
 import 'package:swiftai_erp/core/theme/app_theme.dart';
 import 'package:swiftai_erp/core/widgets/app_layout.dart';
 import 'package:swiftai_erp/features/finance/services/gl_service.dart';
@@ -1004,9 +1005,9 @@ class _GIHistoryList extends StatelessWidget {
     if (text.isEmpty) return '-';
     try {
       final dt = DateTime.parse(text).toLocal();
-      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      return '${Fmt.d(dt)} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
     } catch (_) {
-      return text.length > 16 ? text.substring(0, 16) : text;
+      return Fmt.dateTimeStr(text);
     }
   }
 
@@ -1138,18 +1139,13 @@ class _GIHistoryList extends StatelessWidget {
   ) async {
     try {
       final data = await svc.getOutboundJournal(order['id'].toString());
-      final je = (data['journal_entry'] as Map<String, dynamic>?) ?? data;
-      final lines = (je['lines'] as List<dynamic>?) ?? [];
-      final status = je['status']?.toString() ?? 'draft';
-      final docNo = je['document_no']?.toString() ?? 'N/A';
-      var totalDebit = (je['total_debit'] as num?)?.toDouble() ?? 0;
-      var totalCredit = (je['total_credit'] as num?)?.toDouble() ?? 0;
-      if (totalDebit == 0 && totalCredit == 0) {
-        for (final line in lines) {
-          totalDebit += (line['debit'] as num?)?.toDouble() ?? 0;
-          totalCredit += (line['credit'] as num?)?.toDouble() ?? 0;
-        }
+      final entries = ((data['journal_entries'] as List<dynamic>?) ?? [])
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      if (entries.isEmpty) {
+        entries.add((data['journal_entry'] as Map<String, dynamic>?) ?? data);
       }
+      final first = entries.first;
       if (!context.mounted) return;
       showDialog(
         context: context,
@@ -1158,8 +1154,10 @@ class _GIHistoryList extends StatelessWidget {
           title: Row(
             children: [
               Icon(
-                status == 'posted' ? Icons.check_circle : Icons.edit_note,
-                color: status == 'posted'
+                first['status'] == 'posted'
+                    ? Icons.check_circle
+                    : Icons.edit_note,
+                color: first['status'] == 'posted'
                     ? AppTheme.successColor
                     : AppTheme.warningColor,
                 size: 22,
@@ -1167,56 +1165,35 @@ class _GIHistoryList extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  docNo,
+                  entries.length > 1
+                      ? 'Journal Entries (${entries.length})'
+                      : first['document_no']?.toString() ?? 'N/A',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              _journalStatusBadge(status),
+              _journalStatusBadge(first['status']?.toString() ?? 'draft'),
             ],
           ),
           content: SizedBox(
-            width: 520,
+            width: 560,
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
-                children: [
-                  _journalDetailRow(
-                    'Description',
-                    je['description']?.toString() ?? '',
-                  ),
-                  _journalDetailRow(
-                    'Posting Date',
-                    _journalDate(je['posting_date']),
-                  ),
-                  _journalDetailRow(
-                    'Document Date',
-                    _journalDate(je['document_date']),
-                  ),
-                  _journalDetailRow(
-                    'Reference',
-                    je['reference']?.toString() ?? '',
-                  ),
-                  _journalDetailRow(
-                    'Type',
-                    je['entry_type']?.toString() ?? 'normal',
-                  ),
-                  if ((je['organization_name']?.toString() ?? '').isNotEmpty)
-                    _journalDetailRow(
-                      'Company',
-                      je['organization_name'].toString(),
-                    ),
-                  const Divider(height: 16),
-                  const Text(
-                    'Line Items',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  _journalLineTable(lines, totalDebit, totalCredit),
-                ],
+                children: entries
+                    .asMap()
+                    .entries
+                    .map(
+                      (entry) => _journalEntryPanel(
+                        entry.value,
+                        entry.key,
+                        entries.length,
+                      ),
+                    )
+                    .toList(),
               ),
             ),
           ),
@@ -1235,6 +1212,66 @@ class _GIHistoryList extends StatelessWidget {
         Colors.orange,
       );
     }
+  }
+
+  Widget _journalEntryPanel(
+    Map<String, dynamic> je,
+    int index,
+    int totalEntries,
+  ) {
+    final lines = (je['lines'] as List<dynamic>?) ?? [];
+    var totalDebit = (je['total_debit'] as num?)?.toDouble() ?? 0;
+    var totalCredit = (je['total_credit'] as num?)?.toDouble() ?? 0;
+    if (totalDebit == 0 && totalCredit == 0) {
+      for (final line in lines) {
+        totalDebit += (line['debit'] as num?)?.toDouble() ?? 0;
+        totalCredit += (line['credit'] as num?)?.toDouble() ?? 0;
+      }
+    }
+    final isReversal = je['entry_type']?.toString() == 'reversal';
+    return Padding(
+      padding: EdgeInsets.only(bottom: index == totalEntries - 1 ? 0 : 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                isReversal ? Icons.undo_outlined : Icons.receipt_long_outlined,
+                size: 18,
+                color: isReversal ? AppTheme.errorColor : AppTheme.accentBlue,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${je['document_no'] ?? 'N/A'}${isReversal ? ' - Reversal' : ''}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              _journalStatusBadge(je['status']?.toString() ?? 'draft'),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _journalDetailRow('Description', je['description']?.toString() ?? ''),
+          _journalDetailRow('Posting Date', _journalDate(je['posting_date'])),
+          _journalDetailRow('Document Date', _journalDate(je['document_date'])),
+          _journalDetailRow('Reference', je['reference']?.toString() ?? ''),
+          _journalDetailRow('Type', je['entry_type']?.toString() ?? 'normal'),
+          if ((je['organization_name']?.toString() ?? '').isNotEmpty)
+            _journalDetailRow('Company', je['organization_name'].toString()),
+          const Divider(height: 16),
+          const Text(
+            'Line Items',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          _journalLineTable(lines, totalDebit, totalCredit),
+        ],
+      ),
+    );
   }
 
   Widget _journalStatusBadge(String status) {
@@ -1353,7 +1390,7 @@ class _GIHistoryList extends StatelessWidget {
                   ),
                   Expanded(
                     child: Text(
-                      ((line['debit'] as num?)?.toDouble() ?? 0) > 0
+                      ((line['debit'] as num?)?.toDouble() ?? 0) != 0
                           ? '\$${GlService.fmtAmount(line['debit'] as num?)}'
                           : '',
                       textAlign: TextAlign.right,
@@ -1362,7 +1399,7 @@ class _GIHistoryList extends StatelessWidget {
                   ),
                   Expanded(
                     child: Text(
-                      ((line['credit'] as num?)?.toDouble() ?? 0) > 0
+                      ((line['credit'] as num?)?.toDouble() ?? 0) != 0
                           ? '\$${GlService.fmtAmount(line['credit'] as num?)}'
                           : '',
                       textAlign: TextAlign.right,

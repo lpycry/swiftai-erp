@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	purchasemodels "github.com/swiftai-erp/backend/internal/purchase/models"
@@ -166,7 +168,833 @@ func (r *PurchaseRepo) DeleteVendor(ctx context.Context, id, orgID uuid.UUID) er
 //  PURCHASE ORDERS
 // ══════════════════════════════════════════
 
+// Purchasing Info Records
+
+const infoRecordSelect = `pir.id, pir.org_id, pir.vendor_id, COALESCE(v.vendor_code,''), COALESCE(v.name,''),
+	pir.product_id, COALESCE(p.sku,''), COALESCE(p.name,''), pir.site_id, COALESCE(s.site_code,''), COALESCE(s.site_name,''),
+	pir.purchase_uom, pir.currency, pir.price, pir.min_order_qty, pir.rounding_qty, pir.lead_time_days,
+	pir.overdelivery_tolerance_pct, pir.underdelivery_tolerance_pct, COALESCE(pir.incoterm,''), COALESCE(pir.payment_terms,''),
+	pir.valid_from, pir.valid_to, pir.is_preferred, pir.is_blocked, pir.is_active, COALESCE(pir.notes,''), pir.created_at, pir.updated_at`
+
+func scanInfoRecord(row interface{ Scan(...interface{}) error }) (*purchasemodels.PurchasingInfoRecord, error) {
+	rec := &purchasemodels.PurchasingInfoRecord{}
+	var siteID pgtype.UUID
+	var validTo pgtype.Date
+	err := row.Scan(&rec.ID, &rec.OrgID, &rec.VendorID, &rec.VendorCode, &rec.VendorName,
+		&rec.ProductID, &rec.ProductSKU, &rec.ProductName, &siteID, &rec.SiteCode, &rec.SiteName,
+		&rec.PurchaseUOM, &rec.Currency, &rec.Price, &rec.MinOrderQty, &rec.RoundingQty, &rec.LeadTimeDays,
+		&rec.OverdeliveryTolerancePct, &rec.UnderdeliveryTolerancePct, &rec.Incoterm, &rec.PaymentTerms,
+		&rec.ValidFrom, &validTo, &rec.IsPreferred, &rec.IsBlocked, &rec.IsActive, &rec.Notes, &rec.CreatedAt, &rec.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if siteID.Valid {
+		id := uuid.UUID(siteID.Bytes)
+		rec.SiteID = &id
+	}
+	if validTo.Valid {
+		t := validTo.Time
+		rec.ValidTo = &t
+	}
+	return rec, nil
+}
+
+func parseDateOrDefault(value string, fallback time.Time) (time.Time, error) {
+	if value == "" {
+		return fallback, nil
+	}
+	return time.Parse("2006-01-02", value)
+}
+
+func parseOptionalDate(value string) (*time.Time, error) {
+	if value == "" {
+		return nil, nil
+	}
+	t, err := time.Parse("2006-01-02", value)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (r *PurchaseRepo) resolveInfoRecordOrgID(ctx context.Context, scopeID, vendorID, productID uuid.UUID) (uuid.UUID, error) {
+	var orgID uuid.UUID
+	err := r.db.QueryRow(ctx, `
+		SELECT COALESCE(
+			(SELECT v.org_id
+			 FROM vendors v
+			 JOIN organizations o ON o.id = v.org_id
+			 WHERE v.id = $1
+			 LIMIT 1),
+			(SELECT o.id
+			 FROM vendors v
+			 JOIN organizations o ON o.tenant_id = v.org_id
+			 WHERE v.id = $1
+			 ORDER BY o.created_at, o.id
+			 LIMIT 1),
+			(SELECT o.id
+			 FROM products p
+			 JOIN organizations o ON o.tenant_id = p.tenant_id
+			 WHERE p.id = $2
+			 ORDER BY o.created_at, o.id
+			 LIMIT 1),
+			(SELECT o.id
+			 FROM organizations o
+			 WHERE o.id = $3 OR o.tenant_id = $3
+			 ORDER BY o.created_at, o.id
+			 LIMIT 1)
+		)
+	`, vendorID, productID, scopeID).Scan(&orgID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("resolve organization for info record: %w", err)
+	}
+	var productExists bool
+	err = r.db.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM products WHERE id = $1)`, productID).Scan(&productExists)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("validate material: %w", err)
+	}
+	if !productExists {
+		return uuid.Nil, fmt.Errorf("material is not valid")
+	}
+	return orgID, nil
+}
+
+const infoRecordScopeWhere = `(pir.org_id = $1 OR pir.org_id IN (SELECT id FROM organizations WHERE tenant_id = $1))`
+
+func (r *PurchaseRepo) CreateInfoRecord(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreatePurchasingInfoRecordRequest) (*purchasemodels.PurchasingInfoRecord, error) {
+	realOrgID, err := r.resolveInfoRecordOrgID(ctx, orgID, req.VendorID, req.ProductID)
+	if err != nil {
+		return nil, err
+	}
+	validFrom, err := parseDateOrDefault(req.ValidFrom, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("invalid valid_from: %w", err)
+	}
+	validTo, err := parseOptionalDate(req.ValidTo)
+	if err != nil {
+		return nil, fmt.Errorf("invalid valid_to: %w", err)
+	}
+	uom := req.PurchaseUOM
+	if uom == "" {
+		uom = "EA"
+	}
+	currency := req.Currency
+	if currency == "" {
+		currency = "USD"
+	}
+	id := uuid.New()
+	_, err = r.db.Exec(ctx, `INSERT INTO purchasing_info_records
+		(id, org_id, vendor_id, product_id, site_id, purchase_uom, currency, price, min_order_qty, rounding_qty,
+		 lead_time_days, overdelivery_tolerance_pct, underdelivery_tolerance_pct, incoterm, payment_terms,
+		 valid_from, valid_to, is_preferred, is_blocked, is_active, notes)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,true,$20)`,
+		id, realOrgID, req.VendorID, req.ProductID, req.SiteID, uom, currency, req.Price, req.MinOrderQty, req.RoundingQty,
+		req.LeadTimeDays, req.OverdeliveryTolerancePct, req.UnderdeliveryTolerancePct, req.Incoterm, req.PaymentTerms,
+		validFrom, validTo, req.IsPreferred, req.IsBlocked, req.Notes)
+	if err != nil {
+		return nil, fmt.Errorf("create info record: %w", err)
+	}
+	return r.GetInfoRecord(ctx, id, orgID)
+}
+
+func (r *PurchaseRepo) GetInfoRecord(ctx context.Context, id, orgID uuid.UUID) (*purchasemodels.PurchasingInfoRecord, error) {
+	return scanInfoRecord(r.db.QueryRow(ctx, `SELECT `+infoRecordSelect+`
+		FROM purchasing_info_records pir
+		JOIN vendors v ON v.id = pir.vendor_id
+		JOIN products p ON p.id = pir.product_id
+		LEFT JOIN sites s ON s.id = pir.site_id
+		WHERE pir.id = $2 AND `+infoRecordScopeWhere, orgID, id))
+}
+
+func (r *PurchaseRepo) ListInfoRecords(ctx context.Context, orgID uuid.UUID, productID, vendorID, siteID *uuid.UUID, search string) ([]*purchasemodels.PurchasingInfoRecord, error) {
+	query := `SELECT ` + infoRecordSelect + `
+		FROM purchasing_info_records pir
+		JOIN vendors v ON v.id = pir.vendor_id
+		JOIN products p ON p.id = pir.product_id
+		LEFT JOIN sites s ON s.id = pir.site_id
+		WHERE ` + infoRecordScopeWhere
+	args := []interface{}{orgID}
+	arg := 2
+	if productID != nil {
+		query += fmt.Sprintf(" AND pir.product_id = $%d", arg)
+		args = append(args, *productID)
+		arg++
+	}
+	if vendorID != nil {
+		query += fmt.Sprintf(" AND pir.vendor_id = $%d", arg)
+		args = append(args, *vendorID)
+		arg++
+	}
+	if siteID != nil {
+		query += fmt.Sprintf(" AND (pir.site_id = $%d OR pir.site_id IS NULL)", arg)
+		args = append(args, *siteID)
+		arg++
+	}
+	if search != "" {
+		query += fmt.Sprintf(" AND (v.vendor_code ILIKE $%d OR v.name ILIKE $%d OR p.sku ILIKE $%d OR p.name ILIKE $%d)", arg, arg, arg, arg)
+		args = append(args, "%"+search+"%")
+		arg++
+	}
+	query += " ORDER BY p.sku, pir.is_preferred DESC, v.vendor_code"
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*purchasemodels.PurchasingInfoRecord
+	for rows.Next() {
+		rec, err := scanInfoRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, rec)
+	}
+	return list, nil
+}
+
+func (r *PurchaseRepo) UpdateInfoRecord(ctx context.Context, id, orgID uuid.UUID, req *purchasemodels.UpdatePurchasingInfoRecordRequest) error {
+	var validFrom interface{}
+	if req.ValidFrom != nil {
+		t, err := parseDateOrDefault(*req.ValidFrom, time.Now())
+		if err != nil {
+			return fmt.Errorf("invalid valid_from: %w", err)
+		}
+		validFrom = t
+	}
+	var validTo interface{}
+	if req.ValidTo != nil {
+		t, err := parseOptionalDate(*req.ValidTo)
+		if err != nil {
+			return fmt.Errorf("invalid valid_to: %w", err)
+		}
+		validTo = t
+	}
+	_, err := r.db.Exec(ctx, `UPDATE purchasing_info_records SET
+		site_id = COALESCE($3, site_id),
+		purchase_uom = COALESCE($4, purchase_uom),
+		currency = COALESCE($5, currency),
+		price = COALESCE($6, price),
+		min_order_qty = COALESCE($7, min_order_qty),
+		rounding_qty = COALESCE($8, rounding_qty),
+		lead_time_days = COALESCE($9, lead_time_days),
+		overdelivery_tolerance_pct = COALESCE($10, overdelivery_tolerance_pct),
+		underdelivery_tolerance_pct = COALESCE($11, underdelivery_tolerance_pct),
+		incoterm = COALESCE($12, incoterm),
+		payment_terms = COALESCE($13, payment_terms),
+		valid_from = COALESCE($14, valid_from),
+		valid_to = COALESCE($15, valid_to),
+		is_preferred = COALESCE($16, is_preferred),
+		is_blocked = COALESCE($17, is_blocked),
+		is_active = COALESCE($18, is_active),
+		notes = COALESCE($19, notes),
+		updated_at = NOW()
+		WHERE id = $1 AND (org_id = $2 OR org_id IN (SELECT id FROM organizations WHERE tenant_id = $2))`,
+		id, orgID, req.SiteID, req.PurchaseUOM, req.Currency, req.Price, req.MinOrderQty, req.RoundingQty,
+		req.LeadTimeDays, req.OverdeliveryTolerancePct, req.UnderdeliveryTolerancePct, req.Incoterm, req.PaymentTerms,
+		validFrom, validTo, req.IsPreferred, req.IsBlocked, req.IsActive, req.Notes)
+	return err
+}
+
+func (r *PurchaseRepo) DeleteInfoRecord(ctx context.Context, id, orgID uuid.UUID) error {
+	_, err := r.db.Exec(ctx, `DELETE FROM purchasing_info_records WHERE id = $1 AND (org_id = $2 OR org_id IN (SELECT id FROM organizations WHERE tenant_id = $2))`, id, orgID)
+	return err
+}
+
+func (r *PurchaseRepo) FindPreferredInfoRecord(ctx context.Context, orgID, productID uuid.UUID, siteID *uuid.UUID) (*purchasemodels.PurchasingInfoRecord, error) {
+	return scanInfoRecord(r.db.QueryRow(ctx, `SELECT `+infoRecordSelect+`
+		FROM purchasing_info_records pir
+		JOIN vendors v ON v.id = pir.vendor_id
+		JOIN products p ON p.id = pir.product_id
+		LEFT JOIN sites s ON s.id = pir.site_id
+		WHERE `+infoRecordScopeWhere+` AND pir.product_id = $2
+			AND pir.is_active = true AND pir.is_blocked = false
+			AND pir.valid_from <= CURRENT_DATE
+			AND (pir.valid_to IS NULL OR pir.valid_to >= CURRENT_DATE)
+			AND ($3::uuid IS NULL OR pir.site_id = $3 OR pir.site_id IS NULL)
+		ORDER BY pir.is_preferred DESC, CASE WHEN pir.site_id = $3 THEN 0 ELSE 1 END, pir.price ASC, v.vendor_code
+		LIMIT 1`, orgID, productID, siteID))
+}
+
+func (r *PurchaseRepo) realOrgID(ctx context.Context, scopeID uuid.UUID) (uuid.UUID, error) {
+	var orgID uuid.UUID
+	if err := r.db.QueryRow(ctx, `SELECT id FROM organizations WHERE id = $1`, scopeID).Scan(&orgID); err == nil {
+		return orgID, nil
+	}
+	if err := r.db.QueryRow(ctx, `SELECT id FROM organizations WHERE tenant_id = $1 ORDER BY created_at, id LIMIT 1`, scopeID).Scan(&orgID); err != nil {
+		return uuid.Nil, fmt.Errorf("resolve organization: %w", err)
+	}
+	return orgID, nil
+}
+
+func (r *PurchaseRepo) purchaseOrderOrgID(ctx context.Context, scopeID uuid.UUID) (uuid.UUID, error) {
+	var referencedTable string
+	err := r.db.QueryRow(ctx, `SELECT confrelid::regclass::text
+		FROM pg_constraint
+		WHERE conrelid = 'purchase_orders'::regclass
+			AND conname = 'purchase_orders_org_id_fkey'
+		LIMIT 1`).Scan(&referencedTable)
+	if err == nil && referencedTable == "tenants" {
+		var tenantID uuid.UUID
+		if err := r.db.QueryRow(ctx, `SELECT id FROM tenants WHERE id = $1`, scopeID).Scan(&tenantID); err == nil {
+			return tenantID, nil
+		}
+		if err := r.db.QueryRow(ctx, `SELECT tenant_id FROM organizations WHERE id = $1`, scopeID).Scan(&tenantID); err != nil {
+			return uuid.Nil, fmt.Errorf("resolve purchase order tenant: %w", err)
+		}
+		return tenantID, nil
+	}
+	return r.realOrgID(ctx, scopeID)
+}
+
+func (r *PurchaseRepo) ensurePRTables(ctx context.Context) error {
+	stmts := []string{
+		`CREATE TABLE IF NOT EXISTS purchase_requisitions (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+			pr_number VARCHAR(30) NOT NULL,
+			requester_id UUID,
+			department VARCHAR(120) DEFAULT '',
+			cost_center VARCHAR(80) DEFAULT '',
+			requisition_type VARCHAR(40) NOT NULL DEFAULT 'INVENTORY',
+			status VARCHAR(30) NOT NULL DEFAULT 'DRAFT',
+			total_amount NUMERIC(18,4) NOT NULL DEFAULT 0,
+			currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+			source VARCHAR(30) NOT NULL DEFAULT 'MANUAL',
+			current_level INTEGER NOT NULL DEFAULT 0,
+			approval_level INTEGER NOT NULL DEFAULT 1,
+			rejection_reason TEXT DEFAULT '',
+			submitted_at TIMESTAMPTZ,
+			approved_at TIMESTAMPTZ,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE(org_id, pr_number)
+		)`,
+		`CREATE TABLE IF NOT EXISTS purchase_requisition_items (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			pr_id UUID NOT NULL REFERENCES purchase_requisitions(id) ON DELETE CASCADE,
+			item_no INTEGER NOT NULL,
+			product_id UUID NOT NULL REFERENCES products(id),
+			qty_requested NUMERIC(18,4) NOT NULL,
+			unit_of_measure VARCHAR(20) NOT NULL DEFAULT 'EA',
+			estimated_price NUMERIC(18,4) NOT NULL DEFAULT 0,
+			currency VARCHAR(10) NOT NULL DEFAULT 'USD',
+			required_date DATE NOT NULL,
+			acct_assignment VARCHAR(80) DEFAULT '',
+			suggested_vendor_id UUID REFERENCES vendors(id) ON DELETE SET NULL,
+			source_mrp_pr_id UUID,
+			converted_qty NUMERIC(18,4) NOT NULL DEFAULT 0,
+			po_id UUID REFERENCES purchase_orders(id) ON DELETE SET NULL,
+			status VARCHAR(30) NOT NULL DEFAULT 'OPEN',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			UNIQUE(pr_id, item_no)
+		)`,
+		`CREATE TABLE IF NOT EXISTS purchase_requisition_audit_logs (
+			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+			pr_id UUID NOT NULL REFERENCES purchase_requisitions(id) ON DELETE CASCADE,
+			user_id UUID,
+			action VARCHAR(40) NOT NULL,
+			old_status VARCHAR(30) DEFAULT '',
+			new_status VARCHAR(30) DEFAULT '',
+			message TEXT DEFAULT '',
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+		)`,
+	}
+	for _, stmt := range stmts {
+		if _, err := r.db.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("ensure PR table: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *PurchaseRepo) generatePRNumber(ctx context.Context) string {
+	prefix := "PR" + time.Now().Format("20060102")
+	var count int
+	_ = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM purchase_requisitions WHERE pr_number LIKE $1`, prefix+"%").Scan(&count)
+	return fmt.Sprintf("%s%04d", prefix, count+1)
+}
+
+func approvalLevel(total float64) int {
+	if total <= 1000 {
+		return 1
+	}
+	if total <= 10000 {
+		return 2
+	}
+	return 3
+}
+
+func (r *PurchaseRepo) lookupPRSource(ctx context.Context, orgID, productID uuid.UUID, siteID *uuid.UUID) (*uuid.UUID, float64, string, error) {
+	var vendorID pgtype.UUID
+	var price float64
+	var currency string
+	err := r.db.QueryRow(ctx, `SELECT pir.vendor_id, pir.price, pir.currency
+		FROM purchasing_info_records pir
+		WHERE (pir.org_id = $1 OR pir.org_id IN (SELECT id FROM organizations WHERE tenant_id = $1))
+			AND pir.product_id = $2
+			AND pir.is_active = true AND pir.is_blocked = false
+			AND pir.valid_from <= CURRENT_DATE
+			AND (pir.valid_to IS NULL OR pir.valid_to >= CURRENT_DATE)
+			AND ($3::uuid IS NULL OR pir.site_id = $3 OR pir.site_id IS NULL)
+		ORDER BY pir.is_preferred DESC, CASE WHEN pir.site_id = $3 THEN 0 ELSE 1 END, pir.price ASC
+		LIMIT 1`, orgID, productID, siteID).Scan(&vendorID, &price, &currency)
+	if err != nil {
+		return nil, 0, "", nil
+	}
+	return uuidPtrFromPgtype(vendorID), price, currency, nil
+}
+
+func uuidPtrFromPgtype(value pgtype.UUID) *uuid.UUID {
+	if !value.Valid {
+		return nil
+	}
+	id := uuid.UUID(value.Bytes)
+	return &id
+}
+
+func (r *PurchaseRepo) CreatePR(ctx context.Context, orgID uuid.UUID, userID *uuid.UUID, req *purchasemodels.CreatePurchaseRequisitionRequest) (*purchasemodels.PurchaseRequisition, error) {
+	if err := r.ensurePRTables(ctx); err != nil {
+		return nil, err
+	}
+	realOrg, err := r.realOrgID(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	currency := req.Currency
+	if currency == "" {
+		currency = "USD"
+	}
+	prType := strings.ToUpper(strings.TrimSpace(req.RequisitionType))
+	if prType == "" {
+		prType = "INVENTORY"
+	}
+	source := strings.ToUpper(strings.TrimSpace(req.Source))
+	if source == "" {
+		source = "MANUAL"
+	}
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	id := uuid.New()
+	prNumber := r.generatePRNumber(ctx)
+	total := 0.0
+	for _, item := range req.Items {
+		total += item.QtyRequested * item.EstimatedPrice
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO purchase_requisitions
+		(id, org_id, pr_number, requester_id, department, cost_center, requisition_type, status, total_amount, currency, source, approval_level, created_at, updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,'DRAFT',$8,$9,$10,$11,NOW(),NOW())`,
+		id, realOrg, prNumber, userID, req.Department, req.CostCenter, prType, total, currency, source, approvalLevel(total))
+	if err != nil {
+		return nil, fmt.Errorf("insert pr: %w", err)
+	}
+	for i, item := range req.Items {
+		required, err := time.Parse("2006-01-02", item.RequiredDate)
+		if err != nil {
+			return nil, fmt.Errorf("invalid required_date: %w", err)
+		}
+		var sku, name, uom string
+		var lastCost float64
+		if err := tx.QueryRow(ctx, `SELECT sku, name, unit_of_measure, COALESCE(last_cost, standard_cost, 0) FROM products WHERE id = $1`, item.ProductID).Scan(&sku, &name, &uom, &lastCost); err != nil {
+			return nil, fmt.Errorf("load material: %w", err)
+		}
+		price := item.EstimatedPrice
+		itemCurrency := item.Currency
+		if itemCurrency == "" {
+			itemCurrency = currency
+		}
+		vendorID, infoPrice, infoCurrency, _ := r.lookupPRSource(ctx, realOrg, item.ProductID, nil)
+		if price <= 0 && infoPrice > 0 {
+			price = infoPrice
+		}
+		if price <= 0 {
+			price = lastCost
+		}
+		if itemCurrency == "" && infoCurrency != "" {
+			itemCurrency = infoCurrency
+		}
+		if itemCurrency == "" {
+			itemCurrency = "USD"
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO purchase_requisition_items
+			(id, pr_id, item_no, product_id, qty_requested, unit_of_measure, estimated_price, currency, required_date, acct_assignment, suggested_vendor_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			uuid.New(), id, (i+1)*10, item.ProductID, item.QtyRequested, uom, price, itemCurrency, required, item.AcctAssignment, vendorID)
+		if err != nil {
+			return nil, fmt.Errorf("insert pr item: %w", err)
+		}
+		_ = sku
+		_ = name
+	}
+	_, _ = tx.Exec(ctx, `INSERT INTO purchase_requisition_audit_logs(id, pr_id, user_id, action, new_status, message)
+		VALUES ($1,$2,$3,'CREATE','DRAFT','Purchase requisition created')`, uuid.New(), id, userID)
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return r.GetPR(ctx, id, orgID)
+}
+
+func (r *PurchaseRepo) ListPRs(ctx context.Context, orgID uuid.UUID, status, search string) ([]*purchasemodels.PurchaseRequisition, error) {
+	if err := r.ensurePRTables(ctx); err != nil {
+		return nil, err
+	}
+	realOrg, err := r.realOrgID(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	query := `SELECT id, org_id, pr_number, requester_id, department, cost_center, requisition_type, status, total_amount, currency, source, current_level, approval_level, COALESCE(rejection_reason,''), created_at, updated_at, submitted_at, approved_at
+		FROM purchase_requisitions WHERE org_id = $1`
+	args := []interface{}{realOrg}
+	arg := 2
+	if status != "" {
+		query += fmt.Sprintf(" AND status = $%d", arg)
+		args = append(args, status)
+		arg++
+	}
+	if search != "" {
+		query += fmt.Sprintf(" AND pr_number ILIKE $%d", arg)
+		args = append(args, "%"+search+"%")
+	}
+	query += " ORDER BY created_at DESC"
+	rows, err := r.db.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []*purchasemodels.PurchaseRequisition
+	for rows.Next() {
+		pr, err := scanPR(rows)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, pr)
+	}
+	return list, nil
+}
+
+func scanPR(row interface{ Scan(...interface{}) error }) (*purchasemodels.PurchaseRequisition, error) {
+	pr := &purchasemodels.PurchaseRequisition{}
+	var requester pgtype.UUID
+	var submittedAt, approvedAt pgtype.Timestamptz
+	err := row.Scan(&pr.ID, &pr.OrgID, &pr.PRNumber, &requester, &pr.Department, &pr.CostCenter, &pr.RequisitionType, &pr.Status, &pr.TotalAmount, &pr.Currency, &pr.Source, &pr.CurrentLevel, &pr.ApprovalLevel, &pr.RejectionReason, &pr.CreatedAt, &pr.UpdatedAt, &submittedAt, &approvedAt)
+	if err != nil {
+		return nil, err
+	}
+	pr.RequesterID = uuidPtrFromPgtype(requester)
+	if submittedAt.Valid {
+		t := submittedAt.Time
+		pr.SubmittedAt = &t
+	}
+	if approvedAt.Valid {
+		t := approvedAt.Time
+		pr.ApprovedAt = &t
+	}
+	return pr, nil
+}
+
+func (r *PurchaseRepo) GetPR(ctx context.Context, id, orgID uuid.UUID) (*purchasemodels.PurchaseRequisition, error) {
+	if err := r.ensurePRTables(ctx); err != nil {
+		return nil, err
+	}
+	realOrg, err := r.realOrgID(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	pr, err := scanPR(r.db.QueryRow(ctx, `SELECT id, org_id, pr_number, requester_id, department, cost_center, requisition_type, status, total_amount, currency, source, current_level, approval_level, COALESCE(rejection_reason,''), created_at, updated_at, submitted_at, approved_at
+		FROM purchase_requisitions WHERE id = $1 AND org_id = $2`, id, realOrg))
+	if err != nil {
+		return nil, err
+	}
+	items, err := r.listPRItems(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	pr.Items = items
+	return pr, nil
+}
+
+func (r *PurchaseRepo) listPRItems(ctx context.Context, prID uuid.UUID) ([]purchasemodels.PurchaseRequisitionItem, error) {
+	rows, err := r.db.Query(ctx, `SELECT pri.id, pri.pr_id, pri.item_no, pri.product_id, p.sku, p.name, pri.qty_requested, pri.unit_of_measure, pri.estimated_price, pri.currency, pri.required_date, COALESCE(pri.acct_assignment,''), pri.suggested_vendor_id, COALESCE(v.vendor_code || ' - ' || v.name,''), pri.source_mrp_pr_id, pri.converted_qty, pri.po_id, COALESCE(po.po_number,''), pri.status, pri.created_at, pri.updated_at
+		FROM purchase_requisition_items pri
+		JOIN products p ON p.id = pri.product_id
+		LEFT JOIN vendors v ON v.id = pri.suggested_vendor_id
+		LEFT JOIN purchase_orders po ON po.id = pri.po_id
+		WHERE pri.pr_id = $1 ORDER BY pri.item_no`, prID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var list []purchasemodels.PurchaseRequisitionItem
+	for rows.Next() {
+		var it purchasemodels.PurchaseRequisitionItem
+		var suggested, sourceMRP, poID pgtype.UUID
+		if err := rows.Scan(&it.ID, &it.PRID, &it.ItemNo, &it.ProductID, &it.SKUCode, &it.GoodsName, &it.QtyRequested, &it.UnitOfMeasure, &it.EstimatedPrice, &it.Currency, &it.RequiredDate, &it.AcctAssignment, &suggested, &it.SuggestedVendor, &sourceMRP, &it.ConvertedQty, &poID, &it.PONumber, &it.Status, &it.CreatedAt, &it.UpdatedAt); err != nil {
+			return nil, err
+		}
+		it.SuggestedVendorID = uuidPtrFromPgtype(suggested)
+		it.SourceMRPPRID = uuidPtrFromPgtype(sourceMRP)
+		it.POID = uuidPtrFromPgtype(poID)
+		list = append(list, it)
+	}
+	return list, nil
+}
+
+func (r *PurchaseRepo) UpdatePR(ctx context.Context, id, orgID uuid.UUID, req *purchasemodels.UpdatePurchaseRequisitionRequest) error {
+	existing, err := r.GetPR(ctx, id, orgID)
+	if err != nil {
+		return err
+	}
+	if existing.Status != "DRAFT" && existing.Status != "REJECTED" {
+		return fmt.Errorf("only DRAFT or REJECTED PR can be edited")
+	}
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	total := 0.0
+	for _, item := range req.Items {
+		total += item.QtyRequested * item.EstimatedPrice
+	}
+	prType := strings.ToUpper(strings.TrimSpace(req.RequisitionType))
+	if prType == "" {
+		prType = existing.RequisitionType
+	}
+	currency := req.Currency
+	if currency == "" {
+		currency = existing.Currency
+	}
+	if _, err := tx.Exec(ctx, `UPDATE purchase_requisitions SET department=$3, cost_center=$4, requisition_type=$5, total_amount=$6, currency=$7, status='DRAFT', rejection_reason='', approval_level=$8, updated_at=NOW()
+		WHERE id=$1 AND org_id=$2`, id, existing.OrgID, req.Department, req.CostCenter, prType, total, currency, approvalLevel(total)); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM purchase_requisition_items WHERE pr_id=$1`, id); err != nil {
+		return err
+	}
+	for i, item := range req.Items {
+		required, err := time.Parse("2006-01-02", item.RequiredDate)
+		if err != nil {
+			return err
+		}
+		var uom string
+		var lastCost float64
+		if err := tx.QueryRow(ctx, `SELECT unit_of_measure, COALESCE(last_cost, standard_cost, 0) FROM products WHERE id=$1`, item.ProductID).Scan(&uom, &lastCost); err != nil {
+			return err
+		}
+		price := item.EstimatedPrice
+		vendorID, infoPrice, _, _ := r.lookupPRSource(ctx, existing.OrgID, item.ProductID, nil)
+		if price <= 0 && infoPrice > 0 {
+			price = infoPrice
+		}
+		if price <= 0 {
+			price = lastCost
+		}
+		itemCurrency := item.Currency
+		if itemCurrency == "" {
+			itemCurrency = currency
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO purchase_requisition_items
+			(id, pr_id, item_no, product_id, qty_requested, unit_of_measure, estimated_price, currency, required_date, acct_assignment, suggested_vendor_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			uuid.New(), id, (i+1)*10, item.ProductID, item.QtyRequested, uom, price, itemCurrency, required, item.AcctAssignment, vendorID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PurchaseRepo) DeletePR(ctx context.Context, id, orgID uuid.UUID) error {
+	pr, err := r.GetPR(ctx, id, orgID)
+	if err != nil {
+		return err
+	}
+	if pr.Status != "DRAFT" {
+		return fmt.Errorf("only DRAFT PR can be deleted")
+	}
+	_, err = r.db.Exec(ctx, `DELETE FROM purchase_requisitions WHERE id=$1 AND org_id=$2`, id, pr.OrgID)
+	return err
+}
+
+func (r *PurchaseRepo) SubmitPR(ctx context.Context, id, orgID uuid.UUID, userID *uuid.UUID) error {
+	pr, err := r.GetPR(ctx, id, orgID)
+	if err != nil {
+		return err
+	}
+	if pr.Status != "DRAFT" && pr.Status != "REJECTED" {
+		return fmt.Errorf("only DRAFT or REJECTED PR can be submitted")
+	}
+	if (pr.RequisitionType == "EXPENSE" || pr.RequisitionType == "ADMIN") && pr.CostCenter == "" {
+		return fmt.Errorf("cost center is required for %s PR budget control", pr.RequisitionType)
+	}
+	_, err = r.db.Exec(ctx, `UPDATE purchase_requisitions SET status='PENDING_APPROVAL', current_level=0, submitted_at=NOW(), updated_at=NOW()
+		WHERE id=$1 AND org_id=$2`, id, pr.OrgID)
+	if err == nil {
+		_, _ = r.db.Exec(ctx, `INSERT INTO purchase_requisition_audit_logs(id, pr_id, user_id, action, old_status, new_status, message)
+			VALUES ($1,$2,$3,'SUBMIT',$4,'PENDING_APPROVAL','Submitted for approval')`, uuid.New(), id, userID, pr.Status)
+	}
+	return err
+}
+
+func (r *PurchaseRepo) ApprovePR(ctx context.Context, id, orgID uuid.UUID, userID *uuid.UUID) error {
+	pr, err := r.GetPR(ctx, id, orgID)
+	if err != nil {
+		return err
+	}
+	if pr.Status != "PENDING_APPROVAL" {
+		return fmt.Errorf("only PENDING_APPROVAL PR can be approved")
+	}
+	nextLevel := pr.CurrentLevel + 1
+	status := "PENDING_APPROVAL"
+	var approvedAt interface{}
+	if nextLevel >= pr.ApprovalLevel {
+		status = "APPROVED"
+		approvedAt = time.Now()
+	}
+	_, err = r.db.Exec(ctx, `UPDATE purchase_requisitions SET current_level=$3, status=$4, approved_at=COALESCE($5, approved_at), updated_at=NOW()
+		WHERE id=$1 AND org_id=$2`, id, pr.OrgID, nextLevel, status, approvedAt)
+	if err == nil {
+		_, _ = r.db.Exec(ctx, `INSERT INTO purchase_requisition_audit_logs(id, pr_id, user_id, action, old_status, new_status, message)
+			VALUES ($1,$2,$3,'APPROVE',$4,$5,$6)`, uuid.New(), id, userID, pr.Status, status, fmt.Sprintf("Approved level %d", nextLevel))
+	}
+	return err
+}
+
+func (r *PurchaseRepo) RejectPR(ctx context.Context, id, orgID uuid.UUID, userID *uuid.UUID, reason string) error {
+	pr, err := r.GetPR(ctx, id, orgID)
+	if err != nil {
+		return err
+	}
+	if pr.Status != "PENDING_APPROVAL" {
+		return fmt.Errorf("only PENDING_APPROVAL PR can be rejected")
+	}
+	_, err = r.db.Exec(ctx, `UPDATE purchase_requisitions SET status='REJECTED', rejection_reason=$3, updated_at=NOW()
+		WHERE id=$1 AND org_id=$2`, id, pr.OrgID, reason)
+	if err == nil {
+		_, _ = r.db.Exec(ctx, `INSERT INTO purchase_requisition_audit_logs(id, pr_id, user_id, action, old_status, new_status, message)
+			VALUES ($1,$2,$3,'REJECT',$4,'REJECTED',$5)`, uuid.New(), id, userID, pr.Status, reason)
+	}
+	return err
+}
+
+func (r *PurchaseRepo) ConvertPRToPO(ctx context.Context, id, orgID uuid.UUID, req *purchasemodels.ConvertPRToPORequest, userID *uuid.UUID) ([]*purchasemodels.PurchaseOrder, error) {
+	pr, err := r.GetPR(ctx, id, orgID)
+	if err != nil {
+		return nil, err
+	}
+	if pr.Status != "APPROVED" && pr.Status != "PROCESSING" {
+		return nil, fmt.Errorf("only APPROVED or PROCESSING PR can be converted")
+	}
+	selected := map[uuid.UUID]bool{}
+	for _, itemID := range req.ItemIDs {
+		selected[itemID] = true
+	}
+	groups := map[uuid.UUID][]purchasemodels.PurchaseRequisitionItem{}
+	for _, it := range pr.Items {
+		if !req.All && len(selected) > 0 && !selected[it.ID] {
+			continue
+		}
+		if it.Status == "COMPLETED" || it.QtyRequested-it.ConvertedQty <= 0 || it.SuggestedVendorID == nil {
+			continue
+		}
+		groups[*it.SuggestedVendorID] = append(groups[*it.SuggestedVendorID], it)
+	}
+	var pos []*purchasemodels.PurchaseOrder
+	for vendorID, items := range groups {
+		poReq := &purchasemodels.CreatePORequest{VendorID: vendorID, Currency: pr.Currency, OrganizationID: &pr.OrgID, Notes: "Created from PR " + pr.PRNumber}
+		for _, it := range items {
+			poReq.Items = append(poReq.Items, purchasemodels.POLineItem{
+				ItemID: it.ProductID, Quantity: it.QtyRequested - it.ConvertedQty, UnitPrice: it.EstimatedPrice,
+				UOM: it.UnitOfMeasure, ExpectedDeliveryDate: it.RequiredDate.Format("2006-01-02"),
+			})
+		}
+		po, err := r.CreatePO(ctx, pr.OrgID, poReq, userID)
+		if err != nil {
+			return pos, err
+		}
+		pos = append(pos, po)
+		for _, it := range items {
+			_, _ = r.db.Exec(ctx, `UPDATE purchase_requisition_items SET converted_qty=qty_requested, po_id=$2, status='COMPLETED', updated_at=NOW() WHERE id=$1`, it.ID, po.ID)
+		}
+	}
+	openCount := 0
+	_ = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM purchase_requisition_items WHERE pr_id=$1 AND status <> 'COMPLETED'`, id).Scan(&openCount)
+	status := "PROCESSING"
+	if openCount == 0 {
+		status = "COMPLETED"
+	}
+	_, _ = r.db.Exec(ctx, `UPDATE purchase_requisitions SET status=$3, updated_at=NOW() WHERE id=$1 AND org_id=$2`, id, pr.OrgID, status)
+	return pos, nil
+}
+
+func (r *PurchaseRepo) ImportMRPPRs(ctx context.Context, orgID uuid.UUID, req *purchasemodels.ImportMRPPRsRequest, userID *uuid.UUID) (*purchasemodels.PurchaseRequisition, error) {
+	realOrg, err := r.realOrgID(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	importAll := req == nil || req.All || len(req.IDs) == 0
+	query := `SELECT pr.product_id, pr.order_qty, pr.purchase_uom, pr.price, pr.currency, pr.due_date, pr.vendor_id, pr.id
+		FROM mrp_planned_purchase_requisitions pr
+		JOIN organizations o ON o.id = $1
+		WHERE pr.tenant_id = o.tenant_id AND pr.status='PLANNED'
+			AND NOT EXISTS (SELECT 1 FROM purchase_requisition_items pri WHERE pri.source_mrp_pr_id = pr.id)
+			AND ($2::boolean OR pr.id = ANY($3::uuid[]))
+		ORDER BY pr.due_date`
+	ids := []uuid.UUID{}
+	if req != nil {
+		ids = req.IDs
+	}
+	rows, err := r.db.Query(ctx, query, realOrg, importAll, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	createReq := &purchasemodels.CreatePurchaseRequisitionRequest{RequisitionType: "INVENTORY", Currency: "USD", Source: "MRP"}
+	type sourceInfo struct {
+		vendorID uuid.UUID
+		mrpID    uuid.UUID
+	}
+	var sources []sourceInfo
+	for rows.Next() {
+		var item purchasemodels.CreatePurchaseRequisitionItem
+		var uom, currency string
+		var due time.Time
+		var vendorID, mrpID uuid.UUID
+		if err := rows.Scan(&item.ProductID, &item.QtyRequested, &uom, &item.EstimatedPrice, &currency, &due, &vendorID, &mrpID); err != nil {
+			return nil, err
+		}
+		item.RequiredDate = due.Format("2006-01-02")
+		item.Currency = currency
+		createReq.Currency = currency
+		createReq.Items = append(createReq.Items, item)
+		sources = append(sources, sourceInfo{vendorID: vendorID, mrpID: mrpID})
+		_ = uom
+	}
+	if len(createReq.Items) == 0 {
+		return nil, fmt.Errorf("no open planned MRP PR to convert")
+	}
+	pr, err := r.CreatePR(ctx, realOrg, userID, createReq)
+	if err != nil {
+		return nil, err
+	}
+	for i, item := range pr.Items {
+		if i >= len(sources) {
+			break
+		}
+		_, _ = r.db.Exec(ctx, `UPDATE purchase_requisition_items SET suggested_vendor_id=$2, source_mrp_pr_id=$3 WHERE id=$1`, item.ID, sources[i].vendorID, sources[i].mrpID)
+		_, _ = r.db.Exec(ctx, `UPDATE mrp_planned_purchase_requisitions SET status='CONVERTED', updated_at=NOW() WHERE id=$1`, sources[i].mrpID)
+	}
+	return r.GetPR(ctx, pr.ID, realOrg)
+}
+
 func (r *PurchaseRepo) CreatePO(ctx context.Context, orgID uuid.UUID, req *purchasemodels.CreatePORequest, createdBy *uuid.UUID) (*purchasemodels.PurchaseOrder, error) {
+	poOrgID, err := r.purchaseOrderOrgID(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
 	poID := uuid.New()
 	poNumber := r.generatePONumber(ctx)
 	totalAmount := 0.0
@@ -196,7 +1024,7 @@ func (r *PurchaseRepo) CreatePO(ctx context.Context, orgID uuid.UUID, req *purch
 		INSERT INTO purchase_orders (id, org_id, po_number, vendor_id, total_amount, currency, status, notes,
 			organization_id, po_date, payment_term_code, delivery_address, incoterm_code, created_by, created_at, updated_at)
 		VALUES ($1,$2,$3,$4,$5,$6,'DRAFT',$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())
-	`, poID, orgID, poNumber, req.VendorID, totalAmount, currency, req.Notes,
+	`, poID, poOrgID, poNumber, req.VendorID, totalAmount, currency, req.Notes,
 		req.OrganizationID, poDate, req.PaymentTermCode, req.DeliveryAddress, req.IncotermCode, createdBy)
 	if err != nil {
 		return nil, fmt.Errorf("insert po: %w", err)
@@ -217,9 +1045,9 @@ func (r *PurchaseRepo) CreatePO(ctx context.Context, orgID uuid.UUID, req *purch
 		}
 
 		_, err = tx.Exec(ctx, `
-			INSERT INTO purchase_order_items (id, po_id, item_id, quantity, unit_price, received_quantity, unit_of_measure, line_total, expected_delivery_date, delivery_address)
-			VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,$9)
-		`, uuid.New(), poID, it.ItemID, it.Quantity, it.UnitPrice, uom, lineTotal, deliveryDate, it.DeliveryAddress)
+			INSERT INTO purchase_order_items (id, po_id, item_id, site_id, quantity, unit_price, received_quantity, unit_of_measure, line_total, expected_delivery_date, delivery_address)
+			VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10)
+		`, uuid.New(), poID, it.ItemID, it.SiteID, it.Quantity, it.UnitPrice, uom, lineTotal, deliveryDate, it.DeliveryAddress)
 		if err != nil {
 			return nil, fmt.Errorf("insert po item: %w", err)
 		}
@@ -229,7 +1057,7 @@ func (r *PurchaseRepo) CreatePO(ctx context.Context, orgID uuid.UUID, req *purch
 		return nil, fmt.Errorf("commit po: %w", err)
 	}
 
-	return r.GetPO(ctx, poID, orgID)
+	return r.GetPO(ctx, poID, poOrgID)
 }
 
 func (r *PurchaseRepo) GetPO(ctx context.Context, id, orgID uuid.UUID) (*purchasemodels.PurchaseOrder, error) {
@@ -259,6 +1087,79 @@ func (r *PurchaseRepo) GetPO(ctx context.Context, id, orgID uuid.UUID) (*purchas
 	}
 	po.Items = items
 	return po, nil
+}
+
+func (r *PurchaseRepo) UpdatePO(ctx context.Context, id, orgID uuid.UUID, req *purchasemodels.UpdatePORequest) (*purchasemodels.PurchaseOrder, error) {
+	poOrgID, err := r.purchaseOrderOrgID(ctx, orgID)
+	if err != nil {
+		return nil, err
+	}
+	var status string
+	if err := r.db.QueryRow(ctx, `SELECT status FROM purchase_orders WHERE id = $1 AND org_id = $2`, id, poOrgID).Scan(&status); err != nil {
+		return nil, fmt.Errorf("load po: %w", err)
+	}
+	if status != "DRAFT" {
+		return nil, fmt.Errorf("only DRAFT purchase orders can be edited")
+	}
+
+	totalAmount := 0.0
+	for _, it := range req.Items {
+		totalAmount += it.Quantity * it.UnitPrice
+	}
+	currency := req.Currency
+	if currency == "" {
+		currency = "USD"
+	}
+	poDate := time.Now()
+	if req.PODate != "" {
+		if parsed, err := time.Parse("2006-01-02", req.PODate); err == nil {
+			poDate = parsed
+		}
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `UPDATE purchase_orders SET
+			vendor_id=$3, total_amount=$4, currency=$5, notes=$6,
+			organization_id=$7, po_date=$8, payment_term_code=$9,
+			delivery_address=$10, incoterm_code=$11, updated_at=NOW()
+		WHERE id=$1 AND org_id=$2`, id, poOrgID, req.VendorID, totalAmount, currency, req.Notes,
+		req.OrganizationID, poDate, req.PaymentTermCode, req.DeliveryAddress, req.IncotermCode)
+	if err != nil {
+		return nil, fmt.Errorf("update po: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM purchase_order_items WHERE po_id = $1`, id); err != nil {
+		return nil, fmt.Errorf("delete po items: %w", err)
+	}
+	for _, it := range req.Items {
+		uom := it.UOM
+		if uom == "" {
+			uom = "EA"
+		}
+		lineTotal := it.Quantity * it.UnitPrice
+		var deliveryDate *time.Time
+		if it.ExpectedDeliveryDate != "" {
+			if parsed, err := time.Parse("2006-01-02", it.ExpectedDeliveryDate); err == nil {
+				deliveryDate = &parsed
+			}
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO purchase_order_items (id, po_id, item_id, site_id, quantity, unit_price, received_quantity, unit_of_measure, line_total, expected_delivery_date, delivery_address)
+			VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,$10)
+		`, uuid.New(), id, it.ItemID, it.SiteID, it.Quantity, it.UnitPrice, uom, lineTotal, deliveryDate, it.DeliveryAddress)
+		if err != nil {
+			return nil, fmt.Errorf("insert po item: %w", err)
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit po update: %w", err)
+	}
+	return r.GetPO(ctx, id, poOrgID)
 }
 
 func (r *PurchaseRepo) ListPOs(ctx context.Context, orgID uuid.UUID, status string, vendorID uuid.UUID) ([]*purchasemodels.PurchaseOrder, error) {
@@ -313,12 +1214,13 @@ func (r *PurchaseRepo) UpdatePOStatus(ctx context.Context, id, orgID uuid.UUID, 
 
 func (r *PurchaseRepo) getPOItems(ctx context.Context, poID uuid.UUID) ([]purchasemodels.PurchaseOrderItem, error) {
 	rows, err := r.db.Query(ctx, `
-		SELECT poi.id, poi.po_id, poi.item_id, COALESCE(p.sku,''), COALESCE(p.name,''),
+		SELECT poi.id, poi.po_id, poi.item_id, poi.site_id, COALESCE(s.site_code,''), COALESCE(s.site_name,''), COALESCE(p.sku,''), COALESCE(p.name,''),
 			poi.quantity, poi.unit_price, poi.received_quantity, COALESCE(poi.invoiced_quantity,0),
 			poi.unit_of_measure, poi.line_total,
 			poi.expected_delivery_date, COALESCE(poi.delivery_address,'')
 		FROM purchase_order_items poi
 		LEFT JOIN products p ON p.id = poi.item_id
+		LEFT JOIN sites s ON s.id = poi.site_id
 		WHERE poi.po_id = $1 ORDER BY poi.id
 	`, poID)
 	if err != nil {
@@ -329,7 +1231,7 @@ func (r *PurchaseRepo) getPOItems(ctx context.Context, poID uuid.UUID) ([]purcha
 	var items []purchasemodels.PurchaseOrderItem
 	for rows.Next() {
 		it := purchasemodels.PurchaseOrderItem{}
-		if err := rows.Scan(&it.ID, &it.POID, &it.ItemID, &it.ItemSKU, &it.ItemName,
+		if err := rows.Scan(&it.ID, &it.POID, &it.ItemID, &it.SiteID, &it.SiteCode, &it.SiteName, &it.ItemSKU, &it.ItemName,
 			&it.Quantity, &it.UnitPrice, &it.ReceivedQuantity, &it.InvoicedQuantity,
 			&it.UnitOfMeasure, &it.LineTotal,
 			&it.ExpectedDeliveryDate, &it.DeliveryAddress); err != nil {

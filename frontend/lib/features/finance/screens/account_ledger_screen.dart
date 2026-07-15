@@ -46,7 +46,10 @@ class _AccountLedgerScreenState extends State<AccountLedgerScreen> {
       setState(() => _loadingAccounts = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load accounts: $e'), backgroundColor: AppTheme.errorColor),
+          SnackBar(
+            content: Text('Failed to load accounts: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     }
@@ -77,7 +80,10 @@ class _AccountLedgerScreenState extends State<AccountLedgerScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load ledger: $e'), backgroundColor: AppTheme.errorColor),
+          SnackBar(
+            content: Text('Failed to load ledger: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     } finally {
@@ -106,20 +112,40 @@ class _AccountLedgerScreenState extends State<AccountLedgerScreen> {
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Account',
-                    contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
-                  hint: Text('Select account', style: TextStyle(fontSize: 13, color: Colors.grey.shade400)),
+                  hint: Text(
+                    'Select account',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                  ),
                   items: _loadingAccounts
-                      ? [const DropdownMenuItem(value: '', child: Text('Loading...'))]
-                      : _accounts.map((a) => DropdownMenuItem(
-                            value: a.id,
-                            child: Text('${a.code} - ${a.name}', style: const TextStyle(fontSize: 12)),
-                          )).toList(),
+                      ? [
+                          const DropdownMenuItem(
+                            value: '',
+                            child: Text('Loading...'),
+                          ),
+                        ]
+                      : _accounts
+                            .map(
+                              (a) => DropdownMenuItem(
+                                value: a.id,
+                                child: Text(
+                                  '${a.code} - ${a.name}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ),
+                            )
+                            .toList(),
                   onChanged: (v) {
                     setState(() {
-                      _selectedAccount = v != null ? _accounts.firstWhere((a) => a.id == v) : null;
+                      _selectedAccount = v != null
+                          ? _accounts.firstWhere((a) => a.id == v)
+                          : null;
                     });
                     _loadLedger();
                   },
@@ -144,7 +170,10 @@ class _AccountLedgerScreenState extends State<AccountLedgerScreen> {
                         child: InputDecorator(
                           decoration: const InputDecoration(
                             labelText: 'From',
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
                             border: OutlineInputBorder(),
                             isDense: true,
                           ),
@@ -175,7 +204,10 @@ class _AccountLedgerScreenState extends State<AccountLedgerScreen> {
                         child: InputDecorator(
                           decoration: const InputDecoration(
                             labelText: 'To',
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
                             border: OutlineInputBorder(),
                             isDense: true,
                           ),
@@ -207,16 +239,27 @@ class _AccountLedgerScreenState extends State<AccountLedgerScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                border: const Border(bottom: BorderSide(color: Colors.grey, width: 0.5)),
+                border: const Border(
+                  bottom: BorderSide(color: Colors.grey, width: 0.5),
+                ),
               ),
               child: Row(
                 children: [
                   Expanded(flex: 2, child: _headerText('Date')),
                   Expanded(flex: 2, child: _headerText('Document')),
                   Expanded(flex: 3, child: _headerText('Description')),
-                  Expanded(flex: 2, child: _headerText('Debit', align: TextAlign.right)),
-                  Expanded(flex: 2, child: _headerText('Credit', align: TextAlign.right)),
-                  Expanded(flex: 2, child: _headerText('Balance', align: TextAlign.right)),
+                  Expanded(
+                    flex: 2,
+                    child: _headerText('Debit', align: TextAlign.right),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: _headerText('Credit', align: TextAlign.right),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: _headerText('Balance', align: TextAlign.right),
+                  ),
                 ],
               ),
             ),
@@ -228,38 +271,53 @@ class _AccountLedgerScreenState extends State<AccountLedgerScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.account_balance_outlined, size: 48, color: Colors.grey.shade300),
+                        Icon(
+                          Icons.account_balance_outlined,
+                          size: 48,
+                          color: Colors.grey.shade300,
+                        ),
                         const SizedBox(height: 8),
-                        Text('Select an account to view ledger', style: TextStyle(color: Colors.grey.shade500)),
+                        Text(
+                          'Select an account to view ledger',
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
                       ],
                     ),
                   )
                 : _loadingLedger
-                    ? const Center(child: CircularProgressIndicator())
-                    : _ledger.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.search_off, size: 48, color: Colors.grey.shade300),
-                                const SizedBox(height: 8),
-                                Text('No ledger entries found', style: TextStyle(color: Colors.grey.shade500)),
-                              ],
-                            ),
-                          )
-                        : NotificationListener<ScrollNotification>(
-                            onNotification: (notification) {
-                              if (notification is ScrollEndNotification && _hasMore) {
-                                _loadLedger(append: true);
-                              }
-                              return false;
-                            },
-                            child: ListView.builder(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              itemCount: _ledger.length,
-                              itemBuilder: (context, i) => _LedgerRow(entry: _ledger[i]),
-                            ),
-                          ),
+                ? const Center(child: CircularProgressIndicator())
+                : _ledger.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.search_off,
+                          size: 48,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No ledger entries found',
+                          style: TextStyle(color: Colors.grey.shade500),
+                        ),
+                      ],
+                    ),
+                  )
+                : NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (notification is ScrollEndNotification && _hasMore) {
+                        _loadLedger(append: true);
+                      }
+                      return false;
+                    },
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: _ledger.length,
+                      itemBuilder: (context, i) =>
+                          _LedgerRow(entry: _ledger[i]),
+                    ),
+                  ),
           ),
         ],
       ),
@@ -267,8 +325,13 @@ class _AccountLedgerScreenState extends State<AccountLedgerScreen> {
   }
 
   Widget _headerText(String text, {TextAlign align = TextAlign.left}) {
-    return Text(text,
-      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11, color: Colors.grey.shade700),
+    return Text(
+      text,
+      style: TextStyle(
+        fontWeight: FontWeight.w600,
+        fontSize: 11,
+        color: Colors.grey.shade700,
+      ),
       textAlign: align,
     );
   }
@@ -292,36 +355,66 @@ class _LedgerRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(flex: 2, child: Text(dateStr, style: const TextStyle(fontSize: 12))),
-          Expanded(flex: 2, child: Text(
-            entry['document_no'] ?? '',
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          )),
-          Expanded(flex: 3, child: Text(
-            entry['description'] ?? '',
-            style: const TextStyle(fontSize: 12),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          )),
-          Expanded(flex: 2, child: Text(
-            debit > 0 ? '\$${GlService.fmtAmount(debit)}' : '',
-            style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500),
-            textAlign: TextAlign.right,
-          )),
-          Expanded(flex: 2, child: Text(
-            credit > 0 ? '\$${GlService.fmtAmount(credit)}' : '',
-            style: TextStyle(fontSize: 12, color: Colors.orange.shade700, fontWeight: FontWeight.w500),
-            textAlign: TextAlign.right,
-          )),
-          Expanded(flex: 2, child: Text(
-            '\$${GlService.fmtAmount(balance)}',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: balance >= 0 ? Colors.green.shade800 : AppTheme.errorColor,
+          Expanded(
+            flex: 2,
+            child: Text(dateStr, style: const TextStyle(fontSize: 12)),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              entry['document_no'] ?? '',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
             ),
-            textAlign: TextAlign.right,
-          )),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              entry['description'] ?? '',
+              style: const TextStyle(fontSize: 12),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              debit != 0 ? '\$${GlService.fmtAmount(debit)}' : '',
+              style: TextStyle(
+                fontSize: 12,
+                color: debit < 0 ? AppTheme.errorColor : Colors.green.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              credit != 0 ? '\$${GlService.fmtAmount(credit)}' : '',
+              style: TextStyle(
+                fontSize: 12,
+                color: credit < 0
+                    ? AppTheme.errorColor
+                    : Colors.orange.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(
+              '\$${GlService.fmtAmount(balance)}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: balance >= 0
+                    ? Colors.green.shade800
+                    : AppTheme.errorColor,
+              ),
+              textAlign: TextAlign.right,
+            ),
+          ),
         ],
       ),
     );

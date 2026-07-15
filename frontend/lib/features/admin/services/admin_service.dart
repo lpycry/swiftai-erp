@@ -8,9 +8,75 @@ class AdminService {
   AdminService(this._token);
 
   Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_token',
-      };
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer $_token',
+  };
+
+  // ---- Users ----
+
+  Future<List<dynamic>> getUsers({String? search, String? status}) async {
+    final params = <String, String>{};
+    if (search != null && search.trim().isNotEmpty) {
+      params['search'] = search.trim();
+    }
+    if (status != null && status != 'all') params['status'] = status;
+    final uri = Uri.parse(
+      '$_baseUrl/admin/users',
+    ).replace(queryParameters: params.isEmpty ? null : params);
+    final resp = await http.get(uri, headers: _headers);
+    return _handleList(resp);
+  }
+
+  Future<Map<String, dynamic>> getUser(String id) async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/admin/users/$id'),
+      headers: _headers,
+    );
+    return _handleData(resp);
+  }
+
+  Future<Map<String, dynamic>> createUser(Map<String, dynamic> data) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/admin/users'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    return _handleData(resp);
+  }
+
+  Future<Map<String, dynamic>> updateUser(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.put(
+      Uri.parse('$_baseUrl/admin/users/$id'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    return _handleData(resp);
+  }
+
+  Future<void> setUserActive(String id, bool isActive) async {
+    final resp = await http.put(
+      Uri.parse('$_baseUrl/admin/users/$id/status'),
+      headers: _headers,
+      body: jsonEncode({'is_active': isActive}),
+    );
+    if (resp.statusCode >= 400) {
+      throw Exception('Set status failed: ${resp.statusCode}');
+    }
+  }
+
+  Future<void> resetUserPassword(String id, String password) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/admin/users/$id/reset-password'),
+      headers: _headers,
+      body: jsonEncode({'password': password}),
+    );
+    if (resp.statusCode >= 400) {
+      throw Exception('Reset password failed: ${resp.statusCode}');
+    }
+  }
 
   // ---- Auth Objects ----
 
@@ -30,7 +96,9 @@ class AdminService {
     return _handleData(resp);
   }
 
-  Future<Map<String, dynamic>> createAuthObject(Map<String, dynamic> data) async {
+  Future<Map<String, dynamic>> createAuthObject(
+    Map<String, dynamic> data,
+  ) async {
     final resp = await http.post(
       Uri.parse('$_baseUrl/admin/auth-objects'),
       headers: _headers,
@@ -54,6 +122,26 @@ class AdminService {
       headers: _headers,
     );
     if (resp.statusCode >= 400) throw Exception('Delete failed');
+  }
+
+  Future<Map<String, dynamic>> addAuthObjectField(
+    String objectId,
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/admin/auth-objects/$objectId/fields'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    return _handleData(resp);
+  }
+
+  Future<void> deleteAuthObjectField(String objectId, String fieldId) async {
+    final resp = await http.delete(
+      Uri.parse('$_baseUrl/admin/auth-objects/$objectId/fields/$fieldId'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw Exception('Delete field failed');
   }
 
   // ---- Roles ----
@@ -133,7 +221,9 @@ class AdminService {
 
   Future<bool> checkPermission(String object, String activity) async {
     final resp = await http.get(
-      Uri.parse('$_baseUrl/permissions/check?object=$object&activity=$activity'),
+      Uri.parse(
+        '$_baseUrl/permissions/check?object=$object&activity=$activity',
+      ),
       headers: _headers,
     );
     if (resp.statusCode == 200) return true;
@@ -143,14 +233,27 @@ class AdminService {
   // ---- Helpers ----
 
   List<dynamic> _handleList(http.Response resp) {
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400) {
+      throw Exception(_errorMessage(resp));
+    }
     final body = jsonDecode(resp.body);
     return body['data'] ?? [];
   }
 
   Map<String, dynamic> _handleData(http.Response resp) {
-    if (resp.statusCode >= 400) throw Exception('API error: ${resp.statusCode}');
+    if (resp.statusCode >= 400) {
+      throw Exception(_errorMessage(resp));
+    }
     final body = jsonDecode(resp.body);
     return body['data'] ?? {};
+  }
+
+  String _errorMessage(http.Response resp) {
+    try {
+      final body = jsonDecode(resp.body);
+      final msg = body['message'] ?? body['error'] ?? body['details'];
+      if (msg != null) return 'API error ${resp.statusCode}: $msg';
+    } catch (_) {}
+    return 'API error: ${resp.statusCode}';
   }
 }

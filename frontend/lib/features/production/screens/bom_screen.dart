@@ -712,30 +712,6 @@ class _BOMDetailScreenState extends State<BOMDetailScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.save, size: 16),
-                    label: Text(
-                      _saving ? 'Saving...' : 'Save BOM',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                    onPressed: (_saving || widget.viewOnly) ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(0, 34),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -869,7 +845,39 @@ class _BOMDetailScreenState extends State<BOMDetailScreen> {
                 style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
               ),
             ),
+          _buildSaveBomButton(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSaveBomButton() {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          icon: _saving
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.save, size: 16),
+          label: Text(
+            _saving ? 'Saving...' : 'Save BOM',
+            style: const TextStyle(fontSize: 12),
+          ),
+          onPressed: (_saving || widget.viewOnly) ? null : _save,
+          style: ElevatedButton.styleFrom(minimumSize: const Size(0, 34)),
+        ),
       ),
     );
   }

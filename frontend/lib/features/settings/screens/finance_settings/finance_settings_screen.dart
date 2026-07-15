@@ -1561,10 +1561,13 @@ const Map<String, String> _accountTypes = {
   'DM_CONS': 'Direct Materials Consumption',
   'DL_WAGES': 'Direct Labor Wages',
   'DL_TAX_BEN': 'Direct Labor Payroll Taxes & Benefits',
+  'COGS': 'Cost of sales',
+  'SALES_REV': 'Sales revenue',
   'AP_RECON': 'AP Reconciliation',
   'AP_DP': 'AP Down Payment',
   'AR_RECON': 'AR Reconciliation',
   'AR_DP': 'AR Down Payment',
+  'CC_RECEIVABLE_CLEARING': 'Credit Card Receivable / Clearing Account',
   'CASH': 'Cash / Bank Clearing',
   'TAX_INPUT': 'Input Tax (VAT/GST)',
   'TAX_OUTPUT': 'Output Tax (VAT/GST)',
@@ -1586,6 +1589,8 @@ Color _typeColor(String type) {
       return Colors.indigo;
     case 'AR_DP':
       return Colors.deepPurple;
+    case 'CC_RECEIVABLE_CLEARING':
+      return Colors.blueGrey;
     case 'CASH':
       return Colors.green;
     case 'TAX_INPUT':
@@ -1604,6 +1609,10 @@ Color _typeColor(String type) {
       return Colors.pink;
     case 'DL_TAX_BEN':
       return Colors.deepOrange;
+    case 'COGS':
+      return Colors.redAccent;
+    case 'SALES_REV':
+      return Colors.green;
     default:
       return Colors.grey;
   }
