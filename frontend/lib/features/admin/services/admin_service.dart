@@ -171,6 +171,18 @@ class AdminService {
     return _handleData(resp);
   }
 
+  Future<Map<String, dynamic>> updateRole(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.put(
+      Uri.parse('$_baseUrl/role-master/$id'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    return _handleData(resp);
+  }
+
   Future<void> deleteRole(String id) async {
     final resp = await http.delete(
       Uri.parse('$_baseUrl/role-master/$id'),
@@ -179,11 +191,36 @@ class AdminService {
     if (resp.statusCode >= 400) throw Exception('Delete failed');
   }
 
+  Future<List<dynamic>> getCompositeMembers(String roleId) async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/role-master/$roleId/members'),
+      headers: _headers,
+    );
+    return _handleList(resp);
+  }
+
+  Future<void> addCompositeMember(String roleId, String childRoleId) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/role-master/$roleId/members'),
+      headers: _headers,
+      body: jsonEncode({'child_role_id': childRoleId}),
+    );
+    if (resp.statusCode >= 400) throw Exception(_errorMessage(resp));
+  }
+
+  Future<void> removeCompositeMember(String roleId, String childRoleId) async {
+    final resp = await http.delete(
+      Uri.parse('$_baseUrl/role-master/$roleId/members/$childRoleId'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw Exception(_errorMessage(resp));
+  }
+
   // ---- Auth Values ----
 
   Future<List<dynamic>> getAuthValues(String roleId) async {
     final resp = await http.get(
-      Uri.parse('$_baseUrl/role-master/$roleId/auth-values'),
+      Uri.parse('$_baseUrl/role-auth-values/$roleId'),
       headers: _headers,
     );
     return _handleList(resp);
@@ -191,11 +228,11 @@ class AdminService {
 
   Future<void> setAuthValue(String roleId, Map<String, dynamic> data) async {
     final resp = await http.put(
-      Uri.parse('$_baseUrl/role-master/$roleId/auth-values'),
+      Uri.parse('$_baseUrl/role-auth-values/$roleId'),
       headers: _headers,
       body: jsonEncode(data),
     );
-    if (resp.statusCode >= 400) throw Exception('Set auth value failed');
+    if (resp.statusCode >= 400) throw Exception(_errorMessage(resp));
   }
 
   // ---- User-Role Assignment ----
@@ -215,6 +252,117 @@ class AdminService {
       headers: _headers,
     );
     if (resp.statusCode >= 400) throw Exception('Remove failed');
+  }
+
+  Future<List<dynamic>> getUserPermissions(String userId) async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/user-permissions/$userId'),
+      headers: _headers,
+    );
+    return _handleList(resp);
+  }
+
+  // ---- Org Units ----
+
+  Future<List<dynamic>> getOrgUnits() async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/admin/org-units'),
+      headers: _headers,
+    );
+    return _handleList(resp);
+  }
+
+  Future<Map<String, dynamic>> createOrgUnit(Map<String, dynamic> data) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/admin/org-units'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    return _handleData(resp);
+  }
+
+  Future<void> deleteOrgUnit(String id) async {
+    final resp = await http.delete(
+      Uri.parse('$_baseUrl/admin/org-units/$id'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw Exception(_errorMessage(resp));
+  }
+
+  // ---- SoD Rules ----
+
+  Future<List<dynamic>> getSoDRules() async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/sod-rules'),
+      headers: _headers,
+    );
+    return _handleList(resp);
+  }
+
+  Future<Map<String, dynamic>> createSoDRule(Map<String, dynamic> data) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/sod-rules'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    return _handleData(resp);
+  }
+
+  Future<void> deleteSoDRule(String id) async {
+    final resp = await http.delete(
+      Uri.parse('$_baseUrl/sod-rules/$id'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw Exception(_errorMessage(resp));
+  }
+
+  // ---- Access Requests ----
+
+  Future<List<dynamic>> getAccessRequests({String? status}) async {
+    final uri = Uri.parse('$_baseUrl/access-requests').replace(
+      queryParameters: status != null && status != 'all'
+          ? {'status': status}
+          : null,
+    );
+    final resp = await http.get(uri, headers: _headers);
+    return _handleList(resp);
+  }
+
+  Future<Map<String, dynamic>> createAccessRequest(
+    Map<String, dynamic> data,
+  ) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/access-requests'),
+      headers: _headers,
+      body: jsonEncode(data),
+    );
+    return _handleData(resp);
+  }
+
+  Future<void> approveAccessRequest(String id, {String comment = ''}) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/access-requests/$id/approve'),
+      headers: _headers,
+      body: jsonEncode({'comment': comment}),
+    );
+    if (resp.statusCode >= 400) throw Exception(_errorMessage(resp));
+  }
+
+  Future<void> rejectAccessRequest(String id, {String comment = ''}) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/access-requests/$id/reject'),
+      headers: _headers,
+      body: jsonEncode({'comment': comment}),
+    );
+    if (resp.statusCode >= 400) throw Exception(_errorMessage(resp));
+  }
+
+  Future<void> executeAccessRequest(String id) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/access-requests/$id/execute'),
+      headers: _headers,
+    );
+    if (resp.statusCode >= 400) throw Exception(_errorMessage(resp));
   }
 
   // ---- Permission Check ----

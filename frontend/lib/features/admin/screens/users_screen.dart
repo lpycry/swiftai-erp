@@ -444,6 +444,7 @@ class _UsersScreenState extends State<UsersScreen> {
                       user: _users[i],
                       onEdit: () => _openUserDialog(user: _users[i]),
                       onRoles: () => _showRoles(_users[i]),
+                      onPermissions: () => _showPermissions(_users[i]),
                       onReset: () => _resetPassword(_users[i]),
                       onToggleActive: () => _toggleActive(_users[i]),
                     ),
@@ -453,12 +454,109 @@ class _UsersScreenState extends State<UsersScreen> {
       ),
     );
   }
+
+  Future<void> _showPermissions(Map<String, dynamic> user) async {
+    try {
+      final results = await Future.wait([
+        widget.adminService.getUserPermissions(user['id']),
+        widget.adminService.getAuthObjects(),
+      ]);
+      final permissions = results[0];
+      final objects = {
+        for (final obj in results[1])
+          (obj['id'] ?? '').toString(): Map<String, dynamic>.from(obj),
+      };
+      if (!mounted) return;
+      await showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(
+            'Effective Permissions - ${user['display_name'] ?? user['email']}',
+          ),
+          content: SizedBox(
+            width: 760,
+            height: 520,
+            child: permissions.isEmpty
+                ? const Center(child: Text('No effective roles found'))
+                : ListView.separated(
+                    itemCount: permissions.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final item = Map<String, dynamic>.from(
+                        permissions[index],
+                      );
+                      final role = Map<String, dynamic>.from(
+                        item['role'] ?? {},
+                      );
+                      final authValues =
+                          (item['auth_values'] ?? []) as List<dynamic>;
+                      return Material(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade200),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                role['role_id'] ?? '',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              if (authValues.isEmpty)
+                                Text(
+                                  'No authorization values',
+                                  style: TextStyle(color: Colors.grey.shade600),
+                                )
+                              else
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    for (final raw in authValues)
+                                      _PermissionPill(
+                                        authValue: Map<String, dynamic>.from(
+                                          raw,
+                                        ),
+                                        authObject:
+                                            objects[(raw['auth_object_id'] ??
+                                                    '')
+                                                .toString()],
+                                      ),
+                                  ],
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      _showError(e);
+    }
+  }
 }
 
 class _UserTile extends StatelessWidget {
   final Map<String, dynamic> user;
   final VoidCallback onEdit;
   final VoidCallback onRoles;
+  final VoidCallback onPermissions;
   final VoidCallback onReset;
   final VoidCallback onToggleActive;
 
@@ -466,6 +564,7 @@ class _UserTile extends StatelessWidget {
     required this.user,
     required this.onEdit,
     required this.onRoles,
+    required this.onPermissions,
     required this.onReset,
     required this.onToggleActive,
   });
@@ -535,6 +634,9 @@ class _UserTile extends StatelessWidget {
             case 'roles':
               onRoles();
               break;
+            case 'permissions':
+              onPermissions();
+              break;
             case 'reset':
               onReset();
               break;
@@ -546,10 +648,69 @@ class _UserTile extends StatelessWidget {
         itemBuilder: (_) => [
           const PopupMenuItem(value: 'edit', child: Text('Edit')),
           const PopupMenuItem(value: 'roles', child: Text('Roles')),
+          const PopupMenuItem(
+            value: 'permissions',
+            child: Text('Effective Permissions'),
+          ),
           const PopupMenuItem(value: 'reset', child: Text('Reset Password')),
           PopupMenuItem(
             value: 'toggle',
             child: Text(active ? 'Deactivate' : 'Activate'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PermissionPill extends StatelessWidget {
+  final Map<String, dynamic> authValue;
+  final Map<String, dynamic>? authObject;
+
+  const _PermissionPill({required this.authValue, required this.authObject});
+
+  @override
+  Widget build(BuildContext context) {
+    final activities =
+        [
+              'create',
+              'read',
+              'update',
+              'delete',
+              'approve',
+              'print',
+              'transfer',
+              'close',
+            ]
+            .where((key) => authValue['activity_$key'] == true)
+            .map((key) => key.toUpperCase())
+            .join(', ');
+    final code =
+        authObject?['object_code'] ?? authValue['auth_object_id'] ?? '';
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 320),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            code.toString(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            activities.isEmpty ? 'No activities' : activities,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12),
           ),
         ],
       ),

@@ -192,6 +192,27 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 const Divider(height: 1),
                 ListTile(
+                  leading: const Icon(Icons.policy_outlined),
+                  title: const Text('SoD Rules'),
+                  subtitle: const Text(
+                    'Configure segregation of duties checks',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => Navigator.pushNamed(context, '/admin/sod-rules'),
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.assignment_turned_in_outlined),
+                  title: const Text('Access Requests'),
+                  subtitle: const Text(
+                    'Approve and execute role access requests',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/admin/access-requests'),
+                ),
+                const Divider(height: 1),
+                ListTile(
                   leading: const Icon(Icons.account_balance),
                   title: const Text('Organizations'),
                   subtitle: const Text(

@@ -109,7 +109,11 @@ func main() {
 	authValRepo := authzRepo.NewAuthValueRepo(pool)
 	authzBootstrap.EnsureDefaultAuthObjects(ctx, authObjRepo)
 	userAdminRepo := authzRepo.NewUserRepo(pool)
-	adminHandler := authzHandler.NewAdminHandler(authObjRepo, roleRepo, authValRepo, userAdminRepo)
+	sodRepo := authzRepo.NewSoDRepo(pool)
+	authzOrgRepo := authzRepo.NewOrgRepo(pool)
+	accessRequestRepo := authzRepo.NewAccessRequestRepo(pool)
+	auditRepo := authzRepo.NewAuditRepo(pool)
+	adminHandler := authzHandler.NewAdminHandler(authObjRepo, roleRepo, authValRepo, userAdminRepo, sodRepo, authzOrgRepo, accessRequestRepo, auditRepo)
 	permEngine := engine.New(roleRepo, authValRepo, authObjRepo, rdb)
 
 	// GL
@@ -237,7 +241,11 @@ func main() {
 		protected.POST("/role-master", adminHandler.CreateRole)
 		protected.GET("/role-master", adminHandler.ListRoles)
 		protected.GET("/role-master/:id", adminHandler.GetRole)
+		protected.PUT("/role-master/:id", adminHandler.UpdateRole)
 		protected.DELETE("/role-master/:id", adminHandler.DeleteRole)
+		protected.GET("/role-master/:id/members", adminHandler.ListCompositeMembers)
+		protected.POST("/role-master/:id/members", adminHandler.AddCompositeMember)
+		protected.DELETE("/role-master/:id/members/:childId", adminHandler.RemoveCompositeMember)
 
 		// Role Auth Values
 		protected.GET("/role-auth-values/:roleId", adminHandler.GetAuthValues)
@@ -247,6 +255,17 @@ func main() {
 		protected.POST("/user-roles/assign", adminHandler.AssignUserRole)
 		protected.DELETE("/user-roles/:userId/:roleId", adminHandler.RemoveUserRole)
 		protected.GET("/user-permissions/:userId", adminHandler.GetUserPermissions)
+		protected.GET("/sod-rules", adminHandler.ListSoDRules)
+		protected.POST("/sod-rules", adminHandler.CreateSoDRule)
+		protected.DELETE("/sod-rules/:id", adminHandler.DeleteSoDRule)
+		protected.GET("/admin/org-units", adminHandler.ListOrgUnits)
+		protected.POST("/admin/org-units", adminHandler.CreateOrgUnit)
+		protected.DELETE("/admin/org-units/:id", adminHandler.DeleteOrgUnit)
+		protected.GET("/access-requests", adminHandler.ListAccessRequests)
+		protected.POST("/access-requests", adminHandler.CreateAccessRequest)
+		protected.POST("/access-requests/:id/approve", adminHandler.ApproveAccessRequest)
+		protected.POST("/access-requests/:id/reject", adminHandler.RejectAccessRequest)
+		protected.POST("/access-requests/:id/execute", adminHandler.ExecuteAccessRequest)
 
 		// Permission Check
 		protected.GET("/permissions/check", adminHandler.CheckPermission)

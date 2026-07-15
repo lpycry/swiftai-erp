@@ -80,6 +80,11 @@ func RequireFieldPermission(permEngine *engine.PermissionEngine, objectCode, act
 			return
 		}
 
+		if hasSystemAdminRole(c) {
+			c.Next()
+			return
+		}
+
 		fields := fieldsProvider(c)
 		ok, err := permEngine.CheckField(c.Request.Context(), userID, objectCode, activity, fields)
 		if err != nil {

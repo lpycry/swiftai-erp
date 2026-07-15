@@ -3,6 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -219,10 +221,29 @@ func (e *PermissionEngine) matchActivity(av *models.RoleAuthValue, activity stri
 }
 
 func (e *PermissionEngine) matchFieldValues(av *models.RoleAuthValue, reqFields map[string]string) bool {
-	if len(reqFields) == 0 {
+	if len(av.FieldValues) == 0 && len(av.FieldRanges) == 0 {
 		// No field restrictions needed — activity match is enough
 		return true
 	}
+
+	if len(reqFields) == 0 {
+		return false
+	}
+
+	for field := range av.FieldValues {
+		if !fieldRestrictionMatches(av, field, reqFields[field]) {
+			return false
+		}
+	}
+	for field := range av.FieldRanges {
+		if _, alreadyChecked := av.FieldValues[field]; alreadyChecked {
+			continue
+		}
+		if !fieldRestrictionMatches(av, field, reqFields[field]) {
+			return false
+		}
+	}
+	return true
 
 	for reqField, reqValue := range reqFields {
 		// Check exact value match
@@ -249,6 +270,33 @@ func (e *PermissionEngine) matchFieldValues(av *models.RoleAuthValue, reqFields 
 	return true
 }
 
+func fieldRestrictionMatches(av *models.RoleAuthValue, field, reqValue string) bool {
+	reqValue = strings.TrimSpace(reqValue)
+	if reqValue == "" {
+		return false
+	}
+
+	if allowed, ok := av.FieldValues[field]; ok {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "*" {
+			return true
+		}
+		for _, candidate := range strings.Split(allowed, ",") {
+			if strings.TrimSpace(candidate) == reqValue {
+				return true
+			}
+		}
+	}
+
+	if rangeVal, ok := av.FieldRanges[field]; ok {
+		fromOK := rangeVal.From == "" || reqValue >= rangeVal.From
+		toOK := rangeVal.To == "" || reqValue <= rangeVal.To
+		return fromOK && toOK
+	}
+
+	return false
+}
+
 func (e *PermissionEngine) InvalidateUserCache(ctx context.Context, userID uuid.UUID) {
 	cacheKey := fmt.Sprintf("swiftai:roles:%s", userID.String())
 	e.roleCache.Delete(cacheKey)
@@ -265,9 +313,10 @@ func (e *PermissionEngine) InvalidateRoleCache(roleID uuid.UUID) {
 // authValuesCacheKey creates a deterministic key from a set of role IDs.
 func authValuesCacheKey(roleIDs []uuid.UUID) string {
 	// Simple concatenation — fine for our use case
-	key := ""
+	parts := make([]string, 0, len(roleIDs))
 	for _, id := range roleIDs {
-		key += id.String() + ","
+		parts = append(parts, id.String())
 	}
-	return key
+	sort.Strings(parts)
+	return strings.Join(parts, ",")
 }

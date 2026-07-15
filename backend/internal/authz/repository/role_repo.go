@@ -112,6 +112,78 @@ func (r *RoleRepo) Update(ctx context.Context, role *models.RoleMaster) error {
 	return err
 }
 
+func (r *RoleRepo) ListCompositeMembers(ctx context.Context, compositeRoleID uuid.UUID) ([]*models.RoleMaster, error) {
+	rows, err := r.db.Query(ctx, `
+		SELECT rm.id, rm.tenant_id, rm.role_id, COALESCE(rm.description,''), rm.role_type, COALESCE(rm.role_category,''),
+		       rm.parent_role_id, rm.inherit_level, rm.is_system, rm.is_active,
+		       rm.valid_from, rm.valid_to, rm.created_by, rm.created_at, rm.updated_at
+		FROM composite_role_members crm
+		INNER JOIN role_master rm ON rm.id = crm.child_role_id
+		WHERE crm.composite_role_id = $1
+		ORDER BY rm.role_id`, compositeRoleID)
+	if err != nil {
+		return nil, fmt.Errorf("list composite members: %w", err)
+	}
+	defer rows.Close()
+
+	var roles []*models.RoleMaster
+	for rows.Next() {
+		role := &models.RoleMaster{}
+		if err := rows.Scan(
+			&role.ID, &role.TenantID, &role.RoleID, &role.Description,
+			&role.RoleType, &role.RoleCategory,
+			&role.ParentRoleID, &role.InheritLevel,
+			&role.IsSystem, &role.IsActive,
+			&role.ValidFrom, &role.ValidTo, &role.CreatedBy,
+			&role.CreatedAt, &role.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan composite member: %w", err)
+		}
+		roles = append(roles, role)
+	}
+	return roles, nil
+}
+
+func (r *RoleRepo) AddCompositeMember(ctx context.Context, compositeRoleID, childRoleID uuid.UUID) error {
+	if compositeRoleID == childRoleID {
+		return fmt.Errorf("composite role cannot contain itself")
+	}
+
+	var wouldCycle bool
+	err := r.db.QueryRow(ctx, `
+		WITH RECURSIVE descendants(role_id) AS (
+			SELECT child_role_id FROM composite_role_members WHERE composite_role_id = $1
+			UNION
+			SELECT crm.child_role_id
+			FROM composite_role_members crm
+			INNER JOIN descendants d ON crm.composite_role_id = d.role_id
+		)
+		SELECT EXISTS (SELECT 1 FROM descendants WHERE role_id = $2)`,
+		childRoleID, compositeRoleID).Scan(&wouldCycle)
+	if err != nil {
+		return fmt.Errorf("check composite cycle: %w", err)
+	}
+	if wouldCycle {
+		return fmt.Errorf("composite role cycle is not allowed")
+	}
+
+	_, err = r.db.Exec(ctx, `
+		INSERT INTO composite_role_members (composite_role_id, child_role_id)
+		VALUES ($1, $2)
+		ON CONFLICT (composite_role_id, child_role_id) DO NOTHING`,
+		compositeRoleID, childRoleID)
+	if err != nil {
+		return fmt.Errorf("add composite member: %w", err)
+	}
+	return nil
+}
+
+func (r *RoleRepo) RemoveCompositeMember(ctx context.Context, compositeRoleID, childRoleID uuid.UUID) error {
+	_, err := r.db.Exec(ctx,
+		`DELETE FROM composite_role_members WHERE composite_role_id=$1 AND child_role_id=$2`,
+		compositeRoleID, childRoleID)
+	return err
+}
+
 func (r *RoleRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
 	_, err := r.db.Exec(ctx, `DELETE FROM role_master WHERE id=$1 AND tenant_id=$2 AND is_system=false`,
 		id, tenantID)
@@ -121,21 +193,29 @@ func (r *RoleRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
 // GetEffectiveRoles returns all roles for a user including expanded composite/derived roles.
 func (r *RoleRepo) GetEffectiveRoles(ctx context.Context, userID uuid.UUID) ([]*models.RoleMaster, error) {
 	query := `
-		WITH direct_roles AS (
+		WITH RECURSIVE direct_roles AS (
 			SELECT rm.* FROM role_master rm
 			INNER JOIN user_role_assignments ura ON ura.role_id = rm.id
 			WHERE ura.user_id = $1 AND ura.is_active = true
 			  AND (ura.valid_to IS NULL OR ura.valid_to > NOW())
 		),
-		composite_children AS (
-			SELECT rm.* FROM role_master rm
-			INNER JOIN composite_role_members crm ON crm.child_role_id = rm.id
-			INNER JOIN direct_roles dr ON dr.id = crm.composite_role_id
-		),
-		all_roles AS (
+		role_tree AS (
 			SELECT * FROM direct_roles
 			UNION
-			SELECT * FROM composite_children
+			SELECT rm.* FROM role_master rm
+			INNER JOIN composite_role_members crm ON crm.child_role_id = rm.id
+			INNER JOIN role_tree rt ON rt.id = crm.composite_role_id
+			WHERE rm.is_active = true
+		),
+		derived_base_roles AS (
+			SELECT parent.* FROM role_master parent
+			INNER JOIN role_tree child ON child.parent_role_id = parent.id
+			WHERE child.role_type = 'derived' AND parent.is_active = true
+		),
+		all_roles AS (
+			SELECT * FROM role_tree
+			UNION
+			SELECT * FROM derived_base_roles
 		)
 		SELECT DISTINCT id, tenant_id, role_id, COALESCE(description,''), role_type, COALESCE(role_category,''),
 		       parent_role_id, inherit_level, is_system, is_active,

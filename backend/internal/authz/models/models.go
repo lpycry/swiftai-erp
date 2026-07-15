@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,14 +10,15 @@ import (
 // ---- Authorization Objects ----
 
 type AuthObject struct {
-	ID          uuid.UUID `json:"id"`
-	ObjectClass string    `json:"object_class"`
-	ObjectCode  string    `json:"object_code"`
-	Description string    `json:"description,omitempty"`
-	Activities  []string  `json:"activities"`
-	IsActive    bool      `json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          uuid.UUID         `json:"id"`
+	ObjectClass string            `json:"object_class"`
+	ObjectCode  string            `json:"object_code"`
+	Description string            `json:"description,omitempty"`
+	Activities  []string          `json:"activities"`
+	IsActive    bool              `json:"is_active"`
+	Fields      []AuthObjectField `json:"fields,omitempty"`
+	CreatedAt   time.Time         `json:"created_at"`
+	UpdatedAt   time.Time         `json:"updated_at"`
 }
 
 type AuthObjectField struct {
@@ -149,4 +151,38 @@ type SoDRule struct {
 	ObjectBID    uuid.UUID `json:"object_b_id"`
 	ActivityB    string    `json:"activity_b"`
 	IsActive     bool      `json:"is_active"`
+}
+
+type SoDConflict struct {
+	RuleID       uuid.UUID `json:"rule_id"`
+	RuleCode     string    `json:"rule_code"`
+	Description  string    `json:"description"`
+	Severity     string    `json:"severity"`
+	RiskCategory string    `json:"risk_category"`
+	RoleAID      uuid.UUID `json:"role_a_id"`
+	RoleA        string    `json:"role_a"`
+	RoleBID      uuid.UUID `json:"role_b_id"`
+	RoleB        string    `json:"role_b"`
+	ObjectA      string    `json:"object_a"`
+	ActivityA    string    `json:"activity_a"`
+	ObjectB      string    `json:"object_b"`
+	ActivityB    string    `json:"activity_b"`
+}
+
+type AccessRequest struct {
+	ID              uuid.UUID       `json:"id"`
+	TenantID        uuid.UUID       `json:"tenant_id"`
+	RequesterID     uuid.UUID       `json:"requester_id"`
+	TargetUserID    uuid.UUID       `json:"target_user_id"`
+	RequestType     string          `json:"request_type"`
+	RequestData     json.RawMessage `json:"request_data"`
+	Justification   string          `json:"justification"`
+	Urgency         string          `json:"urgency"`
+	ApproverID      *uuid.UUID      `json:"approver_id,omitempty"`
+	ApprovalStatus  string          `json:"approval_status"`
+	ApprovalAt      *time.Time      `json:"approval_at,omitempty"`
+	ApprovalComment string          `json:"approval_comment"`
+	Executed        bool            `json:"executed"`
+	ExecutedAt      *time.Time      `json:"executed_at,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
 }

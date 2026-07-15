@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../features/admin/screens/auth_objects_screen.dart';
+import '../../features/admin/screens/access_requests_screen.dart';
 import '../../features/admin/screens/roles_screen.dart';
+import '../../features/admin/screens/sod_rules_screen.dart';
 import '../../features/admin/screens/users_screen.dart';
 import '../../features/admin/services/admin_service.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -36,6 +38,8 @@ class AppRouter {
   static const String adminAuthObjects = '/admin/auth-objects';
   static const String adminUsers = '/admin/users';
   static const String adminRoles = '/admin/roles';
+  static const String adminSoDRules = '/admin/sod-rules';
+  static const String adminAccessRequests = '/admin/access-requests';
   static const String adminOrgs = '/admin/organizations';
   static const String adminPeriods = '/admin/periods';
   static const String financeRoute = '/finance';
@@ -114,6 +118,22 @@ class AppRouter {
       case adminRoles:
         return MaterialPageRoute(
           builder: (_) => RolesScreen(
+            authService: _authService,
+            adminService: AdminService(_token),
+          ),
+          settings: settings,
+        );
+      case adminSoDRules:
+        return MaterialPageRoute(
+          builder: (_) => SoDRulesScreen(
+            authService: _authService,
+            adminService: AdminService(_token),
+          ),
+          settings: settings,
+        );
+      case adminAccessRequests:
+        return MaterialPageRoute(
+          builder: (_) => AccessRequestsScreen(
             authService: _authService,
             adminService: AdminService(_token),
           ),
