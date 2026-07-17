@@ -39,8 +39,12 @@ build/
 
 # Go
 vendor/
+.gocache/
 
 # Build & IDE artifacts
 .vs/
 *.exe~
 backend/uploads/
+
+# Local backend test logs
+backend/*.log
